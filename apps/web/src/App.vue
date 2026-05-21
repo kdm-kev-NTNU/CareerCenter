@@ -142,10 +142,14 @@ async function removePath(id: string) {
 }
 
 onMounted(async () => {
-  const map = await api.careerMap();
-  mapNodes.value = map.nodes;
-  await loadPublicData();
-  await loadPrivateData();
+  try {
+    const map = await api.careerMap();
+    mapNodes.value = map.nodes;
+    await loadPublicData();
+    await loadPrivateData();
+  } catch {
+    mapNodes.value = [];
+  }
 });
 </script>
 
@@ -331,4 +335,3 @@ onMounted(async () => {
     </section>
   </div>
 </template>
-

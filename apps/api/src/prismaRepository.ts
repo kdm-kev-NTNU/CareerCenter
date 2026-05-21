@@ -2,6 +2,53 @@ import { PrismaClient } from "@prisma/client";
 import type { CareerPath, CareerPathStep, Company, CoursePlan } from "@careercenter/shared";
 import type { CompanyQuery, CourseInput, PathInput, RegisterUserInput, Repository, StoredUser } from "./repository";
 
+type CourseRow = {
+  id: string;
+  userId: string;
+  semester: number;
+  courseCode: string;
+  title: string;
+  credits: number;
+  status: string;
+  notes: string;
+  trackTags: string[];
+  sortOrder: number;
+};
+
+type CompanyRow = {
+  id: string;
+  name: string;
+  description: string;
+  tracks: string[];
+  tier: number;
+  geography: string;
+  roleTypes: string[];
+  difficulty: string;
+  upside: string;
+  relevanceScore: number;
+  websiteUrl: string | null;
+};
+
+type PathStepRow = {
+  id: string;
+  companyId: string;
+  order: number;
+  note: string;
+  targetRole: string;
+  company: CompanyRow | null;
+};
+
+type PathRow = {
+  id: string;
+  name: string;
+  description: string;
+  targetRole: string;
+  horizon: string;
+  createdAt: Date;
+  updatedAt: Date;
+  steps: PathStepRow[];
+};
+
 export class PrismaRepository implements Repository {
   constructor(private prisma = new PrismaClient()) {}
 
@@ -17,18 +64,18 @@ export class PrismaRepository implements Repository {
   }
 
   async listCourses(userId: string): Promise<CoursePlan[]> {
-    const rows = await this.prisma.coursePlan.findMany({ where: { userId }, orderBy: [{ semester: "asc" }, { sortOrder: "asc" }] });
-    return rows.map(this.mapCourse);
+    const rows = (await this.prisma.coursePlan.findMany({ where: { userId }, orderBy: [{ semester: "asc" }, { sortOrder: "asc" }] })) as CourseRow[];
+    return rows.map((row: CourseRow) => this.mapCourse(row));
   }
 
   async createCourse(userId: string, input: CourseInput): Promise<CoursePlan> {
-    return this.mapCourse(await this.prisma.coursePlan.create({ data: { userId, ...input } }));
+    return this.mapCourse((await this.prisma.coursePlan.create({ data: { userId, ...input } })) as CourseRow);
   }
 
   async updateCourse(userId: string, id: string, input: CourseInput): Promise<CoursePlan | null> {
     const existing = await this.prisma.coursePlan.findFirst({ where: { id, userId } });
     if (!existing) return null;
-    return this.mapCourse(await this.prisma.coursePlan.update({ where: { id }, data: input }));
+    return this.mapCourse((await this.prisma.coursePlan.update({ where: { id }, data: input })) as CourseRow);
   }
 
   async deleteCourse(userId: string, id: string): Promise<boolean> {
@@ -37,10 +84,10 @@ export class PrismaRepository implements Repository {
   }
 
   async listCompanies(query: CompanyQuery): Promise<Company[]> {
-    const rows = await this.prisma.company.findMany({ orderBy: { relevanceScore: "desc" } });
+    const rows = (await this.prisma.company.findMany({ orderBy: { relevanceScore: "desc" } })) as CompanyRow[];
     const search = query.q?.toLowerCase().trim();
     return rows
-      .map(this.mapCompany)
+      .map((row: CompanyRow) => this.mapCompany(row))
       .filter((company) => !search || [company.name, company.description, company.geography, ...company.roleTypes].join(" ").toLowerCase().includes(search))
       .filter((company) => !query.track || company.tracks.includes(query.track))
       .filter((company) => !query.tier || company.tier === query.tier)
@@ -48,24 +95,24 @@ export class PrismaRepository implements Repository {
   }
 
   async listPaths(userId: string): Promise<CareerPath[]> {
-    const rows = await this.prisma.careerPath.findMany({
+    const rows = (await this.prisma.careerPath.findMany({
       where: { userId },
       include: { steps: { include: { company: true }, orderBy: { order: "asc" } } },
       orderBy: { updatedAt: "desc" }
-    });
-    return rows.map(this.mapPath);
+    })) as PathRow[];
+    return rows.map((row: PathRow) => this.mapPath(row));
   }
 
   async getPath(userId: string, id: string): Promise<CareerPath | null> {
-    const row = await this.prisma.careerPath.findFirst({
+    const row = (await this.prisma.careerPath.findFirst({
       where: { id, userId },
       include: { steps: { include: { company: true }, orderBy: { order: "asc" } } }
-    });
+    })) as PathRow | null;
     return row ? this.mapPath(row) : null;
   }
 
   async createPath(userId: string, input: PathInput): Promise<CareerPath> {
-    const row = await this.prisma.careerPath.create({
+    const row = (await this.prisma.careerPath.create({
       data: {
         userId,
         name: input.name,
@@ -75,14 +122,14 @@ export class PrismaRepository implements Repository {
         steps: { create: input.steps }
       },
       include: { steps: { include: { company: true }, orderBy: { order: "asc" } } }
-    });
+    })) as PathRow;
     return this.mapPath(row);
   }
 
   async updatePath(userId: string, id: string, input: PathInput): Promise<CareerPath | null> {
     const existing = await this.prisma.careerPath.findFirst({ where: { id, userId } });
     if (!existing) return null;
-    const row = await this.prisma.$transaction(async (tx) => {
+    const row = (await this.prisma.$transaction(async (tx: PrismaClient) => {
       await tx.careerPathStep.deleteMany({ where: { pathId: id } });
       return tx.careerPath.update({
         where: { id },
@@ -95,7 +142,7 @@ export class PrismaRepository implements Repository {
         },
         include: { steps: { include: { company: true }, orderBy: { order: "asc" } } }
       });
-    });
+    })) as PathRow;
     return this.mapPath(row);
   }
 
@@ -104,15 +151,27 @@ export class PrismaRepository implements Repository {
     return result.count > 0;
   }
 
-  private mapCourse(row: any): CoursePlan {
-    return { ...row, semester: row.semester, status: row.status, trackTags: row.trackTags };
+  private mapCourse(row: CourseRow): CoursePlan {
+    return { ...row, semester: row.semester as CoursePlan["semester"], status: row.status as CoursePlan["status"], trackTags: row.trackTags as CoursePlan["trackTags"] };
   }
 
-  private mapCompany(row: any): Company {
-    return { ...row, tracks: row.tracks, roleTypes: row.roleTypes };
+  private mapCompany(row: CompanyRow): Company {
+    return {
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      tracks: row.tracks as Company["tracks"],
+      tier: row.tier as Company["tier"],
+      geography: row.geography,
+      roleTypes: row.roleTypes,
+      difficulty: row.difficulty as Company["difficulty"],
+      upside: row.upside as Company["upside"],
+      relevanceScore: row.relevanceScore,
+      websiteUrl: row.websiteUrl ?? undefined
+    };
   }
 
-  private mapPath(row: any): CareerPath {
+  private mapPath(row: PathRow): CareerPath {
     return {
       id: row.id,
       name: row.name,
@@ -121,7 +180,7 @@ export class PrismaRepository implements Repository {
       horizon: row.horizon,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
-      steps: row.steps.map((step: any): CareerPathStep => ({
+      steps: row.steps.map((step): CareerPathStep => ({
         id: step.id,
         companyId: step.companyId,
         order: step.order,
@@ -132,4 +191,3 @@ export class PrismaRepository implements Repository {
     };
   }
 }
-
