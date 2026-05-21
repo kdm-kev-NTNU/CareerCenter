@@ -11,4 +11,8 @@ describe("shared helpers", () => {
   it("rejects unsupported semesters", () => {
     expect(() => assertSemester(6)).toThrow("Semester");
   });
+
+  it("accepts supported semesters", () => {
+    expect(assertSemester(7)).toBe(7);
+  });
 });

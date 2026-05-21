@@ -11,7 +11,11 @@ const error = ref("");
 const courses = ref<CoursePlan[]>([]);
 const companies = ref<Company[]>([]);
 const paths = ref<CareerPath[]>([]);
+const baseMapNodes = ref<CareerMapNode[]>([]);
 const mapNodes = ref<CareerMapNode[]>([]);
+const editingMapNodeId = ref<string | null>(null);
+const editingMapTitle = ref("");
+const editingMapItems = ref("");
 const search = ref("");
 const trackFilter = ref<CareerTrack | "">("");
 const tierFilter = ref("");
@@ -34,7 +38,7 @@ const newPath = ref<PathPayload>({
   name: "Energy Quant-ruten",
   description: "NTNU KI til global commodity trading",
   targetRole: "Quantitative Analyst",
-  horizon: "5+ år",
+  horizon: "5+ ar",
   steps: []
 });
 
@@ -43,6 +47,7 @@ const statuses: CourseStatus[] = ["planned", "considering", "confirmed", "comple
 const tracks = Object.keys(trackLabels) as CareerTrack[];
 const visibleMapNodes = computed(() => mapNodes.value.filter((node) => !mapTrack.value || node.track === mapTrack.value || node.level === 0));
 const recommendedCompanies = computed(() => companies.value.slice(0, 5));
+const selectedMapNode = computed(() => mapNodes.value.find((node) => node.id === editingMapNodeId.value) ?? null);
 
 async function loadPrivateData() {
   courses.value = await api.courses();
@@ -57,10 +62,84 @@ async function loadPublicData() {
   companies.value = await api.companies(params.toString() ? `?${params}` : "");
 }
 
+function applyMapDrafts() {
+  const raw = localStorage.getItem("careercenter-map-drafts");
+  if (!raw) {
+    mapNodes.value = baseMapNodes.value.map((node) => ({ ...node }));
+    return;
+  }
+
+  try {
+    const drafts = JSON.parse(raw) as Record<string, { title?: string; items?: string[] }>;
+    mapNodes.value = baseMapNodes.value.map((node) => {
+      const draft = drafts[node.id];
+      return draft ? { ...node, title: draft.title ?? node.title, items: draft.items ?? node.items } : { ...node };
+    });
+  } catch {
+    localStorage.removeItem("careercenter-map-drafts");
+    mapNodes.value = baseMapNodes.value.map((node) => ({ ...node }));
+  }
+}
+
+function saveMapDraft(nodeId: string, title: string, items: string[]) {
+  const raw = localStorage.getItem("careercenter-map-drafts");
+  const drafts = raw ? (JSON.parse(raw) as Record<string, { title?: string; items?: string[] }>) : {};
+  drafts[nodeId] = { title, items };
+  localStorage.setItem("careercenter-map-drafts", JSON.stringify(drafts));
+  mapNodes.value = mapNodes.value.map((node) => (node.id === nodeId ? { ...node, title, items } : node));
+}
+
+function openMapEditor(node: CareerMapNode) {
+  editingMapNodeId.value = node.id;
+  editingMapTitle.value = node.title;
+  editingMapItems.value = node.items.join("\n");
+}
+
+function clearMapEditor() {
+  editingMapNodeId.value = null;
+  editingMapTitle.value = "";
+  editingMapItems.value = "";
+}
+
+function saveMapEditor() {
+  if (!editingMapNodeId.value) return;
+  const items = editingMapItems.value
+    .split("\n")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  saveMapDraft(editingMapNodeId.value, editingMapTitle.value.trim() || selectedMapNode.value?.title || "", items);
+  clearMapEditor();
+}
+
+function resetMapEditor() {
+  if (!editingMapNodeId.value) return;
+  const baseNode = baseMapNodes.value.find((node) => node.id === editingMapNodeId.value);
+  if (!baseNode) return;
+
+  const raw = localStorage.getItem("careercenter-map-drafts");
+  if (raw) {
+    const drafts = JSON.parse(raw) as Record<string, { title?: string; items?: string[] }>;
+    delete drafts[editingMapNodeId.value];
+    localStorage.setItem("careercenter-map-drafts", JSON.stringify(drafts));
+  }
+
+  mapNodes.value = mapNodes.value.map((node) => (node.id === editingMapNodeId.value ? { ...baseNode } : node));
+  clearMapEditor();
+}
+
 async function addCourse() {
   const created = await api.createCourse({ ...newCourse.value, sortOrder: courses.value.length });
   courses.value.push(created);
-  newCourse.value = { semester: newCourse.value.semester, courseCode: "", title: "", credits: 7.5, status: "planned", notes: "", trackTags: ["ENERGY_QUANT"], sortOrder: 0 };
+  newCourse.value = {
+    semester: newCourse.value.semester,
+    courseCode: "",
+    title: "",
+    credits: 7.5,
+    status: "planned",
+    notes: "",
+    trackTags: ["ENERGY_QUANT"],
+    sortOrder: 0
+  };
 }
 
 async function removeCourse(id: string) {
@@ -81,18 +160,21 @@ function removeFromPath(companyId: string) {
 async function savePath() {
   if (selectedCompanies.value.length === 0) return;
   savingPath.value = true;
-  const payload = {
-    ...newPath.value,
-    steps: selectedCompanies.value.map((company, index) => ({
-      companyId: company.id,
-      order: index,
-      note: index === 0 ? "Første sterke signal" : "",
-      targetRole: newPath.value.targetRole
-    }))
-  };
-  const created = await api.createPath(payload);
-  paths.value.unshift(created);
-  savingPath.value = false;
+  try {
+    const payload = {
+      ...newPath.value,
+      steps: selectedCompanies.value.map((company, index) => ({
+        companyId: company.id,
+        order: index,
+        note: index === 0 ? "Forste sterke signal" : "",
+        targetRole: newPath.value.targetRole
+      }))
+    };
+    const created = await api.createPath(payload);
+    paths.value.unshift(created);
+  } finally {
+    savingPath.value = false;
+  }
 }
 
 async function duplicatePath(path: CareerPath) {
@@ -101,20 +183,30 @@ async function duplicatePath(path: CareerPath) {
     description: path.description,
     targetRole: path.targetRole,
     horizon: path.horizon,
-    steps: path.steps.map((step, index) => ({ companyId: step.companyId, order: index, note: step.note, targetRole: step.targetRole }))
+    steps: path.steps.map((step, index) => ({
+      companyId: step.companyId,
+      order: index,
+      note: step.note,
+      targetRole: step.targetRole
+    }))
   });
   paths.value.unshift(created);
 }
 
 async function removePath(id: string) {
-  await api.deletePath(id);
-  paths.value = paths.value.filter((path) => path.id !== id);
+  try {
+    await api.deletePath(id);
+    paths.value = paths.value.filter((path) => path.id !== id);
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "Kunne ikke slette path.";
+  }
 }
 
 onMounted(async () => {
   try {
     const map = await api.careerMap();
-    mapNodes.value = map.nodes;
+    baseMapNodes.value = map.nodes;
+    applyMapDrafts();
     await loadPublicData();
     await loadPrivateData();
   } catch (caught) {
@@ -130,15 +222,15 @@ onMounted(async () => {
         <span class="mark">CC</span>
         <div>
           <strong>CareerCenter</strong>
-          <small>Énbruker-base</small>
+          <small>Enbruker-base</small>
         </div>
       </div>
       <nav>
-        <button :class="{ active: page === 'dashboard' }" @click="page = 'dashboard'">Dashboard</button>
-        <button :class="{ active: page === 'master' }" @click="page = 'master'">Master Plan</button>
-        <button :class="{ active: page === 'map' }" @click="page = 'map'">Karrierekart</button>
-        <button :class="{ active: page === 'companies' }" @click="page = 'companies'">Bedrifter</button>
-        <button :class="{ active: page === 'paths' }" @click="page = 'paths'">Custom Paths</button>
+        <button type="button" :class="{ active: page === 'dashboard' }" @click="page = 'dashboard'">Dashboard</button>
+        <button type="button" :class="{ active: page === 'master' }" @click="page = 'master'">Master Plan</button>
+        <button type="button" :class="{ active: page === 'map' }" @click="page = 'map'">Karrierekart</button>
+        <button type="button" :class="{ active: page === 'companies' }" @click="page = 'companies'">Bedrifter</button>
+        <button type="button" :class="{ active: page === 'paths' }" @click="page = 'paths'">Custom Paths</button>
       </nav>
     </aside>
 
@@ -165,13 +257,13 @@ onMounted(async () => {
         </article>
         <article class="panel strong">
           <h2>Neste steg</h2>
-          <p>Start med 3-5 selskaper i én path og knytt fagvalgene til samme spor.</p>
+          <p>Start med 3-5 selskaper i en path og knytt fagvalgene til samme spor.</p>
         </article>
         <article class="panel wide">
-          <h2>Høyest relevans akkurat nå</h2>
+          <h2>Hoyest relevans akkurat na</h2>
           <div class="company-row" v-for="company in recommendedCompanies" :key="company.id">
             <span>{{ company.name }}</span>
-            <small>{{ company.geography }} · score {{ company.relevanceScore }}</small>
+            <small>{{ company.geography }} - score {{ company.relevanceScore }}</small>
           </div>
         </article>
       </section>
@@ -193,11 +285,11 @@ onMounted(async () => {
             <h2>Semester {{ semester }}</h2>
             <div v-for="course in courses.filter((item) => item.semester === semester)" :key="course.id" class="course-card">
               <div>
-                <strong>{{ course.courseCode }} · {{ course.title }}</strong>
-                <small>{{ course.credits }} stp · {{ course.status }} · {{ course.trackTags.map((track) => trackLabels[track]).join(", ") }}</small>
+                <strong>{{ course.courseCode }} - {{ course.title }}</strong>
+                <small>{{ course.credits }} stp - {{ course.status }} - {{ course.trackTags.map((track) => trackLabels[track]).join(", ") }}</small>
                 <p>{{ course.notes }}</p>
               </div>
-              <button class="icon" aria-label="Slett fag" @click="removeCourse(course.id)">×</button>
+              <button type="button" class="icon" aria-label="Slett fag" @click="removeCourse(course.id)">x</button>
             </div>
           </article>
         </div>
@@ -205,22 +297,45 @@ onMounted(async () => {
 
       <section v-if="page === 'map'" class="stack">
         <div class="toolbar">
-          <button :class="{ active: !mapTrack }" @click="mapTrack = ''">Alle spor</button>
-          <button v-for="track in tracks.slice(0, 3)" :key="track" :class="{ active: mapTrack === track }" @click="mapTrack = track">{{ trackLabels[track] }}</button>
+          <button type="button" :class="{ active: !mapTrack }" @click="mapTrack = ''">Alle spor</button>
+          <button
+            v-for="track in tracks.slice(0, 3)"
+            :key="track"
+            type="button"
+            :class="{ active: mapTrack === track }"
+            @click="mapTrack = track"
+          >
+            {{ trackLabels[track] }}
+          </button>
         </div>
+
         <div class="map">
           <article v-for="node in visibleMapNodes" :key="node.id" class="map-node" :class="`level-${node.level}`">
-            <h2>{{ node.title }}</h2>
+            <div class="map-head">
+              <h2>{{ node.title }}</h2>
+              <button type="button" class="secondary map-edit" @click="openMapEditor(node)">Rediger</button>
+            </div>
             <ul>
               <li v-for="item in node.items" :key="item">{{ item }}</li>
             </ul>
           </article>
         </div>
+
+        <article v-if="selectedMapNode" class="panel editor">
+          <h2>Rediger karrierekart</h2>
+          <label>Tittel<input v-model="editingMapTitle" /></label>
+          <label>Punkter<textarea v-model="editingMapItems" placeholder="En linje per punkt" /></label>
+          <div class="actions">
+            <button type="button" class="primary" @click="saveMapEditor">Lagre</button>
+            <button type="button" class="secondary" @click="resetMapEditor">Tilbakestill</button>
+            <button type="button" class="ghost" @click="clearMapEditor">Lukk</button>
+          </div>
+        </article>
       </section>
 
       <section v-if="page === 'companies' || page === 'paths'" class="stack">
         <div class="panel filters">
-          <input v-model="search" placeholder="Søk etter selskap, rolle eller geografi" @input="loadPublicData" />
+          <input v-model="search" placeholder="Sok etter selskap, rolle eller geografi" @input="loadPublicData" />
           <select v-model="trackFilter" @change="loadPublicData">
             <option value="">Alle spor</option>
             <option v-for="track in tracks" :key="track" :value="track">{{ trackLabels[track] }}</option>
@@ -240,23 +355,23 @@ onMounted(async () => {
               <div>
                 <strong>{{ company.name }}</strong>
                 <p>{{ company.description }}</p>
-                <small>Tier {{ company.tier }} · {{ company.geography }} · {{ company.difficulty }} · score {{ company.relevanceScore }}</small>
+                <small>Tier {{ company.tier }} - {{ company.geography }} - {{ company.difficulty }} - score {{ company.relevanceScore }}</small>
               </div>
-              <button class="secondary" @click="addToPath(company)">Legg til</button>
+              <button type="button" class="secondary" @click="addToPath(company)">Legg til</button>
             </div>
           </article>
 
           <article class="panel builder">
             <h2>Path builder</h2>
             <label>Navn<input v-model="newPath.name" /></label>
-            <label>Målrolle<input v-model="newPath.targetRole" /></label>
+            <label>Malrolle<input v-model="newPath.targetRole" /></label>
             <label>Horisont<input v-model="newPath.horizon" /></label>
             <label>Beskrivelse<textarea v-model="newPath.description" /></label>
             <div class="path-line">
               <span>NTNU KI</span>
               <span v-for="company in selectedCompanies" :key="company.id">
                 {{ company.name }}
-                <button class="mini" @click="removeFromPath(company.id)">×</button>
+                <button type="button" class="mini" @click="removeFromPath(company.id)">x</button>
               </span>
             </div>
             <button class="primary" :disabled="savingPath || selectedCompanies.length === 0" @click="savePath">Lagre custom path</button>
@@ -270,11 +385,11 @@ onMounted(async () => {
             <div>
               <h2>{{ path.name }}</h2>
               <p>{{ path.description }}</p>
-              <small>{{ path.targetRole }} · {{ path.horizon }}</small>
+              <small>{{ path.targetRole }} - {{ path.horizon }}</small>
             </div>
             <div class="actions">
-              <button class="secondary" @click="duplicatePath(path)">Dupliser</button>
-              <button class="ghost danger" @click="removePath(path.id)">Slett</button>
+              <button type="button" class="secondary" @click="duplicatePath(path)">Dupliser</button>
+              <button type="button" class="ghost danger" @click="removePath(path.id)">Slett</button>
             </div>
           </div>
           <div class="path-line saved">

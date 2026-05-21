@@ -167,6 +167,10 @@ nav button.active, nav button:hover { background: #1f2937; color: #ffffff; }
 .map-node.level-0 { grid-column: 1 / -1; border-color: var(--accent); background: #111827; color: #fff; }
 .map-node.level-0 li { color: #dbeafe; }
 .map-node ul { margin: 0; padding-left: 18px; display: grid; gap: 7px; color: var(--muted); }
+.map-head { display: flex; justify-content: space-between; gap: 12px; align-items: start; margin-bottom: 12px; }
+.map-head h2 { margin-bottom: 0; }
+.map-edit { padding: 8px 10px; white-space: nowrap; }
+.editor { display: grid; gap: 14px; }
 .company-list { max-height: 720px; overflow: auto; }
 .company-card { align-items: center; }
 .company-card p { margin-bottom: 8px; }
@@ -201,4 +205,3 @@ nav button.active, nav button:hover { background: #1f2937; color: #ffffff; }
   .wide, .wide-field { grid-column: auto; }
   .content { padding: 18px; }
 }
-

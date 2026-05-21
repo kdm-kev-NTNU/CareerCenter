@@ -2,9 +2,18 @@ import vue from "@vitejs/plugin-vue";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
+import istanbul from "vite-plugin-istanbul";
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [
+    vue(),
+    istanbul({
+      cypress: true,
+      requireEnv: true,
+      include: "src/**/*.{ts,vue}",
+      exclude: ["src/**/*.test.ts"]
+    })
+  ],
   resolve: {
     alias: {
       "@careercenter/shared": path.resolve(fileURLToPath(new URL(".", import.meta.url)), "../../packages/shared/src/index.ts")
@@ -19,6 +28,13 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
-    exclude: ["e2e/**", "playwright.config.ts"]
+    exclude: ["cypress/**", "playwright.config.ts"],
+    coverage: {
+      provider: "v8",
+      reporter: ["json"],
+      reportsDirectory: "../../coverage/apps/web",
+      include: ["src/**/*.{ts,vue}"],
+      exclude: ["src/**/*.test.ts", "src/main.ts"]
+    }
   }
 });
