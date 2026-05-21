@@ -26,3 +26,12 @@ export const pathSchema = z.object({
     })
   )
 });
+
+export const mapNodeSchema = z.object({
+  title: z.string().min(1),
+  items: z.array(z.string().min(1))
+});
+
+export const trackSchema = z.object({
+  label: z.string().min(1)
+});

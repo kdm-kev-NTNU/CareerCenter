@@ -1,6 +1,6 @@
-import { Prisma, PrismaClient } from "@prisma/client";
-import type { CareerPath, CareerPathStep, Company, CoursePlan } from "@careercenter/shared";
-import type { CompanyQuery, CourseInput, PathInput, Repository } from "./repository.js";
+import { PrismaClient } from "@prisma/client";
+import type { CareerMapNode, CareerPath, CareerPathStep, CareerTrack, CareerTrackSetting, Company, CoursePlan } from "@careercenter/shared";
+import type { CareerMapNodeInput, CareerTrackInput, CompanyQuery, CourseInput, PathInput, Repository } from "./repository.js";
 import { SINGLE_USER_EMAIL } from "./repository.js";
 
 type CourseRow = {
@@ -50,6 +50,24 @@ type PathRow = {
   steps: PathStepRow[];
 };
 
+type MapNodeRow = {
+  id: string;
+  defaultTitle: string;
+  title: string;
+  defaultItems: string[];
+  items: string[];
+  level: number;
+  trackId: CareerTrack | null;
+  sortOrder: number;
+};
+
+type TrackRow = {
+  id: CareerTrack;
+  defaultLabel: string;
+  label: string;
+  sortOrder: number;
+};
+
 export class PrismaRepository implements Repository {
   constructor(private prisma = new PrismaClient()) {}
 
@@ -62,9 +80,46 @@ export class PrismaRepository implements Repository {
     });
   }
 
+  async getCareerMap(): Promise<{ nodes: CareerMapNode[]; tracks: CareerTrackSetting[] }> {
+    const [nodes, tracks] = await Promise.all([
+      this.prisma.careerMapNode.findMany({ orderBy: [{ level: "asc" }, { sortOrder: "asc" }] }) as Promise<MapNodeRow[]>,
+      this.prisma.careerTrackSetting.findMany({ orderBy: { sortOrder: "asc" } }) as Promise<TrackRow[]>
+    ]);
+    return { nodes: nodes.map((node) => this.mapNode(node)), tracks: tracks.map((track) => this.mapTrack(track)) };
+  }
+
+  async updateCareerMapNode(id: string, input: CareerMapNodeInput): Promise<CareerMapNode | null> {
+    const existing = await this.prisma.careerMapNode.findUnique({ where: { id } });
+    if (!existing) return null;
+    return this.mapNode((await this.prisma.careerMapNode.update({ where: { id }, data: { title: input.title, items: input.items } })) as MapNodeRow);
+  }
+
+  async resetCareerMapNode(id: string): Promise<CareerMapNode | null> {
+    const existing = await this.prisma.careerMapNode.findUnique({ where: { id } });
+    if (!existing) return null;
+    return this.mapNode((await this.prisma.careerMapNode.update({ where: { id }, data: { title: existing.defaultTitle, items: existing.defaultItems } })) as MapNodeRow);
+  }
+
+  async listCareerTracks(): Promise<CareerTrackSetting[]> {
+    const rows = (await this.prisma.careerTrackSetting.findMany({ orderBy: { sortOrder: "asc" } })) as TrackRow[];
+    return rows.map((row) => this.mapTrack(row));
+  }
+
+  async updateCareerTrack(id: CareerTrack, input: CareerTrackInput): Promise<CareerTrackSetting | null> {
+    const existing = await this.prisma.careerTrackSetting.findUnique({ where: { id } });
+    if (!existing) return null;
+    return this.mapTrack((await this.prisma.careerTrackSetting.update({ where: { id }, data: { label: input.label } })) as TrackRow);
+  }
+
+  async resetCareerTrack(id: CareerTrack): Promise<CareerTrackSetting | null> {
+    const existing = await this.prisma.careerTrackSetting.findUnique({ where: { id } });
+    if (!existing) return null;
+    return this.mapTrack((await this.prisma.careerTrackSetting.update({ where: { id }, data: { label: existing.defaultLabel } })) as TrackRow);
+  }
+
   async listCourses(userId: string): Promise<CoursePlan[]> {
     const rows = (await this.prisma.coursePlan.findMany({ where: { userId }, orderBy: [{ semester: "asc" }, { sortOrder: "asc" }] })) as CourseRow[];
-    return rows.map((row: CourseRow) => this.mapCourse(row));
+    return rows.map((row) => this.mapCourse(row));
   }
 
   async createCourse(userId: string, input: CourseInput): Promise<CoursePlan> {
@@ -86,7 +141,7 @@ export class PrismaRepository implements Repository {
     const rows = (await this.prisma.company.findMany({ orderBy: { relevanceScore: "desc" } })) as CompanyRow[];
     const search = query.q?.toLowerCase().trim();
     return rows
-      .map((row: CompanyRow) => this.mapCompany(row))
+      .map((row) => this.mapCompany(row))
       .filter((company) => !search || [company.name, company.description, company.geography, ...company.roleTypes].join(" ").toLowerCase().includes(search))
       .filter((company) => !query.track || company.tracks.includes(query.track))
       .filter((company) => !query.tier || company.tier === query.tier)
@@ -99,7 +154,7 @@ export class PrismaRepository implements Repository {
       include: { steps: { include: { company: true }, orderBy: { order: "asc" } } },
       orderBy: { updatedAt: "desc" }
     })) as PathRow[];
-    return rows.map((row: PathRow) => this.mapPath(row));
+    return rows.map((row) => this.mapPath(row));
   }
 
   async getPath(userId: string, id: string): Promise<CareerPath | null> {
@@ -128,7 +183,7 @@ export class PrismaRepository implements Repository {
   async updatePath(userId: string, id: string, input: PathInput): Promise<CareerPath | null> {
     const existing = await this.prisma.careerPath.findFirst({ where: { id, userId } });
     if (!existing) return null;
-    const row = (await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const row = (await this.prisma.$transaction(async (tx) => {
       await tx.careerPathStep.deleteMany({ where: { pathId: id } });
       return tx.careerPath.update({
         where: { id },
@@ -187,6 +242,24 @@ export class PrismaRepository implements Repository {
         targetRole: step.targetRole,
         company: step.company ? this.mapCompany(step.company) : undefined
       }))
+    };
+  }
+
+  private mapNode(row: MapNodeRow): CareerMapNode {
+    return {
+      id: row.id,
+      title: row.title,
+      level: row.level as CareerMapNode["level"],
+      track: row.trackId ?? undefined,
+      items: [...row.items]
+    };
+  }
+
+  private mapTrack(row: TrackRow): CareerTrackSetting {
+    return {
+      id: row.id,
+      label: row.label,
+      sortOrder: row.sortOrder
     };
   }
 }

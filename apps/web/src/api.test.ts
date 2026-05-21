@@ -71,6 +71,11 @@ describe("api client", () => {
       sortOrder: 1
     });
     await api.deleteCourse("course-1");
+    await api.updateMapNode("energy-1", { title: "Spor A", items: ["Statkraft"] });
+    await api.resetMapNode("energy-1");
+    await api.tracks();
+    await api.updateTrack("ENERGY_QUANT", { label: "Energy & Quant" });
+    await api.resetTrack("ENERGY_QUANT");
 
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
       "/api/career-map",
@@ -80,10 +85,19 @@ describe("api client", () => {
       "/api/paths",
       "/api/paths/path-1",
       "/api/courses",
-      "/api/courses/course-1"
+      "/api/courses/course-1",
+      "/api/career-map/nodes/energy-1",
+      "/api/career-map/nodes/energy-1/reset",
+      "/api/career-tracks",
+      "/api/career-tracks/ENERGY_QUANT",
+      "/api/career-tracks/ENERGY_QUANT/reset"
     ]);
     expect(fetchMock.mock.calls[3][1]?.method).toBe("PUT");
     expect(fetchMock.mock.calls[7][1]?.method).toBe("DELETE");
+    expect(fetchMock.mock.calls[8][1]?.method).toBe("PUT");
+    expect(fetchMock.mock.calls[9][1]?.method).toBe("POST");
+    expect(fetchMock.mock.calls[11][1]?.method).toBe("PUT");
+    expect(fetchMock.mock.calls[12][1]?.method).toBe("POST");
   });
 
   it("throws response text for failed requests", async () => {

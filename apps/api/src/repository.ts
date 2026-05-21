@@ -1,4 +1,4 @@
-import type { CareerPath, CareerPathStep, CareerTrack, Company, CoursePlan, CourseStatus, UserProfile } from "@careercenter/shared";
+import type { CareerMapNode, CareerPath, CareerPathStep, CareerTrack, CareerTrackSetting, Company, CoursePlan, CourseStatus, UserProfile } from "@careercenter/shared";
 
 export const SINGLE_USER_EMAIL = "local@careercenter.app";
 
@@ -28,8 +28,23 @@ export interface PathInput {
   steps: Array<Omit<CareerPathStep, "id" | "company">>;
 }
 
+export interface CareerMapNodeInput {
+  title: string;
+  items: string[];
+}
+
+export interface CareerTrackInput {
+  label: string;
+}
+
 export interface Repository {
   getOrCreateSingleUser(): Promise<UserProfile>;
+  getCareerMap(): Promise<{ nodes: CareerMapNode[]; tracks: CareerTrackSetting[] }>;
+  updateCareerMapNode(id: string, input: CareerMapNodeInput): Promise<CareerMapNode | null>;
+  resetCareerMapNode(id: string): Promise<CareerMapNode | null>;
+  listCareerTracks(): Promise<CareerTrackSetting[]>;
+  updateCareerTrack(id: CareerTrack, input: CareerTrackInput): Promise<CareerTrackSetting | null>;
+  resetCareerTrack(id: CareerTrack): Promise<CareerTrackSetting | null>;
   listCourses(userId: string): Promise<CoursePlan[]>;
   createCourse(userId: string, input: CourseInput): Promise<CoursePlan>;
   updateCourse(userId: string, id: string, input: CourseInput): Promise<CoursePlan | null>;

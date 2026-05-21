@@ -113,4 +113,86 @@ describe("CareerCenter API", () => {
 
     await app.close();
   });
+
+  it("returns career map nodes and track settings", async () => {
+    const app = await createTestApp();
+
+    const map = await app.inject({ method: "GET", url: "/api/career-map" });
+    expect(map.statusCode).toBe(200);
+    expect(map.json().nodes.some((node: any) => node.id === "energy-1")).toBe(true);
+    expect(map.json().tracks.some((track: any) => track.id === "ENERGY_QUANT")).toBe(true);
+
+    await app.close();
+  });
+
+  it("updates and resets a career map node", async () => {
+    const app = await createTestApp();
+
+    const updated = await app.inject({
+      method: "PUT",
+      url: "/api/career-map/nodes/energy-1",
+      payload: { title: "Spor A nivå 1 (redigert)", items: ["Statkraft", "Equinor"] }
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json().title).toBe("Spor A nivå 1 (redigert)");
+    expect(updated.json().items).toEqual(["Statkraft", "Equinor"]);
+
+    const reset = await app.inject({ method: "POST", url: "/api/career-map/nodes/energy-1/reset" });
+    expect(reset.statusCode).toBe(200);
+    expect(reset.json().title).toBe("Spor A nivå 1: Norge, 0-3 år");
+
+    await app.close();
+  });
+
+  it("returns 404 when updating or resetting an unknown career map node", async () => {
+    const app = await createTestApp();
+
+    const updated = await app.inject({
+      method: "PUT",
+      url: "/api/career-map/nodes/missing-node",
+      payload: { title: "Missing", items: ["Statkraft"] }
+    });
+    expect(updated.statusCode).toBe(404);
+
+    const reset = await app.inject({ method: "POST", url: "/api/career-map/nodes/missing-node/reset" });
+    expect(reset.statusCode).toBe(404);
+    expect(reset.json()).toEqual({ message: "Node ikke funnet." });
+
+    await app.close();
+  });
+
+  it("updates and resets a career track label", async () => {
+    const app = await createTestApp();
+
+    const updated = await app.inject({
+      method: "PUT",
+      url: "/api/career-tracks/ENERGY_QUANT",
+      payload: { label: "Energy & Quant (redigert)" }
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json().label).toBe("Energy & Quant (redigert)");
+
+    const reset = await app.inject({ method: "POST", url: "/api/career-tracks/ENERGY_QUANT/reset" });
+    expect(reset.statusCode).toBe(200);
+    expect(reset.json().label).toBe("Energy, Power Trading & Quant");
+
+    await app.close();
+  });
+
+  it("returns 404 for unknown career track ids", async () => {
+    const app = await createTestApp();
+
+    const updated = await app.inject({
+      method: "PUT",
+      url: "/api/career-tracks/UNKNOWN_TRACK",
+      payload: { label: "Missing" }
+    });
+    expect(updated.statusCode).toBe(404);
+    expect(updated.json()).toEqual({ message: "Spor ikke funnet." });
+
+    const reset = await app.inject({ method: "POST", url: "/api/career-tracks/UNKNOWN_TRACK/reset" });
+    expect(reset.statusCode).toBe(404);
+
+    await app.close();
+  });
 });

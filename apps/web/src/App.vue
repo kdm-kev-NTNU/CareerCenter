@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import type { CareerMapNode, CareerPath, CareerTrack, Company, CoursePlan, CourseStatus } from "@careercenter/shared";
-import { trackLabels } from "@careercenter/shared";
-import { api, type CoursePayload, type PathPayload } from "./api";
+import type { CareerMapNode, CareerPath, CareerTrack, CareerTrackSetting, Company, CoursePlan, CourseStatus } from "@careercenter/shared";
+import { careerTracks, trackLabels } from "@careercenter/shared";
+import { api, type CoursePayload, type PathPayload, type TrackPayload } from "./api";
 
 type Page = "dashboard" | "master" | "map" | "companies" | "paths";
 
@@ -11,11 +11,13 @@ const error = ref("");
 const courses = ref<CoursePlan[]>([]);
 const companies = ref<Company[]>([]);
 const paths = ref<CareerPath[]>([]);
-const baseMapNodes = ref<CareerMapNode[]>([]);
 const mapNodes = ref<CareerMapNode[]>([]);
+const trackSettings = ref<CareerTrackSetting[]>([]);
 const editingMapNodeId = ref<string | null>(null);
 const editingMapTitle = ref("");
 const editingMapItems = ref("");
+const editingTrackId = ref<CareerTrack | null>(null);
+const editingTrackLabel = ref("");
 const search = ref("");
 const trackFilter = ref<CareerTrack | "">("");
 const tierFilter = ref("");
@@ -44,10 +46,16 @@ const newPath = ref<PathPayload>({
 
 const semesters = [7, 8, 9, 10] as const;
 const statuses: CourseStatus[] = ["planned", "considering", "confirmed", "completed"];
-const tracks = Object.keys(trackLabels) as CareerTrack[];
+const trackList = computed(() => trackSettings.value.length ? trackSettings.value : careerTracks.map((track, index) => ({ id: track, label: trackLabels[track], sortOrder: index })));
+const tracks = computed(() => trackList.value.map((track) => track.id));
 const visibleMapNodes = computed(() => mapNodes.value.filter((node) => !mapTrack.value || node.track === mapTrack.value || node.level === 0));
 const recommendedCompanies = computed(() => companies.value.slice(0, 5));
 const selectedMapNode = computed(() => mapNodes.value.find((node) => node.id === editingMapNodeId.value) ?? null);
+const selectedTrack = computed(() => trackList.value.find((track) => track.id === editingTrackId.value) ?? null);
+
+function trackName(track: CareerTrack) {
+  return trackList.value.find((entry) => entry.id === track)?.label ?? trackLabels[track];
+}
 
 async function loadPrivateData() {
   courses.value = await api.courses();
@@ -62,33 +70,6 @@ async function loadPublicData() {
   companies.value = await api.companies(params.toString() ? `?${params}` : "");
 }
 
-function applyMapDrafts() {
-  const raw = localStorage.getItem("careercenter-map-drafts");
-  if (!raw) {
-    mapNodes.value = baseMapNodes.value.map((node) => ({ ...node }));
-    return;
-  }
-
-  try {
-    const drafts = JSON.parse(raw) as Record<string, { title?: string; items?: string[] }>;
-    mapNodes.value = baseMapNodes.value.map((node) => {
-      const draft = drafts[node.id];
-      return draft ? { ...node, title: draft.title ?? node.title, items: draft.items ?? node.items } : { ...node };
-    });
-  } catch {
-    localStorage.removeItem("careercenter-map-drafts");
-    mapNodes.value = baseMapNodes.value.map((node) => ({ ...node }));
-  }
-}
-
-function saveMapDraft(nodeId: string, title: string, items: string[]) {
-  const raw = localStorage.getItem("careercenter-map-drafts");
-  const drafts = raw ? (JSON.parse(raw) as Record<string, { title?: string; items?: string[] }>) : {};
-  drafts[nodeId] = { title, items };
-  localStorage.setItem("careercenter-map-drafts", JSON.stringify(drafts));
-  mapNodes.value = mapNodes.value.map((node) => (node.id === nodeId ? { ...node, title, items } : node));
-}
-
 function openMapEditor(node: CareerMapNode) {
   editingMapNodeId.value = node.id;
   editingMapTitle.value = node.title;
@@ -101,30 +82,46 @@ function clearMapEditor() {
   editingMapItems.value = "";
 }
 
-function saveMapEditor() {
+async function saveMapEditor() {
   if (!editingMapNodeId.value) return;
   const items = editingMapItems.value
     .split("\n")
     .map((item) => item.trim())
     .filter(Boolean);
-  saveMapDraft(editingMapNodeId.value, editingMapTitle.value.trim() || selectedMapNode.value?.title || "", items);
+  const updated = await api.updateMapNode(editingMapNodeId.value, { title: editingMapTitle.value.trim() || selectedMapNode.value?.title || "", items });
+  mapNodes.value = mapNodes.value.map((node) => (node.id === updated.id ? updated : node));
   clearMapEditor();
 }
 
-function resetMapEditor() {
+async function resetMapEditor() {
   if (!editingMapNodeId.value) return;
-  const baseNode = baseMapNodes.value.find((node) => node.id === editingMapNodeId.value);
-  if (!baseNode) return;
-
-  const raw = localStorage.getItem("careercenter-map-drafts");
-  if (raw) {
-    const drafts = JSON.parse(raw) as Record<string, { title?: string; items?: string[] }>;
-    delete drafts[editingMapNodeId.value];
-    localStorage.setItem("careercenter-map-drafts", JSON.stringify(drafts));
-  }
-
-  mapNodes.value = mapNodes.value.map((node) => (node.id === editingMapNodeId.value ? { ...baseNode } : node));
+  const updated = await api.resetMapNode(editingMapNodeId.value);
+  mapNodes.value = mapNodes.value.map((node) => (node.id === updated.id ? updated : node));
   clearMapEditor();
+}
+
+function openTrackEditor(track: CareerTrackSetting) {
+  editingTrackId.value = track.id;
+  editingTrackLabel.value = track.label;
+}
+
+function clearTrackEditor() {
+  editingTrackId.value = null;
+  editingTrackLabel.value = "";
+}
+
+async function saveTrackEditor() {
+  if (!editingTrackId.value) return;
+  const updated = await api.updateTrack(editingTrackId.value, { label: editingTrackLabel.value.trim() || selectedTrack.value?.label || "" } as TrackPayload);
+  trackSettings.value = trackSettings.value.map((track) => (track.id === updated.id ? updated : track));
+  clearTrackEditor();
+}
+
+async function resetTrackEditor() {
+  if (!editingTrackId.value) return;
+  const updated = await api.resetTrack(editingTrackId.value);
+  trackSettings.value = trackSettings.value.map((track) => (track.id === updated.id ? updated : track));
+  clearTrackEditor();
 }
 
 async function addCourse() {
@@ -203,10 +200,11 @@ async function removePath(id: string) {
 }
 
 onMounted(async () => {
+  localStorage.removeItem("careercenter-map-drafts");
   try {
     const map = await api.careerMap();
-    baseMapNodes.value = map.nodes;
-    applyMapDrafts();
+    mapNodes.value = map.nodes;
+    trackSettings.value = map.tracks;
     await loadPublicData();
     await loadPrivateData();
   } catch (caught) {
@@ -275,7 +273,7 @@ onMounted(async () => {
           <label>Tittel<input v-model="newCourse.title" placeholder="Machine Learning" required /></label>
           <label>Studiepoeng<input v-model.number="newCourse.credits" type="number" step="0.5" /></label>
           <label>Status<select v-model="newCourse.status"><option v-for="status in statuses" :key="status">{{ status }}</option></select></label>
-          <label>Spor<select v-model="newCourse.trackTags[0]"><option v-for="track in tracks" :key="track" :value="track">{{ trackLabels[track] }}</option></select></label>
+          <label>Spor<select v-model="newCourse.trackTags[0]"><option v-for="track in tracks" :key="track" :value="track">{{ trackName(track) }}</option></select></label>
           <label class="wide-field">Notater<textarea v-model="newCourse.notes" placeholder="Hvorfor faget passer pathen" /></label>
           <button class="primary" type="submit">Legg til fag</button>
         </form>
@@ -286,7 +284,7 @@ onMounted(async () => {
             <div v-for="course in courses.filter((item) => item.semester === semester)" :key="course.id" class="course-card">
               <div>
                 <strong>{{ course.courseCode }} - {{ course.title }}</strong>
-                <small>{{ course.credits }} stp - {{ course.status }} - {{ course.trackTags.map((track) => trackLabels[track]).join(", ") }}</small>
+                <small>{{ course.credits }} stp - {{ course.status }} - {{ course.trackTags.map((track) => trackName(track)).join(", ") }}</small>
                 <p>{{ course.notes }}</p>
               </div>
               <button type="button" class="icon" aria-label="Slett fag" @click="removeCourse(course.id)">x</button>
@@ -296,16 +294,46 @@ onMounted(async () => {
       </section>
 
       <section v-if="page === 'map'" class="stack">
+        <article class="panel editor">
+          <div class="path-header">
+            <div>
+              <h2>Rediger spor</h2>
+              <p>Navnene brukes i filtre, selskapsvisning og karrierekartet.</p>
+            </div>
+          </div>
+          <div class="track-list">
+            <div v-for="track in trackList" :key="track.id" class="track-row">
+              <div>
+                <strong>{{ trackName(track.id) }}</strong>
+                <small>{{ track.id }}</small>
+              </div>
+              <div class="actions">
+                <button type="button" class="secondary" @click="openTrackEditor(track)">Rediger</button>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article v-if="selectedTrack" class="panel editor">
+          <h2>Rediger spor-navn</h2>
+          <label>Navn<input v-model="editingTrackLabel" /></label>
+          <div class="actions">
+            <button type="button" class="primary" @click="saveTrackEditor">Lagre</button>
+            <button type="button" class="secondary" @click="resetTrackEditor">Tilbakestill</button>
+            <button type="button" class="ghost" @click="clearTrackEditor">Lukk</button>
+          </div>
+        </article>
+
         <div class="toolbar">
           <button type="button" :class="{ active: !mapTrack }" @click="mapTrack = ''">Alle spor</button>
           <button
-            v-for="track in tracks.slice(0, 3)"
+            v-for="track in tracks"
             :key="track"
             type="button"
             :class="{ active: mapTrack === track }"
             @click="mapTrack = track"
           >
-            {{ trackLabels[track] }}
+            {{ trackName(track) }}
           </button>
         </div>
 
@@ -338,7 +366,7 @@ onMounted(async () => {
           <input v-model="search" placeholder="Sok etter selskap, rolle eller geografi" @input="loadPublicData" />
           <select v-model="trackFilter" @change="loadPublicData">
             <option value="">Alle spor</option>
-            <option v-for="track in tracks" :key="track" :value="track">{{ trackLabels[track] }}</option>
+            <option v-for="track in tracks" :key="track" :value="track">{{ trackName(track) }}</option>
           </select>
           <select v-model="tierFilter" @change="loadPublicData">
             <option value="">Alle tiers</option>

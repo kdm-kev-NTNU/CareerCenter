@@ -16,6 +16,18 @@ export const trackLabels: Record<CareerTrack, string> = {
   INDUSTRIAL_AI: "Industrial AI"
 };
 
+export interface CareerTrackSetting {
+  id: CareerTrack;
+  label: string;
+  sortOrder: number;
+}
+
+export const careerTrackDefaults: CareerTrackSetting[] = careerTracks.map((track, index) => ({
+  id: track,
+  label: trackLabels[track],
+  sortOrder: index
+}));
+
 export const courseStatuses = ["planned", "considering", "confirmed", "completed"] as const;
 export type CourseStatus = (typeof courseStatuses)[number];
 
@@ -88,4 +100,3 @@ export function assertSemester(value: number): 7 | 8 | 9 | 10 {
 export function formatPath(companies: Pick<Company, "name">[]): string {
   return ["NTNU KI", ...companies.map((company) => company.name)].join(" -> ");
 }
-

@@ -1,11 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
+import { careerTrackDefaults } from "@careercenter/shared";
 import App from "./App.vue";
 import { api } from "./api";
 
 vi.mock("./api", () => ({
   api: {
     careerMap: vi.fn(),
+    updateMapNode: vi.fn(),
+    resetMapNode: vi.fn(),
+    updateTrack: vi.fn(),
+    resetTrack: vi.fn(),
     companies: vi.fn(),
     courses: vi.fn(),
     paths: vi.fn(),
@@ -20,18 +25,25 @@ const mockedApi = vi.mocked(api);
 
 const defaultMapNode = {
   id: "energy-1",
-  title: "Spor A nivaa 1: Norge, 0-3 ar",
+  title: "Spor A nivå 1: Norge, 0-3 år",
   level: 1 as const,
   track: "ENERGY_QUANT" as const,
   items: ["Statkraft", "Equinor", "Volue"]
 };
 
+const defaultTopNode = {
+  id: "now",
+  title: "NÅ: KI-master / Dataingeniør / NTNU",
+  level: 0 as const,
+  items: ["Tidsserier og forecasting", "RAG / LLM systems / MLOps", "Cloud og produksjonssystemer", "Forretningsforståelse innen energi, finans og marked"]
+};
+
 function mockInitialData(
   paths: any[] = [{ id: "path-1", name: "Saved Quant Path", description: "A saved path", targetRole: "Quant", horizon: "5+ years", steps: [], createdAt: "2026-01-01", updatedAt: "2026-01-01" }],
   companies: any[] = [],
-  mapNodes = [defaultMapNode]
+  mapNodes: any[] = [defaultMapNode]
 ) {
-  mockedApi.careerMap.mockResolvedValue({ nodes: mapNodes, tracks: ["ENERGY_QUANT"] });
+  mockedApi.careerMap.mockResolvedValue({ nodes: mapNodes, tracks: careerTrackDefaults });
   mockedApi.companies.mockResolvedValue(companies);
   mockedApi.courses.mockResolvedValue([]);
   mockedApi.paths.mockResolvedValue(paths);
@@ -129,24 +141,103 @@ describe("App", () => {
 
   it("allows editing and resetting a career map node", async () => {
     mockInitialData([], [], [defaultMapNode]);
+    mockedApi.updateMapNode.mockResolvedValue({
+      ...defaultMapNode,
+      title: "Spor A nivå 1: Norge, 0-3 år (redigert)",
+      items: ["Statkraft", "Equinor", "Volue", "Nord Pool"]
+    });
+    mockedApi.resetMapNode.mockResolvedValue(defaultMapNode);
     const wrapper = mount(App);
     await flushPromises();
 
+    const mapNodeEditor = () => wrapper.findAll("article.panel.editor").find((panel) => panel.text().includes("Rediger karrierekart"))!;
+
     await wrapper.get("nav button:nth-child(3)").trigger("click");
-    await wrapper.get(".map-edit").trigger("click");
-    await wrapper.get(".editor input").setValue("Spor A nivaa 1: Norge, 0-3 ar (redigert)");
-    await wrapper.get(".editor textarea").setValue("Statkraft\nEquinor\nVolue\nNord Pool");
-    await wrapper.get(".editor .primary").trigger("click");
+    await wrapper.get(".map-node.level-1 .map-edit").trigger("click");
+    await mapNodeEditor().get("input").setValue("Spor A nivå 1: Norge, 0-3 år (redigert)");
+    await mapNodeEditor().get("textarea").setValue("Statkraft\nEquinor\nVolue\nNord Pool");
+    await mapNodeEditor().get(".primary").trigger("click");
     await flushPromises();
 
-    expect(wrapper.text()).toContain("Spor A nivaa 1: Norge, 0-3 ar (redigert)");
+    expect(mockedApi.updateMapNode).toHaveBeenCalledWith("energy-1", {
+      title: "Spor A nivå 1: Norge, 0-3 år (redigert)",
+      items: ["Statkraft", "Equinor", "Volue", "Nord Pool"]
+    });
+    expect(wrapper.text()).toContain("Spor A nivå 1: Norge, 0-3 år (redigert)");
     expect(wrapper.text()).toContain("Nord Pool");
 
-    await wrapper.get(".map-edit").trigger("click");
-    await wrapper.get(".editor .secondary").trigger("click");
+    await wrapper.get(".map-node.level-1 .map-edit").trigger("click");
+    await mapNodeEditor().get(".secondary").trigger("click");
     await flushPromises();
 
-    expect(wrapper.text()).toContain("Spor A nivaa 1: Norge, 0-3 ar");
+    expect(mockedApi.resetMapNode).toHaveBeenCalledWith("energy-1");
+    expect(wrapper.text()).toContain("Spor A nivå 1: Norge, 0-3 år");
     expect(wrapper.text()).not.toContain("(redigert)");
+  });
+
+  it("allows editing and resetting the top career map node", async () => {
+    mockInitialData([], [], [defaultTopNode, defaultMapNode]);
+    mockedApi.updateMapNode.mockResolvedValue({
+      ...defaultTopNode,
+      title: "NÅ: KI-master / Dataingeniør / NTNU (redigert)",
+      items: ["Tidsserier og forecasting", "RAG / LLM systems / MLOps", "Cloud og produksjonssystemer"]
+    });
+    mockedApi.resetMapNode.mockResolvedValue(defaultTopNode);
+    const wrapper = mount(App);
+    await flushPromises();
+
+    const mapNodeEditor = () => wrapper.findAll("article.panel.editor").find((panel) => panel.text().includes("Rediger karrierekart"))!;
+
+    await wrapper.get("nav button:nth-child(3)").trigger("click");
+    await wrapper.get(".map-node.level-0 .map-edit").trigger("click");
+    await mapNodeEditor().get("input").setValue("NÅ: KI-master / Dataingeniør / NTNU (redigert)");
+    await mapNodeEditor().get("textarea").setValue("Tidsserier og forecasting\nRAG / LLM systems / MLOps\nCloud og produksjonssystemer");
+    await mapNodeEditor().get(".primary").trigger("click");
+    await flushPromises();
+
+    expect(mockedApi.updateMapNode).toHaveBeenCalledWith("now", {
+      title: "NÅ: KI-master / Dataingeniør / NTNU (redigert)",
+      items: ["Tidsserier og forecasting", "RAG / LLM systems / MLOps", "Cloud og produksjonssystemer"]
+    });
+    expect(wrapper.text()).toContain("NÅ: KI-master / Dataingeniør / NTNU (redigert)");
+    expect(wrapper.text()).toContain("Cloud og produksjonssystemer");
+
+    await wrapper.get(".map-node.level-0 .map-edit").trigger("click");
+    await mapNodeEditor().get(".secondary").trigger("click");
+    await flushPromises();
+
+    expect(mockedApi.resetMapNode).toHaveBeenCalledWith("now");
+    expect(wrapper.text()).toContain("NÅ: KI-master / Dataingeniør / NTNU");
+    expect(wrapper.text()).not.toContain("(redigert)");
+  });
+
+  it("allows editing and resetting a career track label", async () => {
+    mockInitialData([], [], [defaultMapNode]);
+    const customLabel = "Energy & Quant (redigert)";
+    const resetTrack = careerTrackDefaults.find((track) => track.id === "ENERGY_QUANT")!;
+    mockedApi.updateTrack.mockResolvedValue({ ...resetTrack, label: customLabel });
+    mockedApi.resetTrack.mockResolvedValue(resetTrack);
+    const wrapper = mount(App);
+    await flushPromises();
+
+    const trackEditor = () => wrapper.findAll("article.panel.editor").find((panel) => panel.text().includes("Rediger spor-navn"))!;
+
+    await wrapper.get("nav button:nth-child(3)").trigger("click");
+    const energyRow = wrapper.findAll(".track-row").find((row) => row.text().includes("ENERGY_QUANT"));
+    await energyRow!.get("button").trigger("click");
+    await trackEditor().get("input").setValue(customLabel);
+    await trackEditor().get(".primary").trigger("click");
+    await flushPromises();
+
+    expect(mockedApi.updateTrack).toHaveBeenCalledWith("ENERGY_QUANT", { label: customLabel });
+    expect(wrapper.text()).toContain(customLabel);
+
+    await energyRow!.get("button").trigger("click");
+    await trackEditor().get(".secondary").trigger("click");
+    await flushPromises();
+
+    expect(mockedApi.resetTrack).toHaveBeenCalledWith("ENERGY_QUANT");
+    expect(wrapper.text()).toContain(resetTrack.label);
+    expect(wrapper.text()).not.toContain(customLabel);
   });
 });

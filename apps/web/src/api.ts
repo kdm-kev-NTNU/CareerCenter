@@ -1,4 +1,4 @@
-import type { CareerMapNode, CareerPath, Company, CoursePlan, CourseStatus, CareerTrack } from "@careercenter/shared";
+import type { CareerMapNode, CareerPath, CareerTrack, CareerTrackSetting, Company, CoursePlan, CourseStatus } from "@careercenter/shared";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -38,8 +38,22 @@ export interface PathPayload {
   steps: Array<{ companyId: string; order: number; note: string; targetRole: string }>;
 }
 
+export interface MapNodePayload {
+  title: string;
+  items: string[];
+}
+
+export interface TrackPayload {
+  label: string;
+}
+
 export const api = {
-  careerMap: () => request<{ nodes: CareerMapNode[]; tracks: CareerTrack[] }>("/api/career-map"),
+  careerMap: () => request<{ nodes: CareerMapNode[]; tracks: CareerTrackSetting[] }>("/api/career-map"),
+  updateMapNode: (id: string, payload: MapNodePayload) => request<CareerMapNode>(`/api/career-map/nodes/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
+  resetMapNode: (id: string) => request<CareerMapNode>(`/api/career-map/nodes/${id}/reset`, { method: "POST" }),
+  tracks: () => request<CareerTrackSetting[]>("/api/career-tracks"),
+  updateTrack: (id: CareerTrack, payload: TrackPayload) => request<CareerTrackSetting>(`/api/career-tracks/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
+  resetTrack: (id: CareerTrack) => request<CareerTrackSetting>(`/api/career-tracks/${id}/reset`, { method: "POST" }),
   companies: (params = "") => request<Company[]>(`/api/companies${params}`),
   courses: () => request<CoursePlan[]>("/api/courses"),
   createCourse: (payload: CoursePayload) => request<CoursePlan>("/api/courses", { method: "POST", body: JSON.stringify(payload) }),

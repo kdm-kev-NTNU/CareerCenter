@@ -1,75 +1,95 @@
-import type { CareerMapNode, Company } from "@careercenter/shared";
+import type { CareerTrackSetting } from "@careercenter/shared";
+import type { CareerMapNode } from "@careercenter/shared";
+import { careerTrackDefaults } from "@careercenter/shared";
+import type { Company } from "@careercenter/shared";
 
-export const careerMapNodes: CareerMapNode[] = [
-  {
+export type CareerMapNodeSeed = CareerMapNode & {
+  defaultTitle: string;
+  defaultItems: string[];
+  sortOrder: number;
+};
+
+export const careerTrackSeeds: CareerTrackSetting[] = careerTrackDefaults;
+
+function seedNode(node: CareerMapNode, sortOrder: number): CareerMapNodeSeed {
+  return {
+    ...node,
+    defaultTitle: node.title,
+    defaultItems: [...node.items],
+    sortOrder
+  };
+}
+
+export const careerMapNodeSeeds: CareerMapNodeSeed[] = [
+  seedNode({
     id: "now",
     title: "NÅ: KI-master / Dataingeniør / NTNU",
     level: 0,
     items: ["Tidsserier og forecasting", "RAG / LLM systems / MLOps", "Cloud og produksjonssystemer", "Forretningsforståelse innen energi, finans og marked"]
-  },
-  {
+  }, 0),
+  seedNode({
     id: "energy-1",
     title: "Spor A nivå 1: Norge, 0-3 år",
     level: 1,
     track: "ENERGY_QUANT",
     items: ["Statkraft", "Equinor", "Volue", "Nord Pool", "Cognite", "Rystad Energy", "DNV"]
-  },
-  {
+  }, 1),
+  seedNode({
     id: "energy-2",
     title: "Spor A nivå 2: Norden/Europa, 2-4 år",
     level: 2,
     track: "ENERGY_QUANT",
     items: ["Vattenfall Energy Trading", "Ørsted Trading", "InCommodities", "Danske Commodities", "Axpo", "RWE Supply & Trading"]
-  },
-  {
+  }, 2),
+  seedNode({
     id: "energy-3",
     title: "Spor A nivå 3: Global elite, 5+ år",
     level: 3,
     track: "ENERGY_QUANT",
     items: ["Vitol", "Glencore", "Trafigura", "Mercuria", "Citadel commodities", "Man AHL"]
-  },
-  {
+  }, 3),
+  seedNode({
     id: "consulting-1",
     title: "Spor B nivå 1: Norge, 0-3 år",
     level: 1,
     track: "AI_CONSULTING",
     items: ["McKinsey QuantumBlack", "BCG X", "Bain", "Deloitte AI & Data", "EY Data & AI", "PwC Deals/Data", "KPMG Lighthouse"]
-  },
-  {
+  }, 4),
+  seedNode({
     id: "consulting-2",
     title: "Spor B nivå 2: Europa, 2-4 år",
     level: 2,
     track: "AI_CONSULTING",
     items: ["Deloitte M&A Technology", "EY-Parthenon", "Accenture Strategy", "Oliver Wyman Digital", "Altman Solon", "Alvarez & Marsal"]
-  },
-  {
+  }, 5),
+  seedNode({
     id: "consulting-3",
     title: "Spor B nivå 3: Global elite, 5+ år",
     level: 3,
     track: "AI_CONSULTING",
     items: ["PE Portfolio Operations", "Operating Partner AI", "Blackstone Tech & Innovations", "Insight Onsite", "Hg AI Transformation", "EQT Motherbrain"]
-  },
-  {
+  }, 6),
+  seedNode({
     id: "venture-1",
     title: "Spor C nivå 1: Norge/Norden, 0-3 år",
     level: 1,
     track: "VENTURE_PE_AI_OPS",
     items: ["Verdane", "EQT Ventures", "NBIM", "Investinor", "Nysnø", "Viking Venture", "Schibsted Ventures"]
-  },
-  {
+  }, 7),
+  seedNode({
     id: "venture-2",
     title: "Spor C nivå 2: Europa, 2-4 år",
     level: 2,
     track: "VENTURE_PE_AI_OPS",
     items: ["EQT Motherbrain", "Hg", "Insight Partners", "Verdane Elevate", "Northzone", "Creandum", "Atomico", "Index Ventures"]
-  },
-  {
+  }, 8),
+  seedNode({
     id: "venture-3",
     title: "Spor C nivå 3: Global elite, 5+ år",
     level: 3,
     track: "VENTURE_PE_AI_OPS",
     items: ["Blackstone", "KKR", "Vista Equity Partners", "Thoma Bravo", "Silver Lake", "General Atlantic", "Sequoia", "Andreessen Horowitz"]
-  }
+  }, 9)
 ];
 
 export const companies: Company[] = [
@@ -94,4 +114,3 @@ export const companies: Company[] = [
   { id: "vitol", name: "Vitol", description: "Global commodity trading elite.", tracks: ["ENERGY_QUANT"], tier: 3, geography: "Geneva / London / globalt", roleTypes: ["Commodity Trader", "Quant Analyst", "Risk Analyst"], difficulty: "Very high", upside: "Very high", relevanceScore: 92, websiteUrl: "https://www.vitol.com" },
   { id: "blackstone", name: "Blackstone", description: "Global PE med Technology & Innovations, Data Science og portfolio operations.", tracks: ["VENTURE_PE_AI_OPS", "INVESTMENT_TECH"], tier: 3, geography: "New York / London / globalt", roleTypes: ["Data Science", "Portfolio Operations", "Technology Strategy"], difficulty: "Very high", upside: "Very high", relevanceScore: 93, websiteUrl: "https://www.blackstone.com" }
 ];
-

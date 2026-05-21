@@ -1,22 +1,88 @@
 import { nanoid } from "nanoid";
-import type { CareerPath, CareerPathStep, Company, CoursePlan, UserProfile } from "@careercenter/shared";
-import { companies as seededCompanies } from "./seedData.js";
-import type { CompanyQuery, CourseInput, PathInput, Repository } from "./repository.js";
+import type { CareerMapNode, CareerPath, CareerPathStep, CareerTrack, CareerTrackSetting, Company, CoursePlan, UserProfile } from "@careercenter/shared";
+import { companies as seededCompanies, careerMapNodeSeeds, careerTrackSeeds } from "./seedData.js";
+import type { CareerMapNodeInput, CareerTrackInput, CompanyQuery, CourseInput, PathInput, Repository } from "./repository.js";
 import { SINGLE_USER_EMAIL } from "./repository.js";
+
+type StoredTrack = CareerTrackSetting & { defaultLabel: string };
+type StoredNode = CareerMapNode & { defaultTitle: string; defaultItems: string[]; sortOrder: number };
 
 export class MemoryRepository implements Repository {
   private singleUser: UserProfile | null = null;
   private courses = new Map<string, CoursePlan & { userId: string }>();
   private paths = new Map<string, CareerPath & { userId: string }>();
   private companies = [...seededCompanies];
+  private tracks = new Map<string, StoredTrack>(careerTrackSeeds.map((track) => [track.id, { ...track, defaultLabel: track.label }]));
+  private mapNodes = new Map<string, StoredNode>(
+    careerMapNodeSeeds.map((node) => [
+      node.id,
+      {
+        id: node.id,
+        title: node.title,
+        level: node.level,
+        track: node.track,
+        items: [...node.items],
+        defaultTitle: node.defaultTitle,
+        defaultItems: [...node.defaultItems],
+        sortOrder: node.sortOrder
+      }
+    ])
+  );
 
   async getOrCreateSingleUser(): Promise<UserProfile> {
     this.singleUser ??= { id: "single-user", email: SINGLE_USER_EMAIL };
     return this.singleUser;
   }
 
+  async getCareerMap(): Promise<{ nodes: CareerMapNode[]; tracks: CareerTrackSetting[] }> {
+    return {
+      nodes: [...this.mapNodes.values()]
+        .sort((a, b) => a.level - b.level || a.sortOrder - b.sortOrder)
+        .map((node) => this.cloneNode(node)),
+      tracks: [...this.tracks.values()].sort((a, b) => a.sortOrder - b.sortOrder).map((track) => this.cloneTrack(track))
+    };
+  }
+
+  async updateCareerMapNode(id: string, input: CareerMapNodeInput): Promise<CareerMapNode | null> {
+    const existing = this.mapNodes.get(id);
+    if (!existing) return null;
+    const next = { ...existing, title: input.title, items: [...input.items] };
+    this.mapNodes.set(id, next);
+    return this.cloneNode(next);
+  }
+
+  async resetCareerMapNode(id: string): Promise<CareerMapNode | null> {
+    const existing = this.mapNodes.get(id);
+    if (!existing) return null;
+    const next = { ...existing, title: existing.defaultTitle, items: [...existing.defaultItems] };
+    this.mapNodes.set(id, next);
+    return this.cloneNode(next);
+  }
+
+  async listCareerTracks(): Promise<CareerTrackSetting[]> {
+    return [...this.tracks.values()].sort((a, b) => a.sortOrder - b.sortOrder).map((track) => this.cloneTrack(track));
+  }
+
+  async updateCareerTrack(id: CareerTrack, input: CareerTrackInput): Promise<CareerTrackSetting | null> {
+    const existing = this.tracks.get(id);
+    if (!existing) return null;
+    const next = { ...existing, label: input.label };
+    this.tracks.set(id, next);
+    return this.cloneTrack(next);
+  }
+
+  async resetCareerTrack(id: CareerTrack): Promise<CareerTrackSetting | null> {
+    const existing = this.tracks.get(id);
+    if (!existing) return null;
+    const next = { ...existing, label: existing.defaultLabel };
+    this.tracks.set(id, next);
+    return this.cloneTrack(next);
+  }
+
   async listCourses(userId: string): Promise<CoursePlan[]> {
-    return [...this.courses.values()].filter((course) => course.userId === userId).sort((a, b) => a.semester - b.semester || a.sortOrder - b.sortOrder);
+    return [...this.courses.values()]
+      .filter((course) => course.userId === userId)
+      .sort((a, b) => a.semester - b.semester || a.sortOrder - b.sortOrder);
   }
 
   async createCourse(userId: string, input: CourseInput): Promise<CoursePlan> {
@@ -86,7 +152,27 @@ export class MemoryRepository implements Repository {
   private hydratePath(path: CareerPath): CareerPath {
     return {
       ...path,
-      steps: path.steps.map((step) => ({ ...step, company: this.companies.find((company) => company.id === step.companyId) })).sort((a, b) => a.order - b.order)
+      steps: path.steps
+        .map((step) => ({ ...step, company: this.companies.find((company) => company.id === step.companyId) }))
+        .sort((a, b) => a.order - b.order)
+    };
+  }
+
+  private cloneNode(node: StoredNode): CareerMapNode {
+    return {
+      id: node.id,
+      title: node.title,
+      level: node.level,
+      track: node.track,
+      items: [...node.items]
+    };
+  }
+
+  private cloneTrack(track: StoredTrack): CareerTrackSetting {
+    return {
+      id: track.id,
+      label: track.label,
+      sortOrder: track.sortOrder
     };
   }
 }

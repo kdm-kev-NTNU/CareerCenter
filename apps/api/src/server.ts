@@ -5,8 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { careerTracks } from "@careercenter/shared";
 import type { Repository } from "./repository.js";
-import { courseSchema, pathSchema } from "./schemas.js";
-import { careerMapNodes } from "./seedData.js";
+import { courseSchema, mapNodeSchema, pathSchema, trackSchema } from "./schemas.js";
 
 export interface ServerOptions {
   repository: Repository;
@@ -20,7 +19,32 @@ export function buildServer(options: ServerOptions) {
   app.register(cors, { origin: true });
 
   app.get("/api/health", async () => ({ ok: true }));
-  app.get("/api/career-map", async () => ({ nodes: careerMapNodes, tracks: careerTracks }));
+  app.get("/api/career-map", async () => repository.getCareerMap());
+  app.put("/api/career-map/nodes/:id", async (request, reply) => {
+    const result = await repository.updateCareerMapNode((request.params as { id: string }).id, mapNodeSchema.parse(request.body));
+    return result ?? reply.code(404).send({ message: "Node ikke funnet." });
+  });
+  app.post("/api/career-map/nodes/:id/reset", async (request, reply) => {
+    const result = await repository.resetCareerMapNode((request.params as { id: string }).id);
+    return result ?? reply.code(404).send({ message: "Node ikke funnet." });
+  });
+  app.get("/api/career-tracks", async () => repository.listCareerTracks());
+  app.put("/api/career-tracks/:id", async (request, reply) => {
+    const id = (request.params as { id: string }).id as (typeof careerTracks)[number];
+    if (!careerTracks.includes(id)) {
+      return reply.code(404).send({ message: "Spor ikke funnet." });
+    }
+    const result = await repository.updateCareerTrack(id, trackSchema.parse(request.body));
+    return result ?? reply.code(404).send({ message: "Spor ikke funnet." });
+  });
+  app.post("/api/career-tracks/:id/reset", async (request, reply) => {
+    const id = (request.params as { id: string }).id as (typeof careerTracks)[number];
+    if (!careerTracks.includes(id)) {
+      return reply.code(404).send({ message: "Spor ikke funnet." });
+    }
+    const result = await repository.resetCareerTrack(id);
+    return result ?? reply.code(404).send({ message: "Spor ikke funnet." });
+  });
 
   app.get("/api/courses", async () => repository.listCourses((await repository.getOrCreateSingleUser()).id));
   app.post("/api/courses", async (request) => repository.createCourse((await repository.getOrCreateSingleUser()).id, courseSchema.parse(request.body)));

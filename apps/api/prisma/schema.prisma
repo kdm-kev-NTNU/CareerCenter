@@ -45,6 +45,26 @@ model Company {
   pathSteps      CareerPathStep[]
 }
 
+model CareerTrackSetting {
+  id           String           @id
+  defaultLabel String
+  label        String
+  sortOrder    Int              @default(0)
+  nodes        CareerMapNode[]
+}
+
+model CareerMapNode {
+  id           String           @id
+  defaultTitle String
+  title        String
+  defaultItems String[]
+  items        String[]
+  level        Int
+  trackId      String?
+  sortOrder    Int              @default(0)
+  track        CareerTrackSetting? @relation(fields: [trackId], references: [id], onDelete: SetNull)
+}
+
 model CareerPath {
   id          String           @id @default(cuid())
   userId      String
@@ -68,4 +88,3 @@ model CareerPathStep {
   path       CareerPath @relation(fields: [pathId], references: [id], onDelete: Cascade)
   company    Company    @relation(fields: [companyId], references: [id])
 }
-
