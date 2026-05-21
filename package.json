@@ -1,0 +1,28 @@
+{
+  "name": "careercenter",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @careercenter/api & npm run dev --workspace @careercenter/web",
+    "build": "npm run build --workspaces",
+    "typecheck": "npm run typecheck --workspaces",
+    "lint": "npm run lint --workspaces",
+    "test": "npm run test --workspaces",
+    "test:e2e": "npm run test:e2e --workspace @careercenter/web",
+    "db:generate": "npm run db:generate --workspace @careercenter/api",
+    "db:migrate": "npm run db:migrate --workspace @careercenter/api",
+    "db:seed": "npm run db:seed --workspace @careercenter/api"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.18.0",
+    "eslint": "^9.18.0",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.20.0"
+  }
+}
+
