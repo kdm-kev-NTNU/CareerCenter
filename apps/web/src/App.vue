@@ -278,7 +278,6 @@ onMounted(async () => {
           <label>Tittel<input v-model="newCourse.title" placeholder="Machine Learning" required /></label>
           <label>Studiepoeng<input v-model.number="newCourse.credits" type="number" step="0.5" /></label>
           <label>Status<select v-model="newCourse.status"><option v-for="status in statuses" :key="status">{{ status }}</option></select></label>
-          <label>Spor<select v-model="newCourse.trackTags[0]"><option v-for="track in tracks" :key="track" :value="track">{{ trackName(track) }}</option></select></label>
           <label class="wide-field">Notater<textarea v-model="newCourse.notes" placeholder="Hvorfor faget passer pathen" /></label>
           <button class="primary" type="submit">Legg til fag</button>
         </form>
@@ -346,7 +345,13 @@ onMounted(async () => {
         </div>
 
         <div class="map">
-          <article v-for="node in visibleMapNodes" :key="node.id" class="map-node" :class="[`level-${node.level}`, { editing: editingMapNodeId === node.id }]">
+          <article
+            v-for="node in visibleMapNodes"
+            :key="node.id"
+            class="map-node"
+            :data-node-id="node.id"
+            :class="[`level-${node.level}`, { editing: editingMapNodeId === node.id }]"
+          >
             <template v-if="editingMapNodeId === node.id">
               <div class="map-head">
                 <input v-model="editingMapTitle" class="inline-title" />
