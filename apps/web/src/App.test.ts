@@ -150,13 +150,17 @@ describe("App", () => {
     const wrapper = mount(App);
     await flushPromises();
 
-    const mapNodeEditor = () => wrapper.findAll("article.panel.editor").find((panel) => panel.text().includes("Rediger karrierekart"))!;
-
     await wrapper.get("nav button:nth-child(3)").trigger("click");
-    await wrapper.get(".map-node.level-1 .map-edit").trigger("click");
-    await mapNodeEditor().get("input").setValue("Spor A nivå 1: Norge, 0-3 år (redigert)");
-    await mapNodeEditor().get("textarea").setValue("Statkraft\nEquinor\nVolue\nNord Pool");
-    await mapNodeEditor().get(".primary").trigger("click");
+    const mapNode = () => wrapper.get(".map-node.level-1");
+    await mapNode().get(".map-edit").trigger("click");
+    await mapNode().get(".inline-title").setValue("Spor A nivå 1: Norge, 0-3 år (redigert)");
+    await mapNode().get(".add-item").trigger("click");
+    const itemInputs = mapNode().findAll(".editable-items input");
+    await itemInputs[0].setValue("Statkraft");
+    await itemInputs[1].setValue("Equinor");
+    await itemInputs[2].setValue("Volue");
+    await itemInputs[3].setValue("Nord Pool");
+    await mapNode().get(".primary").trigger("click");
     await flushPromises();
 
     expect(mockedApi.updateMapNode).toHaveBeenCalledWith("energy-1", {
@@ -166,8 +170,8 @@ describe("App", () => {
     expect(wrapper.text()).toContain("Spor A nivå 1: Norge, 0-3 år (redigert)");
     expect(wrapper.text()).toContain("Nord Pool");
 
-    await wrapper.get(".map-node.level-1 .map-edit").trigger("click");
-    await mapNodeEditor().get(".secondary").trigger("click");
+    await mapNode().get(".map-edit").trigger("click");
+    await mapNode().get(".secondary").trigger("click");
     await flushPromises();
 
     expect(mockedApi.resetMapNode).toHaveBeenCalledWith("energy-1");
@@ -186,13 +190,16 @@ describe("App", () => {
     const wrapper = mount(App);
     await flushPromises();
 
-    const mapNodeEditor = () => wrapper.findAll("article.panel.editor").find((panel) => panel.text().includes("Rediger karrierekart"))!;
-
     await wrapper.get("nav button:nth-child(3)").trigger("click");
-    await wrapper.get(".map-node.level-0 .map-edit").trigger("click");
-    await mapNodeEditor().get("input").setValue("NÅ: KI-master / Dataingeniør / NTNU (redigert)");
-    await mapNodeEditor().get("textarea").setValue("Tidsserier og forecasting\nRAG / LLM systems / MLOps\nCloud og produksjonssystemer");
-    await mapNodeEditor().get(".primary").trigger("click");
+    const topNode = () => wrapper.get(".map-node.level-0");
+    await topNode().get(".map-edit").trigger("click");
+    await topNode().get(".inline-title").setValue("NÅ: KI-master / Dataingeniør / NTNU (redigert)");
+    const itemInputs = topNode().findAll(".editable-items input");
+    await itemInputs[0].setValue("Tidsserier og forecasting");
+    await itemInputs[1].setValue("RAG / LLM systems / MLOps");
+    await itemInputs[2].setValue("Cloud og produksjonssystemer");
+    await topNode().findAll(".editable-items .icon")[3].trigger("click");
+    await topNode().get(".primary").trigger("click");
     await flushPromises();
 
     expect(mockedApi.updateMapNode).toHaveBeenCalledWith("now", {
@@ -202,8 +209,8 @@ describe("App", () => {
     expect(wrapper.text()).toContain("NÅ: KI-master / Dataingeniør / NTNU (redigert)");
     expect(wrapper.text()).toContain("Cloud og produksjonssystemer");
 
-    await wrapper.get(".map-node.level-0 .map-edit").trigger("click");
-    await mapNodeEditor().get(".secondary").trigger("click");
+    await topNode().get(".map-edit").trigger("click");
+    await topNode().get(".secondary").trigger("click");
     await flushPromises();
 
     expect(mockedApi.resetMapNode).toHaveBeenCalledWith("now");
@@ -220,20 +227,18 @@ describe("App", () => {
     const wrapper = mount(App);
     await flushPromises();
 
-    const trackEditor = () => wrapper.findAll("article.panel.editor").find((panel) => panel.text().includes("Rediger spor-navn"))!;
-
     await wrapper.get("nav button:nth-child(3)").trigger("click");
-    const energyRow = wrapper.findAll(".track-row").find((row) => row.text().includes("ENERGY_QUANT"));
-    await energyRow!.get("button").trigger("click");
-    await trackEditor().get("input").setValue(customLabel);
-    await trackEditor().get(".primary").trigger("click");
+    const energyRow = () => wrapper.findAll(".track-row").find((row) => row.text().includes("ENERGY_QUANT"))!;
+    await energyRow().get("button.secondary").trigger("click");
+    await energyRow().get(".inline-title").setValue(customLabel);
+    await energyRow().get(".primary").trigger("click");
     await flushPromises();
 
     expect(mockedApi.updateTrack).toHaveBeenCalledWith("ENERGY_QUANT", { label: customLabel });
     expect(wrapper.text()).toContain(customLabel);
 
-    await energyRow!.get("button").trigger("click");
-    await trackEditor().get(".secondary").trigger("click");
+    await energyRow().get("button.secondary").trigger("click");
+    await energyRow().get(".secondary").trigger("click");
     await flushPromises();
 
     expect(mockedApi.resetTrack).toHaveBeenCalledWith("ENERGY_QUANT");

@@ -15,7 +15,7 @@ const mapNodes = ref<CareerMapNode[]>([]);
 const trackSettings = ref<CareerTrackSetting[]>([]);
 const editingMapNodeId = ref<string | null>(null);
 const editingMapTitle = ref("");
-const editingMapItems = ref("");
+const editingMapItemsList = ref<string[]>([]);
 const editingTrackId = ref<CareerTrack | null>(null);
 const editingTrackLabel = ref("");
 const search = ref("");
@@ -73,21 +73,26 @@ async function loadPublicData() {
 function openMapEditor(node: CareerMapNode) {
   editingMapNodeId.value = node.id;
   editingMapTitle.value = node.title;
-  editingMapItems.value = node.items.join("\n");
+  editingMapItemsList.value = [...node.items];
 }
 
 function clearMapEditor() {
   editingMapNodeId.value = null;
   editingMapTitle.value = "";
-  editingMapItems.value = "";
+  editingMapItemsList.value = [];
+}
+
+function addMapItem() {
+  editingMapItemsList.value.push("");
+}
+
+function removeMapItem(index: number) {
+  editingMapItemsList.value.splice(index, 1);
 }
 
 async function saveMapEditor() {
   if (!editingMapNodeId.value) return;
-  const items = editingMapItems.value
-    .split("\n")
-    .map((item) => item.trim())
-    .filter(Boolean);
+  const items = editingMapItemsList.value.map((item) => item.trim()).filter(Boolean);
   const updated = await api.updateMapNode(editingMapNodeId.value, { title: editingMapTitle.value.trim() || selectedMapNode.value?.title || "", items });
   mapNodes.value = mapNodes.value.map((node) => (node.id === updated.id ? updated : node));
   clearMapEditor();
@@ -302,25 +307,28 @@ onMounted(async () => {
             </div>
           </div>
           <div class="track-list">
-            <div v-for="track in trackList" :key="track.id" class="track-row">
-              <div>
-                <strong>{{ trackName(track.id) }}</strong>
-                <small>{{ track.id }}</small>
-              </div>
-              <div class="actions">
-                <button type="button" class="secondary" @click="openTrackEditor(track)">Rediger</button>
-              </div>
+            <div v-for="track in trackList" :key="track.id" class="track-row" :class="{ editing: editingTrackId === track.id }">
+              <template v-if="editingTrackId === track.id">
+                <div class="track-row-edit">
+                  <input v-model="editingTrackLabel" class="inline-title" />
+                  <small>{{ track.id }}</small>
+                </div>
+                <div class="actions">
+                  <button type="button" class="primary" @click="saveTrackEditor">Lagre</button>
+                  <button type="button" class="secondary" @click="resetTrackEditor">Tilbakestill</button>
+                  <button type="button" class="ghost" @click="clearTrackEditor">Avbryt</button>
+                </div>
+              </template>
+              <template v-else>
+                <div>
+                  <strong>{{ trackName(track.id) }}</strong>
+                  <small>{{ track.id }}</small>
+                </div>
+                <div class="actions">
+                  <button type="button" class="secondary" @click="openTrackEditor(track)">Rediger</button>
+                </div>
+              </template>
             </div>
-          </div>
-        </article>
-
-        <article v-if="selectedTrack" class="panel editor">
-          <h2>Rediger spor-navn</h2>
-          <label>Navn<input v-model="editingTrackLabel" /></label>
-          <div class="actions">
-            <button type="button" class="primary" @click="saveTrackEditor">Lagre</button>
-            <button type="button" class="secondary" @click="resetTrackEditor">Tilbakestill</button>
-            <button type="button" class="ghost" @click="clearTrackEditor">Lukk</button>
           </div>
         </article>
 
@@ -338,27 +346,35 @@ onMounted(async () => {
         </div>
 
         <div class="map">
-          <article v-for="node in visibleMapNodes" :key="node.id" class="map-node" :class="`level-${node.level}`">
-            <div class="map-head">
-              <h2>{{ node.title }}</h2>
-              <button type="button" class="secondary map-edit" @click="openMapEditor(node)">Rediger</button>
-            </div>
-            <ul>
-              <li v-for="item in node.items" :key="item">{{ item }}</li>
-            </ul>
+          <article v-for="node in visibleMapNodes" :key="node.id" class="map-node" :class="[`level-${node.level}`, { editing: editingMapNodeId === node.id }]">
+            <template v-if="editingMapNodeId === node.id">
+              <div class="map-head">
+                <input v-model="editingMapTitle" class="inline-title" />
+                <div class="actions">
+                  <button type="button" class="primary" @click="saveMapEditor">Lagre</button>
+                  <button type="button" class="secondary" @click="resetMapEditor">Tilbakestill</button>
+                  <button type="button" class="ghost" @click="clearMapEditor">Avbryt</button>
+                </div>
+              </div>
+              <ul class="editable-items">
+                <li v-for="(_item, index) in editingMapItemsList" :key="index">
+                  <input v-model="editingMapItemsList[index]" />
+                  <button type="button" class="icon" aria-label="Slett punkt" @click="removeMapItem(index)">x</button>
+                </li>
+              </ul>
+              <button type="button" class="ghost add-item" @click="addMapItem">+ Legg til punkt</button>
+            </template>
+            <template v-else>
+              <div class="map-head">
+                <h2>{{ node.title }}</h2>
+                <button type="button" class="secondary map-edit" @click="openMapEditor(node)">Rediger</button>
+              </div>
+              <ul>
+                <li v-for="item in node.items" :key="item">{{ item }}</li>
+              </ul>
+            </template>
           </article>
         </div>
-
-        <article v-if="selectedMapNode" class="panel editor">
-          <h2>Rediger karrierekart</h2>
-          <label>Tittel<input v-model="editingMapTitle" /></label>
-          <label>Punkter<textarea v-model="editingMapItems" placeholder="En linje per punkt" /></label>
-          <div class="actions">
-            <button type="button" class="primary" @click="saveMapEditor">Lagre</button>
-            <button type="button" class="secondary" @click="resetMapEditor">Tilbakestill</button>
-            <button type="button" class="ghost" @click="clearMapEditor">Lukk</button>
-          </div>
-        </article>
       </section>
 
       <section v-if="page === 'companies' || page === 'paths'" class="stack">

@@ -30,21 +30,22 @@ describe("CareerCenter custom paths", () => {
     cy.contains("button", "Karrierekart").click();
     cy.contains(".map-node", "Spor A nivå 1").within(() => {
       cy.contains("button", "Rediger").click();
+      cy.get(".inline-title").clear().type("Spor A nivå 1: Norge, 0-3 år (redigert)");
+      cy.get(".editable-items input").eq(0).clear().type("Statkraft");
+      cy.get(".editable-items input").eq(1).clear().type("Equinor");
+      cy.get(".editable-items input").eq(2).clear().type("Volue");
+      cy.contains("button", "+ Legg til punkt").click();
+      cy.get(".editable-items input").eq(3).clear().type("Nord Pool");
+      cy.contains("button", "Lagre").click();
     });
-
-    cy.get(".editor input").clear().type("Spor A nivå 1: Norge, 0-3 år (redigert)");
-    cy.get(".editor textarea")
-      .clear()
-      .type("Statkraft{enter}Equinor{enter}Volue{enter}Nord Pool");
-    cy.contains(".editor button", "Lagre").click();
 
     cy.contains(".map-node", "Spor A nivå 1: Norge, 0-3 år (redigert)").should("be.visible");
     cy.contains(".map-node", "Nord Pool").should("be.visible");
 
     cy.contains(".map-node", "Spor A nivå 1: Norge, 0-3 år (redigert)").within(() => {
       cy.contains("button", "Rediger").click();
+      cy.contains("button", "Tilbakestill").click();
     });
-    cy.contains(".editor button", "Tilbakestill").click();
 
     cy.contains(".map-node", "Spor A nivå 1").should("be.visible");
     cy.contains(".map-node", "(redigert)").should("not.exist");
@@ -56,21 +57,21 @@ describe("CareerCenter custom paths", () => {
     cy.contains("button", "Karrierekart").click();
     cy.contains(".map-node.level-0", "NÅ: KI-master").within(() => {
       cy.contains("button", "Rediger").click();
+      cy.get(".inline-title").clear().type("NÅ: KI-master / Dataingeniør / NTNU (redigert)");
+      cy.get(".editable-items input").eq(0).clear().type("Tidsserier og forecasting");
+      cy.get(".editable-items input").eq(1).clear().type("RAG / LLM systems / MLOps");
+      cy.get(".editable-items input").eq(2).clear().type("Cloud og produksjonssystemer");
+      cy.get(".editable-items .icon").eq(3).click();
+      cy.contains("button", "Lagre").click();
     });
-
-    cy.get(".editor input").clear().type("NÅ: KI-master / Dataingeniør / NTNU (redigert)");
-    cy.get(".editor textarea")
-      .clear()
-      .type("Tidsserier og forecasting{enter}RAG / LLM systems / MLOps{enter}Cloud og produksjonssystemer");
-    cy.contains(".editor button", "Lagre").click();
 
     cy.contains(".map-node.level-0", "NÅ: KI-master / Dataingeniør / NTNU (redigert)").should("be.visible");
     cy.contains(".map-node.level-0", "Cloud og produksjonssystemer").should("be.visible");
 
     cy.contains(".map-node.level-0", "NÅ: KI-master / Dataingeniør / NTNU (redigert)").within(() => {
       cy.contains("button", "Rediger").click();
+      cy.contains("button", "Tilbakestill").click();
     });
-    cy.contains(".editor button", "Tilbakestill").click();
 
     cy.contains(".map-node.level-0", "NÅ: KI-master").should("be.visible");
     cy.contains(".map-node.level-0", "(redigert)").should("not.exist");
@@ -82,25 +83,16 @@ describe("CareerCenter custom paths", () => {
     cy.contains("button", "Karrierekart").click();
     cy.contains(".track-row", "ENERGY_QUANT").within(() => {
       cy.contains("button", "Rediger").click();
+      cy.get(".inline-title").clear().type("Energy & Quant (redigert)");
+      cy.contains("button", "Lagre").click();
     });
-
-    cy.contains("h2", "Rediger spor-navn")
-      .closest("article")
-      .within(() => {
-        cy.get("input").clear().type("Energy & Quant (redigert)");
-        cy.contains("button", "Lagre").click();
-      });
 
     cy.contains(".toolbar button", "Energy & Quant (redigert)").should("be.visible");
 
     cy.contains(".track-row", "ENERGY_QUANT").within(() => {
       cy.contains("button", "Rediger").click();
+      cy.contains("button", "Tilbakestill").click();
     });
-    cy.contains("h2", "Rediger spor-navn")
-      .closest("article")
-      .within(() => {
-        cy.contains("button", "Tilbakestill").click();
-      });
 
     cy.contains(".toolbar button", "Energy, Power Trading & Quant").should("be.visible");
     cy.contains(".toolbar button", "Energy & Quant (redigert)").should("not.exist");
