@@ -172,6 +172,33 @@ nav button.active, nav button:hover { background: #1f2937; color: #ffffff; }
 .map-edit { padding: 8px 10px; white-space: nowrap; flex: 0 0 auto; }
 .map-node.level-0 .map-edit { background: rgba(255, 255, 255, 0.12); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.18); }
 .map-node.level-0 .map-edit:hover { background: rgba(255, 255, 255, 0.2); }
+.map-node.editing { border-color: var(--accent); }
+.map-node.level-0.editing .inline-title,
+.map-node.level-0.editing .editable-items input {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+.map-node.level-0.editing .editable-items li { color: #dbeafe; }
+.inline-title {
+  flex: 1 1 240px;
+  min-width: 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+.editable-items {
+  list-style: none;
+  padding-left: 0;
+  margin: 0 0 10px;
+}
+.editable-items li {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: inherit;
+}
+.editable-items input { flex: 1; min-width: 0; }
+.add-item { justify-self: start; margin-top: 4px; }
 .editor { display: grid; gap: 14px; }
 .track-list { display: grid; gap: 10px; }
 .track-row {
@@ -182,6 +209,8 @@ nav button.active, nav button:hover { background: #1f2937; color: #ffffff; }
   padding: 12px 0;
   border-top: 1px solid var(--border);
 }
+.track-row.editing { flex-wrap: wrap; align-items: flex-start; }
+.track-row-edit { display: grid; gap: 6px; flex: 1 1 240px; min-width: 0; }
 .track-row:first-child { border-top: 0; padding-top: 0; }
 .track-row strong, .track-row small { display: block; }
 .company-list { max-height: 720px; overflow: auto; }
