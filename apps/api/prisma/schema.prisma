@@ -1,0 +1,71 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  passwordHash String
+  createdAt    DateTime     @default(now())
+  courses      CoursePlan[]
+  paths        CareerPath[]
+}
+
+model CoursePlan {
+  id         String   @id @default(cuid())
+  userId     String
+  semester   Int
+  courseCode String
+  title      String
+  credits    Float
+  status     String
+  notes      String   @default("")
+  trackTags  String[]
+  sortOrder  Int      @default(0)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Company {
+  id             String           @id @default(cuid())
+  name           String           @unique
+  description    String
+  tracks         String[]
+  tier           Int
+  geography      String
+  roleTypes      String[]
+  difficulty     String
+  upside         String
+  relevanceScore Int
+  websiteUrl     String?
+  pathSteps      CareerPathStep[]
+}
+
+model CareerPath {
+  id          String           @id @default(cuid())
+  userId      String
+  name        String
+  description String           @default("")
+  targetRole  String           @default("")
+  horizon     String           @default("")
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  steps       CareerPathStep[]
+}
+
+model CareerPathStep {
+  id         String     @id @default(cuid())
+  pathId     String
+  companyId  String
+  order      Int
+  note       String     @default("")
+  targetRole String     @default("")
+  path       CareerPath @relation(fields: [pathId], references: [id], onDelete: Cascade)
+  company    Company    @relation(fields: [companyId], references: [id])
+}
+
