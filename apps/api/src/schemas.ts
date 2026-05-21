@@ -1,11 +1,6 @@
 import { careerTracks, courseStatuses } from "@careercenter/shared";
 import { z } from "zod";
 
-export const authSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8)
-});
-
 export const courseSchema = z.object({
   semester: z.union([z.literal(7), z.literal(8), z.literal(9), z.literal(10)]),
   courseCode: z.string().min(1),
@@ -31,4 +26,3 @@ export const pathSchema = z.object({
     })
   )
 });
-

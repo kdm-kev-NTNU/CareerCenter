@@ -1,13 +1,6 @@
 import type { CareerPath, CareerPathStep, CareerTrack, Company, CoursePlan, CourseStatus, UserProfile } from "@careercenter/shared";
 
-export interface RegisterUserInput {
-  email: string;
-  passwordHash: string;
-}
-
-export interface StoredUser extends UserProfile {
-  passwordHash: string;
-}
+export const SINGLE_USER_EMAIL = "local@careercenter.app";
 
 export interface CourseInput {
   semester: 7 | 8 | 9 | 10;
@@ -36,8 +29,7 @@ export interface PathInput {
 }
 
 export interface Repository {
-  findUserByEmail(email: string): Promise<StoredUser | null>;
-  createUser(input: RegisterUserInput): Promise<UserProfile>;
+  getOrCreateSingleUser(): Promise<UserProfile>;
   listCourses(userId: string): Promise<CoursePlan[]>;
   createCourse(userId: string, input: CourseInput): Promise<CoursePlan>;
   updateCourse(userId: string, id: string, input: CourseInput): Promise<CoursePlan | null>;
@@ -49,4 +41,3 @@ export interface Repository {
   updatePath(userId: string, id: string, input: PathInput): Promise<CareerPath | null>;
   deletePath(userId: string, id: string): Promise<boolean>;
 }
-

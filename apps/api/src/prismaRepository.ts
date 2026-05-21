@@ -1,6 +1,7 @@
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import type { CareerPath, CareerPathStep, Company, CoursePlan } from "@careercenter/shared";
-import type { CompanyQuery, CourseInput, PathInput, RegisterUserInput, Repository, StoredUser } from "./repository";
+import type { CompanyQuery, CourseInput, PathInput, Repository } from "./repository.js";
+import { SINGLE_USER_EMAIL } from "./repository.js";
 
 type CourseRow = {
   id: string;
@@ -52,13 +53,11 @@ type PathRow = {
 export class PrismaRepository implements Repository {
   constructor(private prisma = new PrismaClient()) {}
 
-  async findUserByEmail(email: string): Promise<StoredUser | null> {
-    return this.prisma.user.findUnique({ where: { email: email.toLowerCase() } });
-  }
-
-  async createUser(input: RegisterUserInput) {
-    return this.prisma.user.create({
-      data: { email: input.email.toLowerCase(), passwordHash: input.passwordHash },
+  async getOrCreateSingleUser() {
+    return this.prisma.user.upsert({
+      where: { email: SINGLE_USER_EMAIL },
+      update: {},
+      create: { email: SINGLE_USER_EMAIL, passwordHash: "single-user-no-login" },
       select: { id: true, email: true }
     });
   }
@@ -129,7 +128,7 @@ export class PrismaRepository implements Repository {
   async updatePath(userId: string, id: string, input: PathInput): Promise<CareerPath | null> {
     const existing = await this.prisma.careerPath.findFirst({ where: { id, userId } });
     if (!existing) return null;
-    const row = (await this.prisma.$transaction(async (tx: PrismaClient) => {
+    const row = (await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       await tx.careerPathStep.deleteMany({ where: { pathId: id } });
       return tx.careerPath.update({
         where: { id },
@@ -142,7 +141,7 @@ export class PrismaRepository implements Repository {
         },
         include: { steps: { include: { company: true }, orderBy: { order: "asc" } } }
       });
-    })) as PathRow;
+    })) as unknown as PathRow;
     return this.mapPath(row);
   }
 

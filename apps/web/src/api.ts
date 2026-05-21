@@ -1,18 +1,12 @@
-import type { CareerMapNode, CareerPath, Company, CoursePlan, CourseStatus, CareerTrack, UserProfile } from "@careercenter/shared";
+import type { CareerMapNode, CareerPath, Company, CoursePlan, CourseStatus, CareerTrack } from "@careercenter/shared";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
-export interface Session {
-  token: string;
-  user: UserProfile;
-}
-
-async function request<T>(path: string, options: RequestInit = {}, token?: string): Promise<T> {
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
       "content-type": "application/json",
-      ...(token ? { authorization: `Bearer ${token}` } : {}),
       ...options.headers
     }
   });
@@ -44,17 +38,14 @@ export interface PathPayload {
 }
 
 export const api = {
-  register: (email: string, password: string) => request<Session>("/api/auth/register", { method: "POST", body: JSON.stringify({ email, password }) }),
-  login: (email: string, password: string) => request<Session>("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   careerMap: () => request<{ nodes: CareerMapNode[]; tracks: CareerTrack[] }>("/api/career-map"),
   companies: (params = "") => request<Company[]>(`/api/companies${params}`),
-  courses: (token: string) => request<CoursePlan[]>("/api/courses", {}, token),
-  createCourse: (token: string, payload: CoursePayload) => request<CoursePlan>("/api/courses", { method: "POST", body: JSON.stringify(payload) }, token),
-  updateCourse: (token: string, id: string, payload: CoursePayload) => request<CoursePlan>(`/api/courses/${id}`, { method: "PUT", body: JSON.stringify(payload) }, token),
-  deleteCourse: (token: string, id: string) => request<void>(`/api/courses/${id}`, { method: "DELETE" }, token),
-  paths: (token: string) => request<CareerPath[]>("/api/paths", {}, token),
-  createPath: (token: string, payload: PathPayload) => request<CareerPath>("/api/paths", { method: "POST", body: JSON.stringify(payload) }, token),
-  updatePath: (token: string, id: string, payload: PathPayload) => request<CareerPath>(`/api/paths/${id}`, { method: "PUT", body: JSON.stringify(payload) }, token),
-  deletePath: (token: string, id: string) => request<void>(`/api/paths/${id}`, { method: "DELETE" }, token)
+  courses: () => request<CoursePlan[]>("/api/courses"),
+  createCourse: (payload: CoursePayload) => request<CoursePlan>("/api/courses", { method: "POST", body: JSON.stringify(payload) }),
+  updateCourse: (id: string, payload: CoursePayload) => request<CoursePlan>(`/api/courses/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
+  deleteCourse: (id: string) => request<void>(`/api/courses/${id}`, { method: "DELETE" }),
+  paths: () => request<CareerPath[]>("/api/paths"),
+  createPath: (payload: PathPayload) => request<CareerPath>("/api/paths", { method: "POST", body: JSON.stringify(payload) }),
+  updatePath: (id: string, payload: PathPayload) => request<CareerPath>(`/api/paths/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
+  deletePath: (id: string) => request<void>(`/api/paths/${id}`, { method: "DELETE" })
 };
-

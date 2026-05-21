@@ -2,15 +2,11 @@
 import { computed, onMounted, ref } from "vue";
 import type { CareerMapNode, CareerPath, CareerTrack, Company, CoursePlan, CourseStatus } from "@careercenter/shared";
 import { trackLabels } from "@careercenter/shared";
-import { api, type CoursePayload, type PathPayload, type Session } from "./api";
+import { api, type CoursePayload, type PathPayload } from "./api";
 
 type Page = "dashboard" | "master" | "map" | "companies" | "paths";
 
-const session = ref<Session | null>(loadSession());
 const page = ref<Page>("dashboard");
-const authMode = ref<"login" | "register">("register");
-const email = ref("kevin@example.com");
-const password = ref("password123");
 const error = ref("");
 const courses = ref<CoursePlan[]>([]);
 const companies = ref<Company[]>([]);
@@ -48,31 +44,9 @@ const tracks = Object.keys(trackLabels) as CareerTrack[];
 const visibleMapNodes = computed(() => mapNodes.value.filter((node) => !mapTrack.value || node.track === mapTrack.value || node.level === 0));
 const recommendedCompanies = computed(() => companies.value.slice(0, 5));
 
-function loadSession(): Session | null {
-  const raw = localStorage.getItem("careercenter-session");
-  return raw ? JSON.parse(raw) as Session : null;
-}
-
-function saveSession(next: Session | null) {
-  session.value = next;
-  if (next) localStorage.setItem("careercenter-session", JSON.stringify(next));
-  else localStorage.removeItem("careercenter-session");
-}
-
-async function authenticate() {
-  error.value = "";
-  try {
-    saveSession(authMode.value === "register" ? await api.register(email.value, password.value) : await api.login(email.value, password.value));
-    await loadPrivateData();
-  } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : "Innlogging feilet.";
-  }
-}
-
 async function loadPrivateData() {
-  if (!session.value) return;
-  courses.value = await api.courses(session.value.token);
-  paths.value = await api.paths(session.value.token);
+  courses.value = await api.courses();
+  paths.value = await api.paths();
 }
 
 async function loadPublicData() {
@@ -84,15 +58,13 @@ async function loadPublicData() {
 }
 
 async function addCourse() {
-  if (!session.value) return;
-  const created = await api.createCourse(session.value.token, { ...newCourse.value, sortOrder: courses.value.length });
+  const created = await api.createCourse({ ...newCourse.value, sortOrder: courses.value.length });
   courses.value.push(created);
   newCourse.value = { semester: newCourse.value.semester, courseCode: "", title: "", credits: 7.5, status: "planned", notes: "", trackTags: ["ENERGY_QUANT"], sortOrder: 0 };
 }
 
 async function removeCourse(id: string) {
-  if (!session.value) return;
-  await api.deleteCourse(session.value.token, id);
+  await api.deleteCourse(id);
   courses.value = courses.value.filter((course) => course.id !== id);
 }
 
@@ -107,7 +79,7 @@ function removeFromPath(companyId: string) {
 }
 
 async function savePath() {
-  if (!session.value || selectedCompanies.value.length === 0) return;
+  if (selectedCompanies.value.length === 0) return;
   savingPath.value = true;
   const payload = {
     ...newPath.value,
@@ -118,14 +90,13 @@ async function savePath() {
       targetRole: newPath.value.targetRole
     }))
   };
-  const created = await api.createPath(session.value.token, payload);
+  const created = await api.createPath(payload);
   paths.value.unshift(created);
   savingPath.value = false;
 }
 
 async function duplicatePath(path: CareerPath) {
-  if (!session.value) return;
-  const created = await api.createPath(session.value.token, {
+  const created = await api.createPath({
     name: `${path.name} kopi`,
     description: path.description,
     targetRole: path.targetRole,
@@ -136,8 +107,7 @@ async function duplicatePath(path: CareerPath) {
 }
 
 async function removePath(id: string) {
-  if (!session.value) return;
-  await api.deletePath(session.value.token, id);
+  await api.deletePath(id);
   paths.value = paths.value.filter((path) => path.id !== id);
 }
 
@@ -147,40 +117,20 @@ onMounted(async () => {
     mapNodes.value = map.nodes;
     await loadPublicData();
     await loadPrivateData();
-  } catch {
-    mapNodes.value = [];
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "Kunne ikke laste appdata.";
   }
 });
 </script>
 
 <template>
-  <main v-if="!session" class="auth-shell">
-    <section class="auth-panel">
-      <div>
-        <p class="brand">CareerCenter</p>
-        <h1>Privat base for mastervalg og karrierespor</h1>
-        <p class="lead">Bygg masterplanen, søk i selskaper og lagre egne paths fra KI-master mot energi, consulting, investment tech og PE operations.</p>
-      </div>
-      <form class="auth-form" @submit.prevent="authenticate">
-        <div class="segmented">
-          <button type="button" :class="{ active: authMode === 'register' }" @click="authMode = 'register'">Ny bruker</button>
-          <button type="button" :class="{ active: authMode === 'login' }" @click="authMode = 'login'">Logg inn</button>
-        </div>
-        <label>E-post<input v-model="email" type="email" autocomplete="email" /></label>
-        <label>Passord<input v-model="password" type="password" autocomplete="current-password" /></label>
-        <p v-if="error" class="error">{{ error }}</p>
-        <button class="primary" type="submit">{{ authMode === "register" ? "Opprett base" : "Logg inn" }}</button>
-      </form>
-    </section>
-  </main>
-
-  <div v-else class="app-shell">
+  <div class="app-shell">
     <aside class="sidebar">
       <div class="brand-block">
         <span class="mark">CC</span>
         <div>
           <strong>CareerCenter</strong>
-          <small>{{ session.user.email }}</small>
+          <small>Énbruker-base</small>
         </div>
       </div>
       <nav>
@@ -190,7 +140,6 @@ onMounted(async () => {
         <button :class="{ active: page === 'companies' }" @click="page = 'companies'">Bedrifter</button>
         <button :class="{ active: page === 'paths' }" @click="page = 'paths'">Custom Paths</button>
       </nav>
-      <button class="ghost" @click="saveSession(null)">Logg ut</button>
     </aside>
 
     <section class="content">
@@ -200,6 +149,8 @@ onMounted(async () => {
           <p>KI-master -> teknisk tung AI/data -> kommersiell verdiskaping.</p>
         </div>
       </header>
+
+      <p v-if="error" class="panel error">{{ error }}</p>
 
       <section v-if="page === 'dashboard'" class="grid three">
         <article class="panel strong">
@@ -243,7 +194,7 @@ onMounted(async () => {
             <div v-for="course in courses.filter((item) => item.semester === semester)" :key="course.id" class="course-card">
               <div>
                 <strong>{{ course.courseCode }} · {{ course.title }}</strong>
-                <small>{{ course.credits }} stp · {{ course.status }} · {{ course.trackTags.map((track) => trackLabels[track]).join(', ') }}</small>
+                <small>{{ course.credits }} stp · {{ course.status }} · {{ course.trackTags.map((track) => trackLabels[track]).join(", ") }}</small>
                 <p>{{ course.notes }}</p>
               </div>
               <button class="icon" aria-label="Slett fag" @click="removeCourse(course.id)">×</button>

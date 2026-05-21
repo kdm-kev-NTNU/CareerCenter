@@ -1,42 +1,32 @@
 import { describe, expect, it } from "vitest";
-import { MemoryRepository } from "./memoryRepository";
-import { buildServer } from "./server";
+import { MemoryRepository } from "./memoryRepository.js";
+import { buildServer } from "./server.js";
 
 async function createTestApp() {
-  const app = buildServer({ repository: new MemoryRepository(), jwtSecret: "test-secret" });
+  const app = buildServer({ repository: new MemoryRepository() });
   await app.ready();
   return app;
 }
 
 describe("CareerCenter API", () => {
-  it("registers, logs in and scopes courses to the authenticated user", async () => {
+  it("creates and lists courses for the single app user", async () => {
     const app = await createTestApp();
-    const register = await app.inject({ method: "POST", url: "/api/auth/register", payload: { email: "kevin@example.com", password: "password123" } });
-    expect(register.statusCode).toBe(200);
-    const token = register.json().token;
 
     const createCourse = await app.inject({
       method: "POST",
       url: "/api/courses",
-      headers: { authorization: `Bearer ${token}` },
       payload: { semester: 7, courseCode: "TDT4173", title: "Machine Learning", credits: 7.5, status: "planned", notes: "Relevant for quant", trackTags: ["ENERGY_QUANT"], sortOrder: 0 }
     });
     expect(createCourse.statusCode).toBe(200);
 
-    const courses = await app.inject({ method: "GET", url: "/api/courses", headers: { authorization: `Bearer ${token}` } });
+    const courses = await app.inject({ method: "GET", url: "/api/courses" });
     expect(courses.json()).toHaveLength(1);
-
-    const other = await app.inject({ method: "POST", url: "/api/auth/register", payload: { email: "other@example.com", password: "password123" } });
-    const otherCourses = await app.inject({ method: "GET", url: "/api/courses", headers: { authorization: `Bearer ${other.json().token}` } });
-    expect(otherCourses.json()).toHaveLength(0);
 
     await app.close();
   });
 
   it("searches companies and creates a custom path", async () => {
     const app = await createTestApp();
-    const register = await app.inject({ method: "POST", url: "/api/auth/register", payload: { email: "path@example.com", password: "password123" } });
-    const token = register.json().token;
 
     const companies = await app.inject({ method: "GET", url: "/api/companies?q=Statkraft&track=ENERGY_QUANT" });
     expect(companies.json()[0].name).toBe("Statkraft");
@@ -44,7 +34,6 @@ describe("CareerCenter API", () => {
     const created = await app.inject({
       method: "POST",
       url: "/api/paths",
-      headers: { authorization: `Bearer ${token}` },
       payload: {
         name: "Energy Quant-ruten",
         description: "NTNU til global commodity trading",

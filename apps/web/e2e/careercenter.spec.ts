@@ -2,9 +2,6 @@ import { expect, test } from "@playwright/test";
 
 test("user creates courses and saves a custom path", async ({ page }) => {
   await page.goto("/");
-  await page.getByLabel("E-post").fill(`kevin-${Date.now()}@example.com`);
-  await page.getByLabel("Passord").fill("password123");
-  await page.getByRole("button", { name: "Opprett base" }).click();
 
   await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
   await page.getByRole("button", { name: "Master Plan" }).click();

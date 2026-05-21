@@ -1,22 +1,18 @@
 import { nanoid } from "nanoid";
 import type { CareerPath, CareerPathStep, Company, CoursePlan, UserProfile } from "@careercenter/shared";
-import { companies as seededCompanies } from "./seedData";
-import type { CompanyQuery, CourseInput, PathInput, RegisterUserInput, Repository, StoredUser } from "./repository";
+import { companies as seededCompanies } from "./seedData.js";
+import type { CompanyQuery, CourseInput, PathInput, Repository } from "./repository.js";
+import { SINGLE_USER_EMAIL } from "./repository.js";
 
 export class MemoryRepository implements Repository {
-  private users = new Map<string, StoredUser>();
+  private singleUser: UserProfile | null = null;
   private courses = new Map<string, CoursePlan & { userId: string }>();
   private paths = new Map<string, CareerPath & { userId: string }>();
   private companies = [...seededCompanies];
 
-  async findUserByEmail(email: string): Promise<StoredUser | null> {
-    return [...this.users.values()].find((user) => user.email === email.toLowerCase()) ?? null;
-  }
-
-  async createUser(input: RegisterUserInput): Promise<UserProfile> {
-    const user = { id: nanoid(), email: input.email.toLowerCase(), passwordHash: input.passwordHash };
-    this.users.set(user.id, user);
-    return { id: user.id, email: user.email };
+  async getOrCreateSingleUser(): Promise<UserProfile> {
+    this.singleUser ??= { id: "single-user", email: SINGLE_USER_EMAIL };
+    return this.singleUser;
   }
 
   async listCourses(userId: string): Promise<CoursePlan[]> {
@@ -94,4 +90,3 @@ export class MemoryRepository implements Repository {
     };
   }
 }
-
