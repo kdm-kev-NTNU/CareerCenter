@@ -2,10 +2,10 @@
   "name": "@careercenter/api",
   "version": "0.1.0",
   "type": "module",
-  "main": "dist/src/index.js",
+  "main": "dist/backend/src/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "start:prod": "prisma migrate deploy && node dist/prisma/seed.js && node dist/src/index.js",
+    "start:prod": "prisma migrate deploy && node dist/backend/prisma/seed.js && node dist/backend/src/index.js",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src --ext .ts",
