@@ -13,7 +13,7 @@ RUN npm run build --workspace @careercenter/shared
 RUN npm run build --workspace @careercenter/web
 
 FROM nginx:alpine AS runtime
-ENV API_UPSTREAM=backend:3000
+ENV API_UPSTREAM=careercenter.railway.internal:3000
 COPY frontend/nginx/default.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /app/frontend/dist /usr/share/nginx/html
 EXPOSE 8080
