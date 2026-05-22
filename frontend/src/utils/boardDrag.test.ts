@@ -17,6 +17,21 @@ describe("boardDrag", () => {
     expect(readBoardDragData(dataTransfer)).toEqual({ kind: "company", companyId: "statkraft" });
   });
 
+  it("writes and reads milestone and note drag payloads", () => {
+    const data = new Map<string, string>();
+    const dataTransfer = {
+      setData: (type: string, value: string) => data.set(type, value),
+      getData: (type: string) => data.get(type) ?? "",
+      effectAllowed: "none"
+    } as unknown as DataTransfer;
+
+    setBoardDragData(dataTransfer, { kind: "milestone", label: "Offer" });
+    expect(readBoardDragData(dataTransfer)).toEqual({ kind: "milestone", label: "Offer" });
+
+    setBoardDragData(dataTransfer, { kind: "note", text: "Follow up" });
+    expect(readBoardDragData(dataTransfer)).toEqual({ kind: "note", text: "Follow up" });
+  });
+
   it("returns null for missing or invalid drag payloads", () => {
     const empty = { getData: () => "" } as unknown as DataTransfer;
     expect(readBoardDragData(empty)).toBeNull();
