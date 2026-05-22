@@ -54,14 +54,14 @@ describe("useCompetitionsStore", () => {
         location: "Oslo",
         registrationDeadline: "2025-01-01",
         scope: "NORWAY",
-        type: "case",
+        type: "case_competition",
         status: "considering"
       }),
       sampleEntry({
         id: "comp-3",
         title: "No Date",
-        registrationDeadline: null,
-        startDate: null,
+        registrationDeadline: undefined,
+        startDate: undefined,
         location: "Remote"
       })
     ]);
