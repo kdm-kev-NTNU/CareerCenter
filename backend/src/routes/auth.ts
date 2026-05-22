@@ -2,7 +2,7 @@ import rateLimit from "@fastify/rate-limit";
 import type { FastifyInstance } from "fastify";
 import { LOCKOUT_MINUTES, MAX_FAILED_ATTEMPTS } from "../auth/constants.js";
 import { hashPin, verifyPin } from "../auth/pin.js";
-import { authenticate, clearAuthCookie, setAuthCookie, signAuthToken } from "../middleware/auth.js";
+import { clearAuthCookie, setAuthCookie, signAuthToken } from "../middleware/auth.js";
 import type { Repository } from "../repository.js";
 import { authCredentialsSchema } from "../schemas.js";
 
@@ -72,7 +72,7 @@ export async function authRoutes(app: FastifyInstance, repository: Repository) {
     return reply.code(204).send();
   });
 
-  app.get("/api/auth/me", { preHandler: authenticate }, async (request) => {
+  app.get("/api/auth/me", async (request) => {
     const profile = await repository.getUserById(request.user.id);
     if (!profile) {
       return { message: "Bruker ikke funnet." };

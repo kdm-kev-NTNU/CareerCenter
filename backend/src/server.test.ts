@@ -21,7 +21,7 @@ const pathPayload = (name: string) => ({
 
 describe("CareerCenter API", () => {
   it("registers, logs in, returns me, and logs out", async () => {
-    const app = await buildServer({ repository: new MemoryRepository() });
+    const app = await buildServer({ repository: new MemoryRepository(), authDisabled: false });
 
     const registered = await app.inject({
       method: "POST",
@@ -54,6 +54,16 @@ describe("CareerCenter API", () => {
       payload: { name: "Kevin", pin: "1234" }
     });
     expect(login.statusCode).toBe(200);
+
+    await app.close();
+  });
+
+  it("returns me without a session cookie when auth is disabled", async () => {
+    const app = await createTestApp();
+
+    const me = await app.inject({ method: "GET", url: "/api/auth/me" });
+    expect(me.statusCode).toBe(200);
+    expect(me.json().name).toBe("__test__");
 
     await app.close();
   });
