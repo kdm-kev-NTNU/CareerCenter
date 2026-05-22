@@ -1,0 +1,21 @@
+# https://docs.gitguardian.com/ggshield-docs/reference/file/documenting-secrets
+secret:
+  ignored_paths:
+    - "**/node_modules/**"
+    - "**/coverage/**"
+    - "**/.vite/**"
+    - "**/dist/**"
+    - "**/.env.example"
+    - "apps/api/vitest.setup.ts"
+    - "scripts/run-cypress-e2e.mjs"
+    - "docker-compose.yml"
+    - "docker-compose.dev.yml"
+    - "apps/api/prisma/**"
+  ignored_matches:
+    - name: Dev JWT fixture (local/tests only)
+      match: dev_fixture_only_not_a_real_jwt_secret
+    - name: Test JWT fixture
+      match: test_fixture_only_not_a_real_jwt_secret
+    - name: E2E JWT fixture
+      match: e2e_fixture_only_not_a_real_jwt_secret
+version: 2

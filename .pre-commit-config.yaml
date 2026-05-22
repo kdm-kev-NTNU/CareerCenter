@@ -1,0 +1,8 @@
+repos:
+  - repo: https://github.com/GitGuardian/ggshield
+    rev: v1.38.1
+    hooks:
+      # manual = kjøres ikke ved git commit (unngår blokkering uten API-nøkkel).
+      # Kjør: npm run secrets:scan  eller:  pre-commit run ggshield --all-files
+      - id: ggshield
+        stages: [manual]
