@@ -57,6 +57,8 @@ export async function buildServer(options: ServerOptions) {
 
   app.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } });
 
+  app.get("/", async () => ({ status: "ok" }));
+
   app.register(healthRoutes);
   app.register((instance) => authRoutes(instance, repository));
 
