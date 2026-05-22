@@ -6,10 +6,10 @@ describe("CareerCenter custom paths", () => {
     cy.contains("button", "Custom Paths").click();
 
     cy.get("input[placeholder*='selskap']").clear().type("Statkraft");
-    cy.contains("button", "Legg til").click();
+    cy.contains(".company-card", "Statkraft").contains("button", "Legg til").click();
 
     cy.get("input[placeholder*='selskap']").clear().type("InCommodities");
-    cy.contains("button", "Legg til").click();
+    cy.contains(".company-card", "InCommodities").contains("button", "Legg til").click();
 
     cy.contains("button", "Lagre custom path").click();
     cy.contains("h2", "Energy Quant-ruten").should("be.visible");
@@ -40,13 +40,13 @@ describe("CareerCenter custom paths", () => {
 
     cy.contains("button", "Custom Paths").click();
     cy.get("input[placeholder*='selskap']").clear().type("Statkraft");
-    cy.contains("button", "Legg til").click();
+    cy.contains(".company-card", "Statkraft").contains("button", "Legg til").click();
     cy.contains("button", "Lagre custom path").click();
     cy.contains("h2", "Energy Quant-ruten").should("be.visible");
 
     cy.contains("article.panel", "Energy Quant-ruten").contains("button", "Rediger navn").click();
-    cy.contains("article.panel", "Energy Quant-ruten").find(".inline-title").clear().type("Min Energy-rute");
-    cy.contains("article.panel", "Energy Quant-ruten").contains("button", "Lagre").click();
+    cy.get(".path-header .inline-title").clear().type("Min Energy-rute");
+    cy.get(".path-header .actions").contains("button", "Lagre").click();
 
     cy.contains("h2", "Min Energy-rute").should("be.visible");
 
@@ -89,9 +89,9 @@ describe("CareerCenter custom paths", () => {
     cy.contains("button", "+ Legg til").click();
     cy.get('[role="dialog"]').contains("h2", "Legg til graduate-program").should("be.visible");
 
-    cy.get('[role="dialog"]').contains("label", "Bedrift").parent().find("select").select("nbim");
-    cy.get('[role="dialog"]').contains("label", "Programnavn").parent().find("input").type("Technology Graduate Programme");
-    cy.get('[role="dialog"]').contains("label", "Søknadslenke").parent().find("input").type("https://example.com/graduate");
+    cy.get('[role="dialog"]').contains("label", "Bedrift").find("select").select("nbim");
+    cy.get('[role="dialog"]').contains("label", "Programnavn").find("input").type("Technology Graduate Programme");
+    cy.get('[role="dialog"]').contains("label", "Søknadslenke").find("input").type("https://example.com/graduate");
     cy.get('[role="dialog"]').contains(".requirement-row", "CV").find('input[type="checkbox"]').last().check();
     cy.get('[role="dialog"]').contains("button", "Legg til").click();
 
@@ -108,9 +108,9 @@ describe("CareerCenter custom paths", () => {
     cy.contains("button", "+ Legg til").click();
     cy.get('[role="dialog"]').contains("h2", "Legg til internship").should("be.visible");
 
-    cy.get('[role="dialog"]').contains("label", "Bedrift").parent().find("select").select("statkraft");
-    cy.get('[role="dialog"]').contains("label", "Stilling / rolle").parent().find("input").type("Technology Summer Intern");
-    cy.get('[role="dialog"]').contains("label", "Søknadslenke").parent().find("input").type("https://example.com/intern");
+    cy.get('[role="dialog"]').contains("label", "Bedrift").find("select").select("statkraft");
+    cy.get('[role="dialog"]').contains("label", "Stilling / rolle").find("input").type("Technology Summer Intern");
+    cy.get('[role="dialog"]').contains("label", "Søknadslenke").find("input").type("https://example.com/intern");
     cy.get('[role="dialog"]').contains("button", "Legg til").click();
 
     cy.contains("Statkraft").should("be.visible");
@@ -126,8 +126,8 @@ describe("CareerCenter custom paths", () => {
     cy.contains("button", "Kurs").click();
     cy.contains("h1", "Kurs").should("be.visible");
 
-    cy.contains("label", "Tittel").parent().find("input").type("FastAPI for Beginners");
-    cy.contains("label", "Leverandør").parent().find("input").type("YouTube");
+    cy.contains("label", "Tittel").find("input").type("FastAPI for Beginners");
+    cy.contains("label", "Leverandør").find("input").type("YouTube");
     cy.contains("button", "Legg til kurs").click();
 
     cy.contains("FastAPI for Beginners").should("be.visible");
@@ -164,14 +164,6 @@ describe("CareerCenter custom paths", () => {
 
   it("adds a company and finds it via search", () => {
     const companyName = `E2EBedrift ${Date.now()}`;
-    const userName = `e2e-user-${Date.now()}`;
-
-    cy.visit("/login");
-    cy.contains("button", "Ny bruker").click();
-    cy.get('input[placeholder="Ditt navn"]').type(userName);
-    cy.get('input[placeholder="••••"]').type("1234");
-    cy.get("form.auth-form button.primary").click();
-    cy.url().should("include", "/");
 
     cy.visit("/companies");
     cy.contains("h1", "Bedriftsbase").should("be.visible");

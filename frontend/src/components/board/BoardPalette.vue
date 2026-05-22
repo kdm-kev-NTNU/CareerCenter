@@ -104,9 +104,10 @@ function onNoteDragStart(event: DragEvent) {
     <details class="board-palette-tracks" :open="showTracks" @toggle="showTracks = ($event.target as HTMLDetailsElement).open">
       <summary>Rediger spor</summary>
       <div class="track-list">
-        <div v-for="track in careerMapStore.trackList" :key="track.id" class="track-row">
+        <div v-for="track in careerMapStore.trackList" :key="track.id" class="track-row" :class="{ editing: careerMapStore.editingTrackId === track.id }">
           <template v-if="careerMapStore.editingTrackId === track.id">
             <input v-model="careerMapStore.editingTrackLabel" class="inline-title" />
+            <small>{{ track.id }}</small>
             <div class="actions">
               <button type="button" class="primary" @click="careerMapStore.saveTrackEditor()">Lagre</button>
               <button type="button" class="secondary" @click="careerMapStore.resetTrackEditor()">Tilbakestill</button>
