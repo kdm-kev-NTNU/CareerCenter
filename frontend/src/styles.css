@@ -452,7 +452,7 @@ nav button.active, nav button:hover { background: #1f2937; color: #ffffff; }
   background: rgba(17, 24, 39, 0.45);
 }
 .modal-panel {
-  width: min(780px, 100%);
+  position: relative;
   max-height: min(90vh, 720px);
   display: grid;
   grid-template-rows: auto 1fr auto;
@@ -461,6 +461,43 @@ nav button.active, nav button:hover { background: #1f2937; color: #ffffff; }
   border-radius: 8px;
   box-shadow: var(--shadow);
   overflow: hidden;
+}
+.modal-panel--resizable .modal-body {
+  overflow-x: hidden;
+}
+.modal-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 10px;
+  height: 100%;
+  cursor: ew-resize;
+  touch-action: none;
+  z-index: 1;
+}
+.modal-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 3px;
+  width: 3px;
+  height: 36px;
+  transform: translateY(-50%);
+  border-radius: 2px;
+  background: var(--border);
+  opacity: 0.7;
+  transition: opacity 0.15s, background 0.15s;
+}
+.modal-resize-handle:hover::after,
+.modal-resize-handle:focus-visible::after {
+  opacity: 1;
+  background: var(--accent);
+}
+.modal-resize-handle:focus-visible {
+  outline: none;
+}
+.modal-resize-handle:focus-visible::after {
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
 }
 .modal-header {
   display: flex;
@@ -487,7 +524,13 @@ nav button.active, nav button:hover { background: #1f2937; color: #ffffff; }
   display: grid;
   gap: 14px;
 }
-.modal-body .form-grid { padding: 0; border: 0; box-shadow: none; }
+.modal-body .form-grid {
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+.modal-body .wide-field { grid-column: 1 / -1; }
 .modal-footer {
   display: flex;
   gap: 8px;
