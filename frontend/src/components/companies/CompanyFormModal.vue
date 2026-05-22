@@ -34,7 +34,13 @@ function onClose() {
 </script>
 
 <template>
-  <AppModal :open="open" title="Legg til bedrift" @close="onClose">
+  <AppModal
+    :open="open"
+    title="Legg til bedrift"
+    size="md"
+    persist-key="company-form"
+    @close="onClose"
+  >
     <p v-if="companiesStore.error" class="form-error">{{ companiesStore.error }}</p>
     <form class="form-grid" @submit.prevent="save">
       <label class="wide-field">

@@ -3,6 +3,7 @@ import { computed, ref } from "vue";
 import type { CareerTrack, CareerTrackSetting } from "@careercenter/shared";
 import { careerTracks, trackLabels } from "@careercenter/shared";
 import { api } from "../api/index.js";
+import { useBoardStore } from "./board.js";
 
 export const useCareerMapStore = defineStore("careerMap", () => {
   const trackSettings = ref<CareerTrackSetting[]>([]);
@@ -53,7 +54,13 @@ export const useCareerMapStore = defineStore("careerMap", () => {
 
   async function deleteTrack(track: CareerTrackSetting) {
     const label = trackName(track.id);
-    if (!confirm(`Slette spor «${label}»?`)) return;
+    const boardCount = useBoardStore().nodesForTrack(track.id).length;
+    const boardHint =
+      boardCount > 0
+        ? ` Dette fjerner også ${boardCount} element${boardCount === 1 ? "" : "er"} fra det aktive brettet.`
+        : "";
+    if (!confirm(`Slette spor «${label}»?${boardHint}`)) return;
+    useBoardStore().deleteNodesByTrack(track.id, { skipConfirm: true });
     await api.deleteTrack(track.id);
     trackSettings.value = trackSettings.value.filter((entry) => entry.id !== track.id);
     if (editingTrackId.value === track.id) clearTrackEditor();

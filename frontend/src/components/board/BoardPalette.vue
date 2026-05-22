@@ -120,6 +120,22 @@ function onNoteDragStart(event: DragEvent) {
               <small>{{ track.id }}</small>
             </div>
             <div class="track-row-actions">
+              <button
+                type="button"
+                class="ghost"
+                :disabled="boardStore.nodesForTrack(track.id).length === 0"
+                @click="boardStore.selectNodesByTrack(track.id)"
+              >
+                Velg på brett
+              </button>
+              <button
+                type="button"
+                class="ghost"
+                :disabled="boardStore.nodesForTrack(track.id).length === 0"
+                @click="boardStore.deleteNodesByTrack(track.id)"
+              >
+                Slett fra brett
+              </button>
               <button type="button" class="secondary" @click="careerMapStore.openTrackEditor(track)">Rediger</button>
               <button
                 type="button"
@@ -127,7 +143,7 @@ function onNoteDragStart(event: DragEvent) {
                 :disabled="careerMapStore.trackList.length <= 1"
                 @click="careerMapStore.deleteTrack(track)"
               >
-                Slett
+                Slett spor
               </button>
             </div>
           </template>

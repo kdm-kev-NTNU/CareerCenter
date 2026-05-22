@@ -179,7 +179,13 @@ onMounted(() => {
       </div>
     </article>
 
-    <AppModal :open="modalOpen" :title="modalTitle" @close="closeModal">
+    <AppModal
+      :open="modalOpen"
+      :title="modalTitle"
+      size="lg"
+      persist-key="competitions-form"
+      @close="closeModal"
+    >
       <form class="form-grid" @submit.prevent="saveEntry">
         <label>Tittel<input v-model="store.newEntry.title" placeholder="Junction, NMiAI Grocery Bot" required /></label>
         <label>Type<select v-model="store.newEntry.type">
