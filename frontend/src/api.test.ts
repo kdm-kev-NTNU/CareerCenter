@@ -1,3 +1,4 @@
+import type { CareerTrack } from "@careercenter/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { authApi } from "./api/auth.js";
 import {
@@ -178,7 +179,7 @@ describe("api client", () => {
       notes: "",
       statusId: "status-1",
       locationIds: [] as string[],
-      trackTags: ["ENERGY_QUANT"],
+      trackTags: ["ENERGY_QUANT"] as CareerTrack[],
       requirements: []
     };
     const selfStudyPayload = {
@@ -264,7 +265,7 @@ describe("api client", () => {
       notes: "",
       statusId: "status-1",
       locationIds: [] as string[],
-      trackTags: ["INVESTMENT_TECH"],
+      trackTags: ["INVESTMENT_TECH"] as CareerTrack[],
       requirements: []
     };
     await graduateProgramsApi.createGraduateProgram(graduatePayload);

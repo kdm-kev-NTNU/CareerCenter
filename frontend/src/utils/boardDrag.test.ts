@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { BOARD_DRAG_MIME, readBoardDragData, setBoardDragData } from "./boardDrag.js";
 
 describe("boardDrag", () => {
@@ -8,7 +8,7 @@ describe("boardDrag", () => {
       setData: (type: string, value: string) => data.set(type, value),
       getData: (type: string) => data.get(type) ?? "",
       effectAllowed: "none"
-    } as DataTransfer;
+    } as unknown as DataTransfer;
 
     setBoardDragData(dataTransfer, { kind: "company", companyId: "statkraft" });
     expect(data.get(BOARD_DRAG_MIME)).toContain("statkraft");
@@ -18,10 +18,10 @@ describe("boardDrag", () => {
   });
 
   it("returns null for missing or invalid drag payloads", () => {
-    const empty = { getData: () => "" } as DataTransfer;
+    const empty = { getData: () => "" } as unknown as DataTransfer;
     expect(readBoardDragData(empty)).toBeNull();
 
-    const invalid = { getData: () => "not-json" } as DataTransfer;
+    const invalid = { getData: () => "not-json" } as unknown as DataTransfer;
     expect(readBoardDragData(invalid)).toBeNull();
   });
 });
