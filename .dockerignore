@@ -1,0 +1,10 @@
+node_modules
+**/node_modules
+frontend/dist
+backend/dist
+packages/**/dist
+.git
+.cursor
+coverage
+**/*.log
+.env

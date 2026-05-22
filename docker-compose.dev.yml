@@ -1,0 +1,66 @@
+# Local development with hot reload (Vite + tsx watch).
+# App: http://localhost:5173  |  API: http://localhost:3000
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: careercenter
+      POSTGRES_PASSWORD: careercenter
+      POSTGRES_DB: careercenter
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U careercenter"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: >
+      sh -c "npm run db:generate &&
+             npm run build --workspace @careercenter/shared &&
+             npm run db:migrate &&
+             npm run db:seed &&
+             npm run dev --workspace @careercenter/api"
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://careercenter:careercenter@postgres:5432/careercenter?schema=public
+      JWT_SECRET: ${JWT_SECRET:-dev_fixture_only_not_a_real_jwt_secret}
+      PORT: 3000
+      UPLOAD_DIR: /app/uploads
+      CHOKIDAR_USEPOLLING: "true"
+    volumes:
+      - .:/app
+      - dev-node-modules:/app/node_modules
+      - uploads-data:/app/uploads
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: npm run dev --workspace @careercenter/web
+    environment:
+      VITE_PROXY_TARGET: http://backend:3000
+      CHOKIDAR_USEPOLLING: "true"
+    volumes:
+      - .:/app
+      - dev-node-modules:/app/node_modules
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+volumes:
+  postgres-data:
+  dev-node-modules:
+  uploads-data:

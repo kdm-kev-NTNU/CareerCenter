@@ -1,0 +1,334 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String              @id @default(cuid())
+  name               String              @unique
+  pinHash            String
+  failedAttempts     Int                 @default(0)
+  lockedUntil        DateTime?
+  createdAt          DateTime            @default(now())
+  courses            CoursePlan[]
+  paths              CareerPath[]
+  selfStudyCourses   SelfStudyCourse[]
+  educationBooks     EducationBook[]
+  learningPlatforms  LearningPlatform[]
+  bachelorKnowledge           BachelorKnowledge[]
+  bachelorFolders             BachelorFolder[]
+  bachelorFiles               BachelorFile[]
+  competitions                CompetitionEntry[]
+  internshipStatuses          InternshipStatusOption[]
+  internshipLocations         InternshipLocationOption[]
+  internshipRequirementTypes  InternshipRequirementType[]
+  internships                 Internship[]
+  graduateProgramStatuses          GraduateProgramStatusOption[]
+  graduateProgramLocations         GraduateProgramLocationOption[]
+  graduateProgramRequirementTypes  GraduateProgramRequirementType[]
+  graduatePrograms                   GraduateProgram[]
+  careerBoards                CareerBoard[]
+}
+
+model CoursePlan {
+  id         String   @id @default(cuid())
+  userId     String
+  semester   Int
+  courseCode String
+  title      String
+  credits    Float
+  status     String
+  notes      String   @default("")
+  trackTags  String[]
+  sortOrder  Int      @default(0)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Company {
+  id             String           @id @default(cuid())
+  name           String           @unique
+  description    String
+  tracks         String[]
+  tier           Int
+  geography      String
+  roleTypes      String[]
+  difficulty     String
+  upside         String
+  relevanceScore Int
+  websiteUrl     String?
+  pathSteps        CareerPathStep[]
+  internships      Internship[]
+  graduatePrograms GraduateProgram[]
+}
+
+model CareerTrackSetting {
+  id           String           @id
+  defaultLabel String
+  label        String
+  sortOrder    Int              @default(0)
+  nodes        CareerMapNode[]
+}
+
+model CareerMapNode {
+  id           String           @id
+  defaultTitle String
+  title        String
+  defaultItems String[]
+  items        String[]
+  level        Int
+  trackId      String?
+  sortOrder    Int              @default(0)
+  track        CareerTrackSetting? @relation(fields: [trackId], references: [id], onDelete: SetNull)
+}
+
+model CareerPath {
+  id          String           @id @default(cuid())
+  userId      String
+  name        String
+  description String           @default("")
+  targetRole  String           @default("")
+  horizon     String           @default("")
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  steps       CareerPathStep[]
+}
+
+model CareerPathStep {
+  id         String     @id @default(cuid())
+  pathId     String
+  companyId  String
+  order      Int
+  note       String     @default("")
+  targetRole String     @default("")
+  path       CareerPath @relation(fields: [pathId], references: [id], onDelete: Cascade)
+  company    Company    @relation(fields: [companyId], references: [id])
+}
+
+model InternshipStatusOption {
+  id          String       @id @default(cuid())
+  userId      String
+  label       String
+  sortOrder   Int          @default(0)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  internships Internship[]
+}
+
+model InternshipLocationOption {
+  id        String @id @default(cuid())
+  userId    String
+  label     String
+  sortOrder Int    @default(0)
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model InternshipRequirementType {
+  id           String                    @id @default(cuid())
+  userId       String
+  label        String
+  description  String                    @default("")
+  sortOrder    Int                       @default(0)
+  user         User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  requirements InternshipRequirementItem[]
+}
+
+model Internship {
+  id             String                    @id @default(cuid())
+  userId         String
+  companyId      String?
+  companyName    String
+  title          String
+  description    String                    @default("")
+  applicationUrl String                    @default("")
+  notes          String                    @default("")
+  deadline       DateTime?
+  statusId       String
+  locationIds    String[]
+  trackTags      String[]
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+  user           User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company        Company?                  @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  status         InternshipStatusOption    @relation(fields: [statusId], references: [id])
+  requirements   InternshipRequirementItem[]
+}
+
+model InternshipRequirementItem {
+  id                String                    @id @default(cuid())
+  internshipId      String
+  requirementTypeId String
+  isRequired        Boolean                   @default(true)
+  isDone            Boolean                   @default(false)
+  notes             String                    @default("")
+  internship        Internship                @relation(fields: [internshipId], references: [id], onDelete: Cascade)
+  requirementType   InternshipRequirementType @relation(fields: [requirementTypeId], references: [id])
+}
+
+model CompetitionEntry {
+  id                   String    @id @default(cuid())
+  userId               String
+  title                String
+  type                 String
+  scope                String
+  format               String    @default("hybrid")
+  startDate            DateTime?
+  endDate              DateTime?
+  registrationDeadline DateTime?
+  location             String    @default("")
+  organizer            String    @default("")
+  url                  String?
+  status               String
+  notes                String    @default("")
+  sortOrder            Int       @default(0)
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model SelfStudyCourse {
+  id          String    @id @default(cuid())
+  userId      String
+  title       String
+  provider    String
+  status      String
+  url         String?
+  notes       String    @default("")
+  completedAt DateTime?
+  sortOrder   Int       @default(0)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model EducationBook {
+  id        String  @id @default(cuid())
+  userId    String
+  title     String
+  author    String?
+  status    String
+  url       String?
+  notes     String  @default("")
+  sortOrder Int     @default(0)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model LearningPlatform {
+  id        String  @id @default(cuid())
+  userId    String
+  name      String
+  url       String?
+  notes     String  @default("")
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model BachelorKnowledge {
+  id         String @id @default(cuid())
+  userId     String
+  courseName String
+  topic      String
+  notes      String @default("")
+  sortOrder  Int    @default(0)
+  user       User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model BachelorFolder {
+  id        String           @id @default(cuid())
+  userId    String
+  parentId  String?
+  name      String
+  sortOrder Int              @default(0)
+  createdAt DateTime         @default(now())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent    BachelorFolder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  BachelorFolder[] @relation("FolderTree")
+  files     BachelorFile[]
+}
+
+model BachelorFile {
+  id           String          @id @default(cuid())
+  userId       String
+  folderId     String?
+  originalName String
+  storagePath  String
+  mimeType     String
+  sizeBytes    Int
+  notes        String          @default("")
+  sortOrder    Int             @default(0)
+  createdAt    DateTime        @default(now())
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folder       BachelorFolder? @relation(fields: [folderId], references: [id], onDelete: Cascade)
+}
+
+model GraduateProgramStatusOption {
+  id               String            @id @default(cuid())
+  userId           String
+  label            String
+  sortOrder        Int               @default(0)
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  graduatePrograms GraduateProgram[]
+}
+
+model GraduateProgramLocationOption {
+  id        String @id @default(cuid())
+  userId    String
+  label     String
+  sortOrder Int    @default(0)
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model GraduateProgramRequirementType {
+  id           String                         @id @default(cuid())
+  userId       String
+  label        String
+  description  String                         @default("")
+  sortOrder    Int                            @default(0)
+  user         User                           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  requirements GraduateProgramRequirementItem[]
+}
+
+model GraduateProgram {
+  id             String                         @id @default(cuid())
+  userId         String
+  companyId      String?
+  companyName    String
+  title          String
+  description    String                         @default("")
+  applicationUrl String                         @default("")
+  notes          String                         @default("")
+  deadline       DateTime?
+  statusId       String
+  locationIds    String[]
+  trackTags      String[]
+  createdAt      DateTime                       @default(now())
+  updatedAt      DateTime                       @updatedAt
+  user           User                           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company        Company?                       @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  status         GraduateProgramStatusOption    @relation(fields: [statusId], references: [id])
+  requirements   GraduateProgramRequirementItem[]
+}
+
+model GraduateProgramRequirementItem {
+  id                String                         @id @default(cuid())
+  graduateProgramId String
+  requirementTypeId String
+  isRequired        Boolean                        @default(true)
+  isDone            Boolean                        @default(false)
+  notes             String                         @default("")
+  graduateProgram   GraduateProgram                @relation(fields: [graduateProgramId], references: [id], onDelete: Cascade)
+  requirementType   GraduateProgramRequirementType @relation(fields: [requirementTypeId], references: [id])
+}
+
+model CareerBoard {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  description String   @default("")
+  viewport    Json?
+  graph       Json
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}

@@ -17,10 +17,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run db:generate
+      - run: npm run build --workspace @careercenter/shared
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run test:coverage
       - run: npx cypress install
       - run: npm run test:e2e
       - run: npm run coverage:merge
-      - run: docker build -t careercenter .
+      - run: docker build -f frontend/Dockerfile -t careercenter-frontend .
+      - run: docker build -f backend/Dockerfile -t careercenter-backend .
