@@ -15,18 +15,33 @@ services:
       timeout: 5s
       retries: 10
 
-  app:
-    build: .
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     environment:
+      NODE_ENV: production
       DATABASE_URL: postgresql://careercenter:careercenter@postgres:5432/careercenter?schema=public
       JWT_SECRET: ${JWT_SECRET:-dev_fixture_only_not_a_real_jwt_secret}
       PORT: 3000
-    ports:
-      - "3000:3000"
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - uploads-data:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
 
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    environment:
+      API_UPSTREAM: backend:3000
+    ports:
+      - "8080:8080"
+    depends_on:
+      - backend
+
 volumes:
   postgres-data:
-
+  uploads-data:

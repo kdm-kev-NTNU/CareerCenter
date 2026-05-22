@@ -24,4 +24,5 @@ jobs:
       - run: npx cypress install
       - run: npm run test:e2e
       - run: npm run coverage:merge
-      - run: docker build -t careercenter .
+      - run: docker build -f frontend/Dockerfile -t careercenter-frontend .
+      - run: docker build -f backend/Dockerfile -t careercenter-backend .

@@ -8,6 +8,6 @@ const repository =
     ? new MemoryRepository()
     : new PrismaRepository();
 
-const app = await buildServer({ repository, serveWeb: env.NODE_ENV === "production" });
+const app = await buildServer({ repository });
 
 await app.listen({ port: env.PORT, host: "0.0.0.0" });

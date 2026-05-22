@@ -16,14 +16,15 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      "@careercenter/shared": path.resolve(fileURLToPath(new URL(".", import.meta.url)), "../../packages/shared/src/index.ts")
+      "@careercenter/shared": path.resolve(fileURLToPath(new URL(".", import.meta.url)), "../packages/shared/src/index.ts")
     }
   },
   server: {
     port: 5173,
     host: true,
     watch: {
-      usePolling: process.env.CHOKIDAR_USEPOLLING === "true"
+      usePolling: process.env.CHOKIDAR_USEPOLLING === "true",
+      ignored: ["**/coverage/**"]
     },
     proxy: {
       "/api": {
@@ -39,7 +40,7 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["json"],
-      reportsDirectory: "../../coverage/apps/web",
+      reportsDirectory: "../coverage/frontend",
       include: ["src/**/*.{ts,vue}"],
       exclude: ["src/**/*.test.ts", "src/main.ts"]
     }

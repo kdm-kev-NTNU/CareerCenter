@@ -17,7 +17,7 @@ services:
       timeout: 5s
       retries: 10
 
-  api:
+  backend:
     build:
       context: .
       dockerfile: Dockerfile.dev
@@ -44,13 +44,13 @@ services:
       postgres:
         condition: service_healthy
 
-  web:
+  frontend:
     build:
       context: .
       dockerfile: Dockerfile.dev
     command: npm run dev --workspace @careercenter/web
     environment:
-      VITE_PROXY_TARGET: http://api:3000
+      VITE_PROXY_TARGET: http://backend:3000
       CHOKIDAR_USEPOLLING: "true"
     volumes:
       - .:/app
@@ -58,7 +58,7 @@ services:
     ports:
       - "5173:5173"
     depends_on:
-      - api
+      - backend
 
 volumes:
   postgres-data:

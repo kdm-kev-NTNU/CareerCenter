@@ -64,7 +64,7 @@ function findCoverageFiles(dir) {
 
 const coverageFiles = [
   ...findCoverageFiles(path.join(root, "coverage")),
-  ...findCoverageFiles(path.join(root, "apps", "web", ".nyc_output"))
+  ...findCoverageFiles(path.join(root, "frontend", ".nyc_output"))
 ];
 
 if (coverageFiles.length === 0) {

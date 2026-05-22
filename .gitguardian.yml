@@ -6,11 +6,11 @@ secret:
     - "**/.vite/**"
     - "**/dist/**"
     - "**/.env.example"
-    - "apps/api/vitest.setup.ts"
+    - "backend/vitest.setup.ts"
     - "scripts/run-cypress-e2e.mjs"
     - "docker-compose.yml"
     - "docker-compose.dev.yml"
-    - "apps/api/prisma/**"
+    - "backend/prisma/**"
   ignored_matches:
     - name: Dev JWT fixture (local/tests only)
       match: dev_fixture_only_not_a_real_jwt_secret

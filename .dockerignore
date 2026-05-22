@@ -1,6 +1,7 @@
 node_modules
 **/node_modules
-apps/**/dist
+frontend/dist
+backend/dist
 packages/**/dist
 .git
 .cursor
