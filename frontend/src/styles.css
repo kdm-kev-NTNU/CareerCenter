@@ -148,7 +148,7 @@ nav button.active, nav button:hover { background: #1f2937; color: #ffffff; }
 .form-grid, .filters {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
+  gap: 16px;
   align-items: end;
 }
 .wide-field { grid-column: span 3; }
@@ -250,7 +250,7 @@ nav button.active, nav button:hover { background: #1f2937; color: #ffffff; }
 .track-row-edit { display: grid; gap: 6px; flex: 1 1 240px; min-width: 0; }
 .track-row:first-child { border-top: 0; padding-top: 0; }
 .track-row strong, .track-row small { display: block; }
-.track-row-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.track-row-actions { display: flex; flex-wrap: wrap; gap: 6px; flex-shrink: 0; }
 .company-list { max-height: 720px; overflow: auto; }
 .company-card { align-items: center; }
 .company-card p { margin-bottom: 8px; }
@@ -452,7 +452,7 @@ nav button.active, nav button:hover { background: #1f2937; color: #ffffff; }
   background: rgba(17, 24, 39, 0.45);
 }
 .modal-panel {
-  width: min(560px, 100%);
+  width: min(780px, 100%);
   max-height: min(90vh, 720px);
   display: grid;
   grid-template-rows: auto 1fr auto;
@@ -467,7 +467,7 @@ nav button.active, nav button:hover { background: #1f2937; color: #ffffff; }
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  padding: 18px 20px;
+  padding: 18px 24px;
   border-bottom: 1px solid var(--border);
 }
 .modal-header h2 { margin: 0; font-size: 1.1rem; }
@@ -482,7 +482,7 @@ nav button.active, nav button:hover { background: #1f2937; color: #ffffff; }
   line-height: 1;
 }
 .modal-body {
-  padding: 20px;
+  padding: 24px;
   overflow-y: auto;
   display: grid;
   gap: 14px;
@@ -492,7 +492,7 @@ nav button.active, nav button:hover { background: #1f2937; color: #ffffff; }
   display: flex;
   gap: 8px;
   justify-content: flex-end;
-  padding: 14px 20px;
+  padding: 14px 24px;
   border-top: 1px solid var(--border);
 }
 

@@ -1,6 +1,14 @@
 import { defineStore } from "pinia";
 import { ref, shallowRef } from "vue";
-import type { BoardGraph, BoardViewport, CareerBoard, CareerBoardSummary, Company } from "@careercenter/shared";
+import type {
+  BoardGraph,
+  BoardNodeData,
+  BoardViewport,
+  CareerBoard,
+  CareerBoardSummary,
+  CareerTrack,
+  Company
+} from "@careercenter/shared";
 import type { Connection, Edge, Node } from "@vue-flow/core";
 import { api } from "../api/index.js";
 import { defaultBoardEdgeOptions, flowToGraph, graphToFlow, newNodeId } from "../utils/boardFlow.js";
@@ -322,6 +330,40 @@ export const useBoardStore = defineStore("board", () => {
     edgeLabelEditRequestId.value = null;
   }
 
+  function nodeTrack(node: Node): CareerTrack | undefined {
+    return (node.data as BoardNodeData & { track?: CareerTrack }).track;
+  }
+
+  function nodesForTrack(trackId: CareerTrack) {
+    return nodes.value.filter((node) => nodeTrack(node) === trackId);
+  }
+
+  function selectNodesByTrack(trackId: CareerTrack) {
+    nodes.value = nodes.value.map((node) => ({
+      ...node,
+      selected: nodeTrack(node) === trackId
+    }));
+    edges.value = edges.value.map((edge) => ({ ...edge, selected: false }));
+  }
+
+  function deleteNodesByTrack(trackId: CareerTrack, options?: { skipConfirm?: boolean }) {
+    const matching = nodesForTrack(trackId);
+    if (matching.length === 0) return;
+    if (
+      !options?.skipConfirm &&
+      !confirm(`Slette ${matching.length} element${matching.length === 1 ? "" : "er"} for dette sporet fra brettet?`)
+    ) {
+      return;
+    }
+    const nodeIds = new Set(matching.map((node) => node.id));
+    nodes.value = nodes.value.filter((node) => !nodeIds.has(node.id));
+    edges.value = edges.value.filter(
+      (edge) => !nodeIds.has(edge.source) && !nodeIds.has(edge.target)
+    );
+    if (editingNodeId.value && nodeIds.has(editingNodeId.value)) editingNodeId.value = null;
+    scheduleSave();
+  }
+
   function removeSelectedElements(selectedNodes: Node[], selectedEdges: Edge[]) {
     const nodeIds = new Set(selectedNodes.map((node) => node.id));
     const edgeIds = new Set(selectedEdges.map((edge) => edge.id));
@@ -388,6 +430,9 @@ export const useBoardStore = defineStore("board", () => {
     clearEdgeLabelEditRequest,
     scheduleViewportSave,
     removeSelectedElements,
+    selectNodesByTrack,
+    deleteNodesByTrack,
+    nodesForTrack,
     selectEdge,
     applyEdgeLabel,
     scheduleSave

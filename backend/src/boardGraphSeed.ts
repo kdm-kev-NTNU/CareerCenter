@@ -60,14 +60,14 @@ export function buildDefaultBoardGraph(
           id: nodeId,
           type: "company",
           position: { x, y },
-          data: { companyId }
+          data: { companyId, ...(seed.track ? { track: seed.track } : {}) }
         });
       } else {
         nodes.push({
           id: nodeId,
           type: "milestone",
           position: { x, y },
-          data: { label: itemName }
+          data: { label: itemName, ...(seed.track ? { track: seed.track } : {}) }
         });
       }
 
