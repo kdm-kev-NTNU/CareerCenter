@@ -528,6 +528,71 @@ describe("CareerCenter API", () => {
     await app.close();
   });
 
+  it("returns 400 for invalid request bodies", async () => {
+    const app = await createTestApp();
+
+    const invalidPath = await app.inject({
+      method: "POST",
+      url: "/api/paths",
+      payload: { name: "" }
+    });
+    expect(invalidPath.statusCode).toBe(400);
+    expect(invalidPath.json().message).toBe("Ugyldig forespørsel.");
+    expect(invalidPath.json().issues).toBeDefined();
+
+    await app.close();
+  });
+
+  it("creates education books and platforms and returns 404 for unknown ids", async () => {
+    const app = await createTestApp();
+
+    const book = await app.inject({
+      method: "POST",
+      url: "/api/education/books",
+      payload: { title: "Designing Data-Intensive Applications", status: "planned", notes: "", sortOrder: 0 }
+    });
+    expect(book.statusCode).toBe(200);
+
+    const platform = await app.inject({
+      method: "POST",
+      url: "/api/education/platforms",
+      payload: { name: "Coursera", notes: "", isActive: true, sortOrder: 0 }
+    });
+    expect(platform.statusCode).toBe(200);
+
+    const missingBookUpdate = await app.inject({
+      method: "PUT",
+      url: "/api/education/books/missing-book",
+      payload: { title: "Ghost", status: "planned", notes: "", sortOrder: 0 }
+    });
+    expect(missingBookUpdate.statusCode).toBe(404);
+    expect(missingBookUpdate.json()).toEqual({ message: "Bok ikke funnet." });
+
+    const missingBookDelete = await app.inject({ method: "DELETE", url: "/api/education/books/missing-book" });
+    expect(missingBookDelete.statusCode).toBe(404);
+
+    const missingPlatformUpdate = await app.inject({
+      method: "PUT",
+      url: "/api/education/platforms/missing-platform",
+      payload: { name: "Ghost", notes: "", isActive: true, sortOrder: 0 }
+    });
+    expect(missingPlatformUpdate.statusCode).toBe(404);
+    expect(missingPlatformUpdate.json()).toEqual({ message: "Plattform ikke funnet." });
+
+    const missingPlatformDelete = await app.inject({ method: "DELETE", url: "/api/education/platforms/missing-platform" });
+    expect(missingPlatformDelete.statusCode).toBe(404);
+
+    const updatedBook = await app.inject({
+      method: "PUT",
+      url: `/api/education/books/${book.json().id}`,
+      payload: { title: "DDIA (2nd ed.)", status: "in_progress", notes: "Ongoing", sortOrder: 0 }
+    });
+    expect(updatedBook.statusCode).toBe(200);
+    expect(updatedBook.json().title).toBe("DDIA (2nd ed.)");
+
+    await app.close();
+  });
+
   it("creates a company and finds it via search", async () => {
     const app = await createTestApp();
 
