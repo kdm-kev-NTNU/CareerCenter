@@ -19,7 +19,7 @@ services:
     build: .
     environment:
       DATABASE_URL: postgresql://careercenter:careercenter@postgres:5432/careercenter?schema=public
-      JWT_SECRET: local-dev-secret
+      JWT_SECRET: ${JWT_SECRET:-dev_fixture_only_not_a_real_jwt_secret}
       PORT: 3000
     ports:
       - "3000:3000"
