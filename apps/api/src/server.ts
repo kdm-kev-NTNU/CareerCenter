@@ -1,93 +1,112 @@
-import cors from "@fastify/cors";
-import fastifyStatic from "@fastify/static";
-import Fastify from "fastify";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { careerTracks } from "@careercenter/shared";
-import type { Repository } from "./repository.js";
-import { courseSchema, mapNodeSchema, pathSchema, trackSchema } from "./schemas.js";
-
-export interface ServerOptions {
-  repository: Repository;
-  serveWeb?: boolean;
-}
-
-export function buildServer(options: ServerOptions) {
-  const app = Fastify({ logger: false });
-  const repository = options.repository;
-
-  app.register(cors, { origin: true });
-
-  app.get("/api/health", async () => ({ ok: true }));
-  app.get("/api/career-map", async () => repository.getCareerMap());
-  app.put("/api/career-map/nodes/:id", async (request, reply) => {
-    const result = await repository.updateCareerMapNode((request.params as { id: string }).id, mapNodeSchema.parse(request.body));
-    return result ?? reply.code(404).send({ message: "Node ikke funnet." });
-  });
-  app.post("/api/career-map/nodes/:id/reset", async (request, reply) => {
-    const result = await repository.resetCareerMapNode((request.params as { id: string }).id);
-    return result ?? reply.code(404).send({ message: "Node ikke funnet." });
-  });
-  app.get("/api/career-tracks", async () => repository.listCareerTracks());
-  app.put("/api/career-tracks/:id", async (request, reply) => {
-    const id = (request.params as { id: string }).id as (typeof careerTracks)[number];
-    if (!careerTracks.includes(id)) {
-      return reply.code(404).send({ message: "Spor ikke funnet." });
-    }
-    const result = await repository.updateCareerTrack(id, trackSchema.parse(request.body));
-    return result ?? reply.code(404).send({ message: "Spor ikke funnet." });
-  });
-  app.post("/api/career-tracks/:id/reset", async (request, reply) => {
-    const id = (request.params as { id: string }).id as (typeof careerTracks)[number];
-    if (!careerTracks.includes(id)) {
-      return reply.code(404).send({ message: "Spor ikke funnet." });
-    }
-    const result = await repository.resetCareerTrack(id);
-    return result ?? reply.code(404).send({ message: "Spor ikke funnet." });
-  });
-
-  app.get("/api/courses", async () => repository.listCourses((await repository.getOrCreateSingleUser()).id));
-  app.post("/api/courses", async (request) => repository.createCourse((await repository.getOrCreateSingleUser()).id, courseSchema.parse(request.body)));
-  app.put("/api/courses/:id", async (request, reply) => {
-    const result = await repository.updateCourse((await repository.getOrCreateSingleUser()).id, (request.params as { id: string }).id, courseSchema.parse(request.body));
-    return result ?? reply.code(404).send({ message: "Fag ikke funnet." });
-  });
-  app.delete("/api/courses/:id", async (request, reply) => {
-    const deleted = await repository.deleteCourse((await repository.getOrCreateSingleUser()).id, (request.params as { id: string }).id);
-    return deleted ? reply.code(204).send() : reply.code(404).send({ message: "Fag ikke funnet." });
-  });
-
-  app.get("/api/companies", async (request) => {
-    const query = request.query as { q?: string; track?: string; tier?: string; geography?: string };
-    return repository.listCompanies({
-      q: query.q,
-      track: careerTracks.includes(query.track as any) ? (query.track as any) : undefined,
-      tier: query.tier ? Number(query.tier) : undefined,
-      geography: query.geography
-    });
-  });
-
-  app.get("/api/paths", async () => repository.listPaths((await repository.getOrCreateSingleUser()).id));
-  app.get("/api/paths/:id", async (request, reply) => {
-    const path = await repository.getPath((await repository.getOrCreateSingleUser()).id, (request.params as { id: string }).id);
-    return path ?? reply.code(404).send({ message: "Path ikke funnet." });
-  });
-  app.post("/api/paths", async (request) => repository.createPath((await repository.getOrCreateSingleUser()).id, pathSchema.parse(request.body)));
-  app.put("/api/paths/:id", async (request, reply) => {
-    const result = await repository.updatePath((await repository.getOrCreateSingleUser()).id, (request.params as { id: string }).id, pathSchema.parse(request.body));
-    return result ?? reply.code(404).send({ message: "Path ikke funnet." });
-  });
-  app.delete("/api/paths/:id", async (request, reply) => {
-    const deleted = await repository.deletePath((await repository.getOrCreateSingleUser()).id, (request.params as { id: string }).id);
-    return deleted ? reply.code(204).send() : reply.code(404).send({ message: "Path ikke funnet." });
-  });
-
-  if (options.serveWeb) {
-    const dirname = path.dirname(fileURLToPath(import.meta.url));
-    const webDist = path.resolve(dirname, "../../../../../web/dist");
-    app.register(fastifyStatic, { root: webDist, prefix: "/" });
-    app.setNotFoundHandler((_request, reply) => reply.sendFile("index.html"));
-  }
-
-  return app;
-}
+import cors from "@fastify/cors";
+import helmet from "@fastify/helmet";
+import multipart from "@fastify/multipart";
+import fastifyStatic from "@fastify/static";
+import Fastify from "fastify";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { hashPin } from "./auth/pin.js";
+import { env } from "./config/env.js";
+import { authenticate, registerAuthPlugins } from "./middleware/auth.js";
+import { registerErrorHandler } from "./middleware/errorHandler.js";
+import type { Repository } from "./repository.js";
+import { authRoutes } from "./routes/auth.js";
+import { careerMapRoutes } from "./routes/careerMap.js";
+import { companiesRoutes } from "./routes/companies.js";
+import { coursesRoutes } from "./routes/courses.js";
+import { healthRoutes } from "./routes/health.js";
+import { graduateProgramSettingsRoutes } from "./routes/graduateProgramSettings.js";
+import { graduateProgramsRoutes } from "./routes/graduatePrograms.js";
+import { internshipSettingsRoutes } from "./routes/internshipSettings.js";
+import { internshipsRoutes } from "./routes/internships.js";
+import { pathsRoutes } from "./routes/paths.js";
+import { bachelorStorageRoutes } from "./routes/bachelorStorage.js";
+import { educationRoutes } from "./routes/education.js";
+import { competitionsRoutes } from "./routes/competitions.js";
+import { boardsRoutes } from "./routes/boards.js";
+
+const TEST_AUTH_USER_NAME = "__test__";
+const TEST_AUTH_USER_PIN = "0000";
+
+export interface ServerOptions {
+  repository: Repository;
+  serveWeb?: boolean;
+  authDisabled?: boolean;
+}
+
+function isPublicApiPath(url: string): boolean {
+  return (
+    url === "/api/health" ||
+    url.startsWith("/api/auth/register") ||
+    url.startsWith("/api/auth/login")
+  );
+}
+
+export async function buildServer(options: ServerOptions) {
+  const app = Fastify({ logger: env.NODE_ENV === "production" });
+  const repository = options.repository;
+  const authDisabled = options.authDisabled ?? env.AUTH_DISABLED;
+
+  registerErrorHandler(app);
+  await registerAuthPlugins(app);
+
+  await app.register(helmet, {
+    contentSecurityPolicy: env.NODE_ENV === "production" ? undefined : false
+  });
+
+  await app.register(cors, {
+    origin: env.NODE_ENV === "production" ? false : true,
+    credentials: true
+  });
+
+  app.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } });
+
+  app.register(healthRoutes);
+  app.register((instance) => authRoutes(instance, repository));
+
+  if (authDisabled) {
+    app.addHook("onRequest", async (request) => {
+      const url = request.url.split("?")[0] ?? request.url;
+      if (isPublicApiPath(url)) return;
+
+      const user = await repository.findUserByName(TEST_AUTH_USER_NAME);
+      if (!user) {
+        const pinHash = await hashPin(TEST_AUTH_USER_PIN);
+        const created = await repository.createUser(TEST_AUTH_USER_NAME, pinHash);
+        await repository.initializeNewUser(created.id);
+        request.user = created;
+        return;
+      }
+      request.user = { id: user.id, name: user.name };
+    });
+  } else {
+    app.addHook("onRequest", async (request, reply) => {
+      const url = request.url.split("?")[0] ?? request.url;
+      if (!url.startsWith("/api/") || isPublicApiPath(url)) return;
+      await authenticate(request, reply);
+    });
+  }
+
+  app.register((instance) => careerMapRoutes(instance, repository));
+  app.register((instance) => coursesRoutes(instance, repository));
+  app.register((instance) => companiesRoutes(instance, repository));
+  app.register((instance) => pathsRoutes(instance, repository));
+  app.register((instance) => internshipsRoutes(instance, repository));
+  app.register((instance) => internshipSettingsRoutes(instance, repository));
+  app.register((instance) => graduateProgramsRoutes(instance, repository));
+  app.register((instance) => graduateProgramSettingsRoutes(instance, repository));
+  app.register((instance) => competitionsRoutes(instance, repository));
+  app.register((instance) => boardsRoutes(instance, repository));
+  app.register((instance) => educationRoutes(instance, repository));
+  app.register((instance) => bachelorStorageRoutes(instance, repository));
+
+  if (options.serveWeb) {
+    const dirname = path.dirname(fileURLToPath(import.meta.url));
+    const webDist = path.resolve(dirname, "../../../../../web/dist");
+    app.register(fastifyStatic, { root: webDist, prefix: "/" });
+    app.setNotFoundHandler((_request, reply) => reply.sendFile("index.html"));
+  }
+
+  return app;
+}
+

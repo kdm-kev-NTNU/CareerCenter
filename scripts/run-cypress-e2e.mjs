@@ -53,7 +53,8 @@ process.on("SIGTERM", () => {
 
 run(["run", "dev", "--workspace", "@careercenter/api"], {
   CAREERCENTER_REPOSITORY: "memory",
-  JWT_SECRET: "e2e-secret",
+  JWT_SECRET: "e2e_fixture_only_not_a_real_jwt_secret",
+  AUTH_DISABLED: "true",
   PORT: "3000"
 });
 run(["run", "dev", "--workspace", "@careercenter/web"], {

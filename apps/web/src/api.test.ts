@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { api } from "./api";
+import { api } from "./api/index.js";
 
 const jsonResponse = (body: unknown, init: ResponseInit = {}) => new Response(JSON.stringify(body), {
   status: 200,
@@ -41,6 +41,17 @@ describe("api client", () => {
 
     await api.careerMap();
     await api.companies("?q=Statkraft");
+    await api.createCompany({
+      name: "NyBedrift AS",
+      description: "Test",
+      tracks: ["ENERGY_QUANT"],
+      tier: 1,
+      geography: "Oslo",
+      roleTypes: ["Data Scientist"],
+      difficulty: "High",
+      upside: "High",
+      relevanceScore: 80
+    });
     await api.courses();
     await api.updateCourse("course-1", {
       semester: 7,
@@ -76,10 +87,12 @@ describe("api client", () => {
     await api.tracks();
     await api.updateTrack("ENERGY_QUANT", { label: "Energy & Quant" });
     await api.resetTrack("ENERGY_QUANT");
+    await api.deleteTrack("ENERGY_QUANT");
 
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
       "/api/career-map",
       "/api/companies?q=Statkraft",
+      "/api/companies",
       "/api/courses",
       "/api/courses/course-1",
       "/api/paths",
@@ -90,14 +103,19 @@ describe("api client", () => {
       "/api/career-map/nodes/energy-1/reset",
       "/api/career-tracks",
       "/api/career-tracks/ENERGY_QUANT",
-      "/api/career-tracks/ENERGY_QUANT/reset"
+      "/api/career-tracks/ENERGY_QUANT/reset",
+      "/api/career-tracks/ENERGY_QUANT"
     ]);
-    expect(fetchMock.mock.calls[3][1]?.method).toBe("PUT");
-    expect(fetchMock.mock.calls[7][1]?.method).toBe("DELETE");
-    expect(fetchMock.mock.calls[8][1]?.method).toBe("PUT");
-    expect(fetchMock.mock.calls[9][1]?.method).toBe("POST");
-    expect(fetchMock.mock.calls[11][1]?.method).toBe("PUT");
-    expect(fetchMock.mock.calls[12][1]?.method).toBe("POST");
+    expect(fetchMock.mock.calls[4][1]?.method).toBe("PUT");
+    expect(fetchMock.mock.calls[6][1]?.method).toBe("PUT");
+    expect(fetchMock.mock.calls[7][1]?.method).toBe("POST");
+    expect(fetchMock.mock.calls[8][1]?.method).toBe("DELETE");
+    expect(fetchMock.mock.calls[9][1]?.method).toBe("PUT");
+    expect(fetchMock.mock.calls[10][1]?.method).toBe("POST");
+    expect(fetchMock.mock.calls[12][1]?.method).toBe("PUT");
+    expect(fetchMock.mock.calls[13][1]?.method).toBe("POST");
+    expect(fetchMock.mock.calls[14][1]?.method).toBe("DELETE");
+    expect(fetchMock.mock.calls.every(([, init]) => init?.credentials === "include")).toBe(true);
   });
 
   it("throws response text for failed requests", async () => {
