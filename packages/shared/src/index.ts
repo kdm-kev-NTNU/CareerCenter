@@ -170,10 +170,12 @@ export interface BoardPosition {
 export interface BoardCompanyNodeData {
   companyId: string;
   note?: string;
+  track?: CareerTrack;
 }
 
 export interface BoardMilestoneNodeData {
   label: string;
+  track?: CareerTrack;
 }
 
 export interface BoardNoteNodeData {

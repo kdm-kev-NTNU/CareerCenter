@@ -299,7 +299,13 @@ function formatDeadline(value?: string) {
       </div>
     </CatalogSettingsPanel>
 
-    <AppModal :open="modalOpen" :title="modalTitle" @close="closeModal">
+    <AppModal
+      :open="modalOpen"
+      :title="modalTitle"
+      size="lg"
+      persist-key="internships-form"
+      @close="closeModal"
+    >
       <form class="form-grid" @submit.prevent="submitInternship">
         <p v-if="modalError" class="form-error">{{ modalError }}</p>
         <label>

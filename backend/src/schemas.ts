@@ -182,13 +182,17 @@ const boardViewportSchema = z.object({
   zoom: z.number()
 });
 
+const boardTrackField = z.enum(careerTracks).optional();
+
 const boardCompanyDataSchema = z.object({
   companyId: z.string().min(1),
-  note: z.string().optional()
+  note: z.string().optional(),
+  track: boardTrackField
 });
 
 const boardMilestoneDataSchema = z.object({
-  label: z.string().min(1)
+  label: z.string().min(1),
+  track: boardTrackField
 });
 
 const boardNoteDataSchema = z.object({
