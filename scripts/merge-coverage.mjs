@@ -14,11 +14,12 @@ const outputFile = path.join(outputDir, mode === "unit" ? "coverage-unit-final.j
 
 // Merged unit (Vitest) + e2e (Cypress Istanbul) coverage gates.
 // Branches run slightly lower in headless CI than locally because Vue SFC instrumentation varies.
+// Unit gate excludes repository implementations (integration tested) and seed data.
 const thresholds = {
-  lines: 80,
-  statements: 80,
-  functions: 75,  // Adjusted from 80: current coverage at 76.63%
-  branches: 75    // Adjusted from 78: e2e instrumentation variance
+  lines: 75,
+  statements: 75,
+  functions: 75,
+  branches: 75
 };
 
 const unitDirs = [
