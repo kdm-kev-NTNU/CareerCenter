@@ -20,6 +20,25 @@ const pathPayload = (name: string) => ({
 });
 
 describe("CareerCenter API", () => {
+  it("rejects login with wrong pin", async () => {
+    const app = await buildServer({ repository: new MemoryRepository(), authDisabled: false });
+
+    await app.inject({
+      method: "POST",
+      url: "/api/auth/register",
+      payload: { name: "WrongPinUser", pin: "1234" }
+    });
+
+    const login = await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { name: "WrongPinUser", pin: "9999" }
+    });
+    expect(login.statusCode).toBe(401);
+
+    await app.close();
+  });
+
   it("registers, logs in, returns me, and logs out", async () => {
     const app = await buildServer({ repository: new MemoryRepository(), authDisabled: false });
 
@@ -505,6 +524,33 @@ describe("CareerCenter API", () => {
     await app.close();
   });
 
+  it("updates and deletes bachelor folders", async () => {
+    const app = await createTestApp();
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/education/bachelor/folders",
+      payload: { name: "Mappe A", parentId: null, sortOrder: 0 }
+    });
+    expect(created.statusCode).toBe(200);
+
+    const updated = await app.inject({
+      method: "PUT",
+      url: `/api/education/bachelor/folders/${created.json().id}`,
+      payload: { name: "Mappe A (redigert)", parentId: null, sortOrder: 1 }
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json().name).toBe("Mappe A (redigert)");
+
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: `/api/education/bachelor/folders/${created.json().id}`
+    });
+    expect(deleted.statusCode).toBe(204);
+
+    await app.close();
+  });
+
   it("creates bachelor folders and lists folder tree", async () => {
     const app = await createTestApp();
 
@@ -524,6 +570,51 @@ describe("CareerCenter API", () => {
     const files = await app.inject({ method: "GET", url: "/api/education/bachelor/files?folderId=" });
     expect(files.statusCode).toBe(200);
     expect(files.json()).toEqual([]);
+
+    await app.close();
+  });
+
+  it("uploads, updates, downloads, and deletes bachelor files", async () => {
+    const app = await createTestApp();
+    const boundary = "----CareerCenterBoundary";
+
+    const upload = await app.inject({
+      method: "POST",
+      url: "/api/education/bachelor/files",
+      headers: {
+        "content-type": `multipart/form-data; boundary=${boundary}`
+      },
+      payload:
+        `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="file"; filename="notes.txt"\r\n` +
+        `Content-Type: text/plain\r\n\r\n` +
+        `hello bachelor\r\n` +
+        `--${boundary}--\r\n`
+    });
+    expect(upload.statusCode).toBe(201);
+    const fileId = upload.json().id as string;
+    expect(upload.json().originalName).toBe("notes.txt");
+
+    const updated = await app.inject({
+      method: "PUT",
+      url: `/api/education/bachelor/files/${fileId}`,
+      payload: { notes: "Husk dette", originalName: "notes.txt" }
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json().notes).toBe("Husk dette");
+
+    const download = await app.inject({
+      method: "GET",
+      url: `/api/education/bachelor/files/${fileId}/download`
+    });
+    expect(download.statusCode).toBe(200);
+    expect(download.body).toContain("hello bachelor");
+
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: `/api/education/bachelor/files/${fileId}`
+    });
+    expect(deleted.statusCode).toBe(204);
 
     await app.close();
   });

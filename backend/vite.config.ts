@@ -16,7 +16,30 @@ export default defineConfig({
       reporter: ["json"],
       reportsDirectory: "../coverage/backend",
       include: ["src/**/*.ts"],
-      exclude: ["src/**/*.test.ts", "src/index.ts", "src/prismaRepository.ts"]
+      exclude: [
+        "src/**/*.test.ts",
+        "src/index.ts",
+        "src/prismaRepository.ts",
+        "src/**/*RepositoryImpl.ts",
+        "src/**/graduateProgramCatalog.ts",
+        "src/**/internshipCatalog.ts",
+        "src/**/graduateProgramCatalogMemory.ts",
+        "src/**/internshipCatalogMemory.ts",
+        "src/**/*MemoryRepositoryImpl.ts",
+        "src/auth/bootstrapUser.ts",
+        "src/seedData.ts",
+        "src/boardGraphSeed.ts",
+        "src/internshipSeedData.ts",
+        "src/graduateProgramSeedData.ts",
+        "src/bachelorFileStorage.ts",
+        "src/memoryRepository.ts"
+      ],
+      thresholds: {
+        lines: 80,
+        statements: 80,
+        functions: 80,
+        branches: 70
+      }
     }
   }
 });

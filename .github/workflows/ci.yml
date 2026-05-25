@@ -1,3 +1,6 @@
+# CI: quality + unit coverage gate + e2e coverage gate + docker build
+# Local parity: npm run test:ci
+
 name: CI
 
 on:
@@ -7,8 +10,10 @@ on:
     branches: [main]
 
 jobs:
-  verify:
+  quality:
+    name: quality
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -20,9 +25,56 @@ jobs:
       - run: npm run build --workspace @careercenter/shared
       - run: npm run typecheck
       - run: npm run lint
+
+  unit:
+    name: unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
       - run: npm run test:coverage
+      - run: npm run coverage:merge:unit
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-unit
+          path: coverage/
+
+  e2e:
+    name: e2e
+    needs: unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run build --workspace @careercenter/shared
       - run: npx cypress install
       - run: npm run test:e2e
-      - run: npm run coverage:merge
+      - run: npm run coverage:merge:full
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-full
+          path: coverage/
+
+  docker:
+    name: docker
+    needs: [quality, e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
       - run: docker build -f frontend/Dockerfile -t careercenter-frontend .
       - run: docker build -f backend/Dockerfile -t careercenter-backend .

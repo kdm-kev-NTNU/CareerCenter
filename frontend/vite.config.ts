@@ -39,10 +39,16 @@ export default defineConfig({
     exclude: ["cypress/**", "playwright.config.ts"],
     coverage: {
       provider: "v8",
-      reporter: ["json"],
+      reporter: ["json", "text"],
       reportsDirectory: "../coverage/frontend",
-      include: ["src/**/*.{ts,vue}"],
-      exclude: ["src/**/*.test.ts", "src/main.ts"]
+      include: ["src/**/*.ts", "src/**/*.vue"],
+      exclude: ["src/**/*.test.ts", "src/main.ts"],
+      thresholds: {
+        lines: 80,
+        statements: 80,
+        functions: 80,
+        branches: 78
+      }
     }
   }
 });
