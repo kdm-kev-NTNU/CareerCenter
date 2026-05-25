@@ -50,8 +50,8 @@ const company = (id: string): Company =>
     tier: 1,
     geography: "Oslo",
     roleTypes: [],
-    difficulty: "",
-    upside: "",
+    difficulty: "Medium",
+    upside: "High",
     relevanceScore: 0
   }) as Company;
 

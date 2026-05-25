@@ -111,10 +111,11 @@ describe("CareerCenter API", () => {
     });
     expect(created.statusCode).toBe(200);
 
+    const createdBody = created.json() as { id: string; title: string };
     const updated = await app.inject({
       method: "PUT",
-      url: `/api/competitions/${created.json().id}`,
-      payload: { ...created.json(), title: "Junction (oppdatert)" }
+      url: `/api/competitions/${createdBody.id}`,
+      payload: { ...createdBody, title: "Junction (oppdatert)" }
     });
     expect(updated.statusCode).toBe(200);
     expect(updated.json().title).toBe("Junction (oppdatert)");

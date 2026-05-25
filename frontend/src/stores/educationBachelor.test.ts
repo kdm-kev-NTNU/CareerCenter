@@ -33,7 +33,17 @@ const folderTree: BachelorFolderTreeNode[] = [
     name: "Algoritmer",
     parentId: null,
     sortOrder: 0,
-    children: [{ id: "folder-2", name: "Sortering", parentId: "folder-1", sortOrder: 0, children: [] }]
+    createdAt: "2026-01-01",
+    children: [
+      {
+        id: "folder-2",
+        name: "Sortering",
+        parentId: "folder-1",
+        sortOrder: 0,
+        createdAt: "2026-01-01",
+        children: []
+      }
+    ]
   }
 ];
 
@@ -44,8 +54,8 @@ const sampleFile: BachelorFile = {
   mimeType: "application/pdf",
   sizeBytes: 2048,
   notes: "",
-  createdAt: "2026-01-01",
-  updatedAt: "2026-01-01"
+  sortOrder: 0,
+  createdAt: "2026-01-01"
 };
 
 describe("education bachelor helpers", () => {
@@ -109,8 +119,20 @@ describe("useEducationBachelorStore", () => {
   });
 
   it("creates, renames, and deletes folders", async () => {
-    mockedApi.createBachelorFolder.mockResolvedValue(undefined);
-    mockedApi.updateBachelorFolder.mockResolvedValue(undefined);
+    mockedApi.createBachelorFolder.mockResolvedValue({
+      id: "new-folder",
+      name: "Ny mappe",
+      parentId: null,
+      sortOrder: 0,
+      createdAt: "2026-01-01"
+    });
+    mockedApi.updateBachelorFolder.mockResolvedValue({
+      id: "folder-1",
+      name: "Algoritmer II",
+      parentId: null,
+      sortOrder: 0,
+      createdAt: "2026-01-01"
+    });
     mockedApi.deleteBachelorFolder.mockResolvedValue(undefined);
     const store = useEducationBachelorStore();
     await store.loadAll();

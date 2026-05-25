@@ -16,7 +16,7 @@ vi.mock("../api/index.js", () => ({
 const mockedApi = vi.mocked(api);
 
 const company = (id: string): Company =>
-  ({ id, name: id, description: "", tracks: ["ENERGY_QUANT"], tier: 1, geography: "Oslo", roleTypes: [], difficulty: "", upside: "", relevanceScore: 0 }) as Company;
+  ({ id, name: id, description: "", tracks: ["ENERGY_QUANT"], tier: 1, geography: "Oslo", roleTypes: [], difficulty: "Medium", upside: "High", relevanceScore: 0 }) as Company;
 
 describe("usePathsStore", () => {
   beforeEach(() => {
