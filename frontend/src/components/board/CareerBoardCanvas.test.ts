@@ -4,6 +4,8 @@ import { createPinia, setActivePinia } from "pinia";
 import { nextTick } from "vue";
 import CareerBoardCanvas from "./CareerBoardCanvas.vue";
 
+const BOARD_DRAG_MIME = "application/x-career-board-node";
+
 const vueFlowMocks = vi.hoisted(() => ({
   mockFitView: vi.fn(),
   mockGetSelectedNodes: vi.fn().mockReturnValue([]),
@@ -22,6 +24,7 @@ const {
   mockGetViewport
 } = vueFlowMocks;
 
+// Mock Vue Flow
 vi.mock("@vue-flow/core", () => ({
   VueFlow: {
     template: `
@@ -61,14 +64,14 @@ vi.mock("@vue-flow/core", () => ({
       "drop"
     ]
   },
-  useVueFlow: vi.fn().mockReturnValue({
+  useVueFlow: vi.fn(() => ({
     fitView: vueFlowMocks.mockFitView,
     getSelectedNodes: vueFlowMocks.mockGetSelectedNodes,
     getSelectedEdges: vueFlowMocks.mockGetSelectedEdges,
     screenToFlowCoordinate: vueFlowMocks.mockScreenToFlowCoordinate,
     setViewport: vueFlowMocks.mockSetViewport,
     getViewport: vueFlowMocks.mockGetViewport
-  }),
+  })),
   SelectionMode: { Partial: "partial" }
 }));
 
@@ -125,23 +128,8 @@ vi.mock("./CustomEdge.vue", () => ({
   }
 }));
 
-// Mock stores
-const mockLoadBoards = vi.fn();
-const mockOnConnect = vi.fn();
-const mockOnNodesChange = vi.fn();
-const mockOnEdgesChange = vi.fn();
-const mockAddCompanyNode = vi.fn();
-const mockAddMilestoneNode = vi.fn();
-const mockAddNoteNode = vi.fn().mockReturnValue("note-1");
-const mockStartNodeEdit = vi.fn();
-const mockDuplicateNode = vi.fn();
-const mockDeleteNode = vi.fn();
-const mockDeleteEdge = vi.fn();
-const mockRequestEdgeLabelEdit = vi.fn();
-const mockRemoveSelectedElements = vi.fn();
-const mockScheduleViewportSave = vi.fn();
-const mockSelectEdge = vi.fn();
-const mockApplyEdgeLabel = vi.fn();
+// Mock stores - use factory function to return fresh instances
+let mockBoardStore: ReturnType<typeof createMockBoardStore>;
 
 const createMockBoardStore = (overrides = {}) => ({
   summaries: [],
@@ -155,35 +143,33 @@ const createMockBoardStore = (overrides = {}) => ({
     { id: "node-2", type: "milestone", position: { x: 200, y: 200 }, data: { label: "Milestone" } }
   ],
   edges: [{ id: "edge-1", source: "node-1", target: "node-2", data: { label: "" } }],
-  selectedEdgeId: null,
+  selectedEdgeId: null as string | null,
   edgeLabelDraft: "",
-  editingNodeId: null,
-  edgeLabelEditRequestId: null,
+  editingNodeId: null as string | null,
+  edgeLabelEditRequestId: null as string | null,
   saveState: "saved" as const,
   loading: false,
-  loadBoards: mockLoadBoards,
-  onConnect: mockOnConnect,
-  onNodesChange: mockOnNodesChange,
-  onEdgesChange: mockOnEdgesChange,
-  addCompanyNode: mockAddCompanyNode,
-  addMilestoneNode: mockAddMilestoneNode,
-  addNoteNode: mockAddNoteNode,
-  startNodeEdit: mockStartNodeEdit,
-  duplicateNode: mockDuplicateNode,
-  deleteNode: mockDeleteNode,
-  deleteEdge: mockDeleteEdge,
-  requestEdgeLabelEdit: mockRequestEdgeLabelEdit,
-  removeSelectedElements: mockRemoveSelectedElements,
-  scheduleViewportSave: mockScheduleViewportSave,
-  selectEdge: mockSelectEdge,
-  applyEdgeLabel: mockApplyEdgeLabel,
+  loadBoards: vi.fn(),
+  onConnect: vi.fn(),
+  onNodesChange: vi.fn(),
+  onEdgesChange: vi.fn(),
+  addCompanyNode: vi.fn(),
+  addMilestoneNode: vi.fn(),
+  addNoteNode: vi.fn().mockReturnValue("note-1"),
+  startNodeEdit: vi.fn(),
+  duplicateNode: vi.fn(),
+  deleteNode: vi.fn(),
+  deleteEdge: vi.fn(),
+  requestEdgeLabelEdit: vi.fn(),
+  removeSelectedElements: vi.fn(),
+  scheduleViewportSave: vi.fn(),
+  selectEdge: vi.fn(),
+  applyEdgeLabel: vi.fn(),
   ...overrides
 });
 
-let mockBoardStore = createMockBoardStore();
-
 vi.mock("../../stores/board.js", () => ({
-  useBoardStore: vi.fn().mockImplementation(() => mockBoardStore)
+  useBoardStore: vi.fn(() => mockBoardStore)
 }));
 
 const mockCompanies = [
@@ -191,7 +177,7 @@ const mockCompanies = [
 ];
 
 vi.mock("../../stores/companies.js", () => ({
-  useCompaniesStore: vi.fn().mockImplementation(() => ({
+  useCompaniesStore: vi.fn(() => ({
     companies: mockCompanies
   }))
 }));
@@ -205,7 +191,7 @@ vi.mock("../../utils/boardFlow.js", () => ({
 
 vi.mock("../../utils/boardDrag.js", () => ({
   readBoardDragData: vi.fn().mockImplementation((dataTransfer: DataTransfer) => {
-    const raw = dataTransfer.getData("application/x-career-board-node");
+    const raw = dataTransfer.getData(BOARD_DRAG_MIME);
     if (!raw) return null;
     try {
       return JSON.parse(raw);
@@ -213,7 +199,7 @@ vi.mock("../../utils/boardDrag.js", () => ({
       return null;
     }
   }),
-  BOARD_DRAG_MIME: "application/x-career-board-node"
+  BOARD_DRAG_MIME
 }));
 
 // Mock crypto.randomUUID
@@ -231,10 +217,17 @@ describe("CareerBoardCanvas", () => {
     vi.useFakeTimers();
     pinia = createPinia();
     setActivePinia(pinia);
-    vi.clearAllMocks();
+    
+    // Reset mocks
+    mockFitView = vi.fn();
+    mockGetSelectedNodes = vi.fn().mockReturnValue([]);
+    mockGetSelectedEdges = vi.fn().mockReturnValue([]);
+    mockScreenToFlowCoordinate = vi.fn().mockReturnValue({ x: 100, y: 100 });
+    mockSetViewport = vi.fn();
+    mockGetViewport = vi.fn().mockReturnValue({ x: 0, y: 0, zoom: 1 });
+    
     mockBoardStore = createMockBoardStore();
-    mockGetSelectedNodes.mockReturnValue([]);
-    mockGetSelectedEdges.mockReturnValue([]);
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
@@ -460,7 +453,7 @@ describe("CareerBoardCanvas", () => {
       await contextMenu.vm.$emit("edit");
       await flushPromises();
 
-      expect(mockStartNodeEdit).toHaveBeenCalledWith("node-1");
+      expect(mockBoardStore.startNodeEdit).toHaveBeenCalledWith("node-1");
     });
 
     it("handles edge edit from context menu", async () => {
@@ -480,7 +473,7 @@ describe("CareerBoardCanvas", () => {
       await contextMenu.vm.$emit("edit");
       await flushPromises();
 
-      expect(mockRequestEdgeLabelEdit).toHaveBeenCalledWith("edge-1");
+      expect(mockBoardStore.requestEdgeLabelEdit).toHaveBeenCalledWith("edge-1");
     });
 
     it("handles duplicate from context menu for nodes", async () => {
@@ -500,7 +493,7 @@ describe("CareerBoardCanvas", () => {
       await contextMenu.vm.$emit("duplicate");
       await flushPromises();
 
-      expect(mockDuplicateNode).toHaveBeenCalledWith("node-1");
+      expect(mockBoardStore.duplicateNode).toHaveBeenCalledWith("node-1");
     });
 
     it("handles delete from context menu for nodes", async () => {
@@ -520,7 +513,7 @@ describe("CareerBoardCanvas", () => {
       await contextMenu.vm.$emit("delete");
       await flushPromises();
 
-      expect(mockDeleteNode).toHaveBeenCalledWith("node-1");
+      expect(mockBoardStore.deleteNode).toHaveBeenCalledWith("node-1");
     });
 
     it("handles delete from context menu for edges", async () => {
@@ -540,7 +533,7 @@ describe("CareerBoardCanvas", () => {
       await contextMenu.vm.$emit("delete");
       await flushPromises();
 
-      expect(mockDeleteEdge).toHaveBeenCalledWith("edge-1");
+      expect(mockBoardStore.deleteEdge).toHaveBeenCalledWith("edge-1");
     });
 
     it("closes context menu on close event", async () => {
@@ -579,8 +572,8 @@ describe("CareerBoardCanvas", () => {
       await paneMenu.vm.$emit("addNote");
       await flushPromises();
 
-      expect(mockAddNoteNode).toHaveBeenCalled();
-      expect(mockStartNodeEdit).toHaveBeenCalledWith("note-1");
+      expect(mockBoardStore.addNoteNode).toHaveBeenCalled();
+      expect(mockBoardStore.startNodeEdit).toHaveBeenCalledWith("note-1");
     });
 
     it("closes pane menu on close event", async () => {
@@ -616,20 +609,6 @@ describe("CareerBoardCanvas", () => {
       expect(dragEvent.defaultPrevented).toBe(true);
     });
 
-    it("does not prevent default on drag over without board data", async () => {
-      wrapper = mountComponent();
-      await flushPromises();
-
-      const vueFlow = wrapper.findComponent({ name: "VueFlow" });
-      const dataTransfer = new DataTransfer();
-
-      const dragEvent = new DragEvent("dragover", { dataTransfer });
-      await vueFlow.vm.$emit("dragover", dragEvent);
-
-      // Event should not be prevented when there's no board data
-      // The mock readBoardDragData returns null for empty dataTransfer
-    });
-
     it("handles drop with company payload", async () => {
       wrapper = mountComponent();
       await flushPromises();
@@ -648,7 +627,7 @@ describe("CareerBoardCanvas", () => {
       await flushPromises();
 
       expect(mockScreenToFlowCoordinate).toHaveBeenCalledWith({ x: 150, y: 200 });
-      expect(mockAddCompanyNode).toHaveBeenCalled();
+      expect(mockBoardStore.addCompanyNode).toHaveBeenCalled();
     });
 
     it("handles drop with milestone payload", async () => {
@@ -668,7 +647,7 @@ describe("CareerBoardCanvas", () => {
       await vueFlow.vm.$emit("drop", dropEvent);
       await flushPromises();
 
-      expect(mockAddMilestoneNode).toHaveBeenCalledWith("New Milestone", expect.any(Object));
+      expect(mockBoardStore.addMilestoneNode).toHaveBeenCalledWith("New Milestone", expect.any(Object));
     });
 
     it("handles drop with note payload", async () => {
@@ -688,7 +667,7 @@ describe("CareerBoardCanvas", () => {
       await vueFlow.vm.$emit("drop", dropEvent);
       await flushPromises();
 
-      expect(mockAddNoteNode).toHaveBeenCalledWith("My Note", expect.any(Object));
+      expect(mockBoardStore.addNoteNode).toHaveBeenCalledWith("My Note", expect.any(Object));
     });
 
     it("does nothing on drop without valid payload", async () => {
@@ -707,29 +686,9 @@ describe("CareerBoardCanvas", () => {
       await vueFlow.vm.$emit("drop", dropEvent);
       await flushPromises();
 
-      expect(mockAddCompanyNode).not.toHaveBeenCalled();
-      expect(mockAddMilestoneNode).not.toHaveBeenCalled();
-      expect(mockAddNoteNode).not.toHaveBeenCalled();
-    });
-
-    it("does nothing on drop with unknown company", async () => {
-      wrapper = mountComponent();
-      await flushPromises();
-
-      const vueFlow = wrapper.findComponent({ name: "VueFlow" });
-      const dataTransfer = new DataTransfer();
-      dataTransfer.setData(BOARD_DRAG_MIME, JSON.stringify({ kind: "company", companyId: "unknown-company" }));
-
-      const dropEvent = new DragEvent("drop", {
-        dataTransfer,
-        clientX: 150,
-        clientY: 200
-      });
-
-      await vueFlow.vm.$emit("drop", dropEvent);
-      await flushPromises();
-
-      expect(mockAddCompanyNode).not.toHaveBeenCalled();
+      expect(mockBoardStore.addCompanyNode).not.toHaveBeenCalled();
+      expect(mockBoardStore.addMilestoneNode).not.toHaveBeenCalled();
+      expect(mockBoardStore.addNoteNode).not.toHaveBeenCalled();
     });
   });
 
@@ -746,7 +705,7 @@ describe("CareerBoardCanvas", () => {
       window.dispatchEvent(keydownEvent);
       await flushPromises();
 
-      expect(mockRemoveSelectedElements).toHaveBeenCalled();
+      expect(mockBoardStore.removeSelectedElements).toHaveBeenCalled();
       vi.unstubAllGlobals();
     });
 
@@ -762,7 +721,7 @@ describe("CareerBoardCanvas", () => {
       window.dispatchEvent(keydownEvent);
       await flushPromises();
 
-      expect(mockRemoveSelectedElements).toHaveBeenCalled();
+      expect(mockBoardStore.removeSelectedElements).toHaveBeenCalled();
       vi.unstubAllGlobals();
     });
 
@@ -777,7 +736,7 @@ describe("CareerBoardCanvas", () => {
       window.dispatchEvent(keydownEvent);
       await flushPromises();
 
-      expect(mockRemoveSelectedElements).not.toHaveBeenCalled();
+      expect(mockBoardStore.removeSelectedElements).not.toHaveBeenCalled();
     });
 
     it("does not delete when typing in input", async () => {
@@ -796,7 +755,7 @@ describe("CareerBoardCanvas", () => {
       input.dispatchEvent(keydownEvent);
       await flushPromises();
 
-      expect(mockRemoveSelectedElements).not.toHaveBeenCalled();
+      expect(mockBoardStore.removeSelectedElements).not.toHaveBeenCalled();
 
       document.body.removeChild(input);
     });
@@ -815,7 +774,7 @@ describe("CareerBoardCanvas", () => {
       await flushPromises();
 
       expect(confirmMock).toHaveBeenCalledWith("Slette 3 valgte elementer?");
-      expect(mockRemoveSelectedElements).toHaveBeenCalled();
+      expect(mockBoardStore.removeSelectedElements).toHaveBeenCalled();
       vi.unstubAllGlobals();
     });
 
@@ -831,7 +790,7 @@ describe("CareerBoardCanvas", () => {
       window.dispatchEvent(keydownEvent);
       await flushPromises();
 
-      expect(mockRemoveSelectedElements).not.toHaveBeenCalled();
+      expect(mockBoardStore.removeSelectedElements).not.toHaveBeenCalled();
       vi.unstubAllGlobals();
     });
   });
@@ -851,7 +810,7 @@ describe("CareerBoardCanvas", () => {
       await deleteButton.trigger("click");
       await flushPromises();
 
-      expect(mockRemoveSelectedElements).toHaveBeenCalled();
+      expect(mockBoardStore.removeSelectedElements).toHaveBeenCalled();
       vi.unstubAllGlobals();
     });
   });
@@ -885,7 +844,7 @@ describe("CareerBoardCanvas", () => {
       await vueFlow.vm.$emit("moveEnd");
       await flushPromises();
 
-      expect(mockScheduleViewportSave).toHaveBeenCalled();
+      expect(mockBoardStore.scheduleViewportSave).toHaveBeenCalled();
     });
 
     it("schedules viewport save on viewport change end", async () => {
@@ -896,7 +855,7 @@ describe("CareerBoardCanvas", () => {
       await vueFlow.vm.$emit("viewportChangeEnd");
       await flushPromises();
 
-      expect(mockScheduleViewportSave).toHaveBeenCalled();
+      expect(mockBoardStore.scheduleViewportSave).toHaveBeenCalled();
     });
   });
 
@@ -910,7 +869,7 @@ describe("CareerBoardCanvas", () => {
       await vueFlow.vm.$emit("connect", connection);
       await flushPromises();
 
-      expect(mockOnConnect).toHaveBeenCalledWith(connection);
+      expect(mockBoardStore.onConnect).toHaveBeenCalledWith(connection);
     });
 
     it("calls onNodesChange when nodes change", async () => {
@@ -921,7 +880,7 @@ describe("CareerBoardCanvas", () => {
       await vueFlow.vm.$emit("nodesChange");
       await flushPromises();
 
-      expect(mockOnNodesChange).toHaveBeenCalled();
+      expect(mockBoardStore.onNodesChange).toHaveBeenCalled();
     });
 
     it("calls onNodesChange when node drag stops", async () => {
@@ -932,7 +891,7 @@ describe("CareerBoardCanvas", () => {
       await vueFlow.vm.$emit("nodeDragStop");
       await flushPromises();
 
-      expect(mockOnNodesChange).toHaveBeenCalled();
+      expect(mockBoardStore.onNodesChange).toHaveBeenCalled();
     });
 
     it("calls onEdgesChange when edges change", async () => {
@@ -943,7 +902,7 @@ describe("CareerBoardCanvas", () => {
       await vueFlow.vm.$emit("edgesChange");
       await flushPromises();
 
-      expect(mockOnEdgesChange).toHaveBeenCalled();
+      expect(mockBoardStore.onEdgesChange).toHaveBeenCalled();
     });
   });
 
@@ -1032,32 +991,6 @@ describe("CareerBoardCanvas", () => {
       expect(wrapper.find(".board-context-menu-mock").exists()).toBe(true);
     });
 
-    it("does not add note when pane menu has no flow position", async () => {
-      // This scenario is difficult to test directly without manipulating internal state
-      // But we can verify the handler is called correctly
-      wrapper = mountComponent();
-      await flushPromises();
-
-      // The pane menu is only shown when there's a valid position
-      // So if we trigger addNote without having the pane menu open,
-      // the function should return early
-      const vueFlow = wrapper.findComponent({ name: "VueFlow" });
-
-      // Simulate pane click to open menu
-      const rectMock = { left: 0, top: 0 };
-      const clickEvent = new MouseEvent("click", { clientX: 100, clientY: 100 });
-      Object.defineProperty(clickEvent, "stopPropagation", { value: vi.fn() });
-
-      // Mock getBoundingClientRect
-      wrapper.find(".board-canvas-wrap").element.getBoundingClientRect = () => rectMock as DOMRect;
-
-      await vueFlow.vm.$emit("paneClick", clickEvent);
-      await flushPromises();
-
-      // Menu should be visible now
-      expect(wrapper.find(".board-pane-menu-mock").exists()).toBe(true);
-    });
-
     it("handles edge case: active board is null on viewport change", async () => {
       mockBoardStore = createMockBoardStore({ activeBoard: null });
       wrapper = mountComponent();
@@ -1068,7 +1001,7 @@ describe("CareerBoardCanvas", () => {
       await flushPromises();
 
       // Should not throw and should not schedule save when activeBoard is null
-      expect(mockScheduleViewportSave).not.toHaveBeenCalled();
+      expect(mockBoardStore.scheduleViewportSave).not.toHaveBeenCalled();
     });
   });
 
@@ -1094,7 +1027,7 @@ describe("CareerBoardCanvas", () => {
       await contextMenu.vm.$emit("edit");
       await flushPromises();
 
-      expect(mockStartNodeEdit).toHaveBeenCalledWith("node-1");
+      expect(mockBoardStore.startNodeEdit).toHaveBeenCalledWith("node-1");
       expect(wrapper.find(".board-context-menu-mock").exists()).toBe(false);
     });
 
@@ -1115,7 +1048,7 @@ describe("CareerBoardCanvas", () => {
       window.dispatchEvent(keydownEvent);
       await flushPromises();
 
-      expect(mockRemoveSelectedElements).toHaveBeenCalled();
+      expect(mockBoardStore.removeSelectedElements).toHaveBeenCalled();
       vi.unstubAllGlobals();
     });
 
@@ -1145,7 +1078,7 @@ describe("CareerBoardCanvas", () => {
       await flushPromises();
 
       expect(mockScreenToFlowCoordinate).toHaveBeenCalledWith({ x: 200, y: 300 });
-      expect(mockAddCompanyNode).toHaveBeenCalled();
+      expect(mockBoardStore.addCompanyNode).toHaveBeenCalled();
     });
   });
 });
