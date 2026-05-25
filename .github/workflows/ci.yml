@@ -46,9 +46,10 @@ jobs:
         with:
           name: coverage-unit
           path: |
-            coverage/
-            !coverage/**/coverage-final.json
-            !coverage/**/coverage-unit-final.json
+            coverage/backend/
+            coverage/frontend/
+            coverage/packages/
+            coverage/coverage-unit-final.json
           retention-days: 1
 
   e2e:
@@ -69,7 +70,8 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: coverage-unit
-          path: coverage/
+          path: .
+          merge-multiple: true
       - run: npm run test:e2e
       - run: npm run coverage:merge:full
       - uses: actions/upload-artifact@v4
