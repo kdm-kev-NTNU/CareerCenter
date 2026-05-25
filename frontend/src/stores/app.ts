@@ -49,17 +49,26 @@ export const useAppStore = defineStore("app", () => {
     const boardStore = useBoardStore();
 
     try {
-      careerMapStore.setTracks(await api.tracks());
-      await companiesStore.loadCompanies();
-      await coursesStore.loadCourses();
-      await pathsStore.loadPaths();
-      await competitionsStore.loadCompetitions();
-      await internshipSettingsStore.loadSettings();
-      internshipsStore.syncFormFromSettings();
-      await internshipsStore.loadInternships();
-      await graduateProgramSettingsStore.loadSettings();
-      graduateProgramsStore.syncFormFromSettings();
-      await graduateProgramsStore.loadGraduatePrograms();
+      const [tracks] = await Promise.all([
+        api.tracks(),
+        companiesStore.loadCompanies(),
+        coursesStore.loadCourses(),
+        pathsStore.loadPaths(),
+        competitionsStore.loadCompetitions()
+      ]);
+      careerMapStore.setTracks(tracks);
+
+      await Promise.all([
+        internshipSettingsStore.loadSettings().then(() => {
+          internshipsStore.syncFormFromSettings();
+          return internshipsStore.loadInternships();
+        }),
+        graduateProgramSettingsStore.loadSettings().then(() => {
+          graduateProgramsStore.syncFormFromSettings();
+          return graduateProgramsStore.loadGraduatePrograms();
+        })
+      ]);
+
       await Promise.all([
         educationSelfStudyStore.loadCourses(),
         educationBooksStore.loadBooks(),
