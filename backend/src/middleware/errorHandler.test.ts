@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import Fastify from "fastify";
 import { Prisma } from "@prisma/client";
-import { ZodError, z } from "zod";
+import { z } from "zod";
 import { registerErrorHandler } from "./errorHandler.js";
 import { CatalogInUseError, CompanyDuplicateError, InvalidReferenceError } from "../repository.js";
 

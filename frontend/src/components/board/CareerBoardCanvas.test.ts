@@ -33,7 +33,7 @@ class MockDataTransfer implements DataTransfer {
   setDragImage(): void {}
 }
 
-// @ts-ignore - Add to global for tests
+// @ts-expect-error - Add to global for tests
 global.DataTransfer = MockDataTransfer;
 
 // Define DragEvent on global scope before tests
@@ -49,8 +49,8 @@ Object.defineProperty(global, "DragEvent", {
   configurable: true
 });
 
-// Track all the callback handlers for VueFlow events
-const vueFlowHandlers: Record<string, Function[]> = {};
+// Track all the callback handlers for VueFlow events (unused, kept for potential future use)
+const _vueFlowHandlers: Record<string, Function[]> = {};
 
 // Vue Flow mock state
 const mockFitView = vi.fn();
@@ -159,8 +159,8 @@ vi.mock("./CustomEdge.vue", () => ({
   }
 }));
 
-// Store mocks
-const BOARD_DRAG_MIME = "application/x-career-board-node";
+// Store mocks (unused constant)
+const _BOARD_DRAG_MIME = "application/x-career-board-node";
 
 let mockBoardStore: ReturnType<typeof createMockBoardStore>;
 
