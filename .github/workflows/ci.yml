@@ -40,9 +40,6 @@ jobs:
       - run: npm run db:generate --workspace=@careercenter/api
       - run: npm run build --workspace=@careercenter/shared
       - run: npm run test:coverage --workspaces
-      - run: ls -la coverage/ || echo "No coverage dir"
-      - run: ls -la coverage/backend/ || echo "No backend coverage"
-      - run: ls -la coverage/frontend/ || echo "No frontend coverage"
       - run: npm run coverage:merge:unit
       - uses: actions/upload-artifact@v4
         if: always()
@@ -70,8 +67,6 @@ jobs:
         with:
           name: coverage-unit
           path: coverage/
-      - run: ls -la coverage/ || echo "No coverage dir after download"
-      - run: ls -la coverage/backend/ 2>/dev/null || echo "No backend coverage"
       - run: npm run test:e2e
       - run: npm run coverage:merge:full
       - uses: actions/upload-artifact@v4
