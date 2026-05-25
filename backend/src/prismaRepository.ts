@@ -20,7 +20,7 @@ import type {
   LearningPlatform,
   SelfStudyCourse
 } from "@careercenter/shared";
-import { CompanyDuplicateError } from "./repository.js";
+import { CompanyDuplicateError, InvalidReferenceError } from "./repository.js";
 import type {
   BachelorFileCreateInput,
   BachelorFileUpdateInput,
@@ -576,7 +576,7 @@ export class PrismaRepository implements Repository {
   async createBachelorFolder(userId: string, input: BachelorFolderInput): Promise<BachelorFolder> {
     if (input.parentId) {
       const parent = await this.prisma.bachelorFolder.findFirst({ where: { id: input.parentId, userId } });
-      if (!parent) throw new Error("Overordnet mappe finnes ikke.");
+      if (!parent) throw new InvalidReferenceError("Overordnet mappe finnes ikke.");
     }
     return this.mapBachelorFolder(
       (await this.prisma.bachelorFolder.create({
@@ -589,9 +589,9 @@ export class PrismaRepository implements Repository {
     const existing = await this.prisma.bachelorFolder.findFirst({ where: { id, userId } });
     if (!existing) return null;
     if (input.parentId) {
-      if (input.parentId === id) throw new Error("En mappe kan ikke være sin egen overordnede.");
+      if (input.parentId === id) throw new InvalidReferenceError("En mappe kan ikke være sin egen overordnede.");
       const parent = await this.prisma.bachelorFolder.findFirst({ where: { id: input.parentId, userId } });
-      if (!parent) throw new Error("Overordnet mappe finnes ikke.");
+      if (!parent) throw new InvalidReferenceError("Overordnet mappe finnes ikke.");
     }
     return this.mapBachelorFolder(
       (await this.prisma.bachelorFolder.update({
@@ -630,7 +630,7 @@ export class PrismaRepository implements Repository {
   async createBachelorFile(userId: string, input: BachelorFileCreateInput): Promise<BachelorFile> {
     if (input.folderId) {
       const folder = await this.prisma.bachelorFolder.findFirst({ where: { id: input.folderId, userId } });
-      if (!folder) throw new Error("Mappe finnes ikke.");
+      if (!folder) throw new InvalidReferenceError("Mappe finnes ikke.");
     }
     return this.mapBachelorFile(
       (await this.prisma.bachelorFile.create({
@@ -653,7 +653,7 @@ export class PrismaRepository implements Repository {
     if (!existing) return null;
     if (input.folderId) {
       const folder = await this.prisma.bachelorFolder.findFirst({ where: { id: input.folderId, userId } });
-      if (!folder) throw new Error("Mappe finnes ikke.");
+      if (!folder) throw new InvalidReferenceError("Mappe finnes ikke.");
     }
     return this.mapBachelorFile(
       (await this.prisma.bachelorFile.update({

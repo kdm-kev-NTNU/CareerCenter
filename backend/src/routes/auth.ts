@@ -11,10 +11,10 @@ function isLocked(lockedUntil: Date | null): boolean {
 }
 
 export async function authRoutes(app: FastifyInstance, repository: Repository) {
-  app.get("/api/auth/me", async (request) => {
+  app.get("/api/auth/me", async (request, reply) => {
     const profile = await repository.getUserById(request.user.id);
     if (!profile) {
-      return { message: "Bruker ikke funnet." };
+      return reply.code(401).send({ message: "Ikke autentisert." });
     }
     return profile;
   });
