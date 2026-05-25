@@ -621,4 +621,539 @@ describe("CareerCenter API", () => {
 
     await app.close();
   });
+
+  describe("graduate program listings", () => {
+    async function loadGraduateSettings(app: Awaited<ReturnType<typeof createTestApp>>) {
+      const settings = await app.inject({ method: "GET", url: "/api/graduate-program-settings" });
+      expect(settings.statusCode).toBe(200);
+      return settings.json() as {
+        statuses: Array<{ id: string }>;
+        locations: Array<{ id: string }>;
+        requirementTypes: Array<{ id: string }>;
+      };
+    }
+
+    it("rejects create with invalid statusId", async () => {
+      const app = await createTestApp();
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/graduate-programs",
+        payload: {
+          companyName: "Test AS",
+          title: "Graduate",
+          statusId: "missing-status",
+          locationIds: [],
+          trackTags: [],
+          requirements: []
+        }
+      });
+      expect(created.statusCode).toBe(422);
+      expect(created.json().message).toBe("Ugyldig status.");
+      await app.close();
+    });
+
+    it("rejects create with invalid companyId", async () => {
+      const app = await createTestApp();
+      const settings = await loadGraduateSettings(app);
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/graduate-programs",
+        payload: {
+          companyId: "missing-company",
+          companyName: "Test AS",
+          title: "Graduate",
+          statusId: settings.statuses[0].id,
+          locationIds: [],
+          trackTags: [],
+          requirements: []
+        }
+      });
+      expect(created.statusCode).toBe(422);
+      expect(created.json().message).toBe("Ugyldig bedrift.");
+      await app.close();
+    });
+
+    it("rejects create with empty required fields", async () => {
+      const app = await createTestApp();
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/graduate-programs",
+        payload: { companyName: "", title: "", statusId: "", locationIds: [], trackTags: [], requirements: [] }
+      });
+      expect(created.statusCode).toBe(400);
+      await app.close();
+    });
+
+    it("updates a graduate program", async () => {
+      const app = await createTestApp();
+      const settings = await loadGraduateSettings(app);
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/graduate-programs",
+        payload: {
+          companyName: "DNB",
+          title: "Tech Graduate",
+          statusId: settings.statuses[0].id,
+          locationIds: [settings.locations[0].id],
+          trackTags: ["INVESTMENT_TECH"],
+          requirements: []
+        }
+      });
+      expect(created.statusCode).toBe(200);
+
+      const updated = await app.inject({
+        method: "PUT",
+        url: `/api/graduate-programs/${created.json().id}`,
+        payload: {
+          companyName: "DNB",
+          title: "Tech Graduate (oppdatert)",
+          statusId: settings.statuses[0].id,
+          locationIds: [settings.locations[0].id],
+          trackTags: ["INVESTMENT_TECH"],
+          requirements: []
+        }
+      });
+      expect(updated.statusCode).toBe(200);
+      expect(updated.json().title).toBe("Tech Graduate (oppdatert)");
+      await app.close();
+    });
+
+    it("returns 404 when updating unknown graduate program", async () => {
+      const app = await createTestApp();
+      const settings = await loadGraduateSettings(app);
+      const updated = await app.inject({
+        method: "PUT",
+        url: "/api/graduate-programs/missing-id",
+        payload: {
+          companyName: "DNB",
+          title: "Ghost",
+          statusId: settings.statuses[0].id,
+          locationIds: [],
+          trackTags: [],
+          requirements: []
+        }
+      });
+      expect(updated.statusCode).toBe(404);
+      await app.close();
+    });
+
+    it("filters graduate programs by status, location, track and search", async () => {
+      const app = await createTestApp();
+      const settings = await loadGraduateSettings(app);
+      await app.inject({
+        method: "POST",
+        url: "/api/graduate-programs",
+        payload: {
+          companyName: "Equinor",
+          title: "Energy Graduate",
+          statusId: settings.statuses[0].id,
+          locationIds: [settings.locations[0].id],
+          trackTags: ["ENERGY_QUANT"],
+          requirements: []
+        }
+      });
+      await app.inject({
+        method: "POST",
+        url: "/api/graduate-programs",
+        payload: {
+          companyName: "NBIM",
+          title: "Investment Graduate",
+          statusId: settings.statuses[1]?.id ?? settings.statuses[0].id,
+          locationIds: settings.locations[1] ? [settings.locations[1].id] : [],
+          trackTags: ["INVESTMENT_TECH"],
+          requirements: []
+        }
+      });
+
+      const bySearch = await app.inject({ method: "GET", url: "/api/graduate-programs?q=Equinor" });
+      expect(bySearch.json()).toHaveLength(1);
+
+      const byStatus = await app.inject({
+        method: "GET",
+        url: `/api/graduate-programs?statusId=${settings.statuses[0].id}`
+      });
+      expect(byStatus.json().every((item: { statusId: string }) => item.statusId === settings.statuses[0].id)).toBe(true);
+
+      const byTrack = await app.inject({ method: "GET", url: "/api/graduate-programs?track=INVESTMENT_TECH" });
+      expect(byTrack.json()).toHaveLength(1);
+
+      await app.close();
+    });
+
+    it("manages graduate program settings catalog", async () => {
+      const app = await createTestApp();
+      const location = await app.inject({
+        method: "POST",
+        url: "/api/graduate-program-settings/locations",
+        payload: { label: "Tromsø" }
+      });
+      expect(location.statusCode).toBe(200);
+
+      const updatedLocation = await app.inject({
+        method: "PUT",
+        url: `/api/graduate-program-settings/locations/${location.json().id}`,
+        payload: { label: "Tromsø (oppdatert)" }
+      });
+      expect(updatedLocation.statusCode).toBe(200);
+      expect(updatedLocation.json().label).toBe("Tromsø (oppdatert)");
+
+      const requirementType = await app.inject({
+        method: "POST",
+        url: "/api/graduate-program-settings/requirement-types",
+        payload: { label: "Portefølje", description: "GitHub-lenke" }
+      });
+      expect(requirementType.statusCode).toBe(200);
+
+      const deletedRequirement = await app.inject({
+        method: "DELETE",
+        url: `/api/graduate-program-settings/requirement-types/${requirementType.json().id}`
+      });
+      expect(deletedRequirement.statusCode).toBe(204);
+
+      const deletedLocation = await app.inject({
+        method: "DELETE",
+        url: `/api/graduate-program-settings/locations/${location.json().id}`
+      });
+      expect(deletedLocation.statusCode).toBe(204);
+
+      await app.close();
+    });
+
+    it("blocks deleting graduate program location in use", async () => {
+      const app = await createTestApp();
+      const settings = await loadGraduateSettings(app);
+      const locationId = settings.locations[0].id;
+      await app.inject({
+        method: "POST",
+        url: "/api/graduate-programs",
+        payload: {
+          companyName: "Yara",
+          title: "Graduate",
+          statusId: settings.statuses[0].id,
+          locationIds: [locationId],
+          trackTags: [],
+          requirements: []
+        }
+      });
+
+      const deleted = await app.inject({
+        method: "DELETE",
+        url: `/api/graduate-program-settings/locations/${locationId}`
+      });
+      expect(deleted.statusCode).toBe(409);
+      await app.close();
+    });
+
+    it("blocks deleting graduate program requirement type in use", async () => {
+      const app = await createTestApp();
+      const settings = await loadGraduateSettings(app);
+      const requirementTypeId = settings.requirementTypes[0].id;
+      await app.inject({
+        method: "POST",
+        url: "/api/graduate-programs",
+        payload: {
+          companyName: "Orkla",
+          title: "Graduate",
+          statusId: settings.statuses[0].id,
+          locationIds: [],
+          trackTags: [],
+          requirements: [{ requirementTypeId, isRequired: true, isDone: false, notes: "" }]
+        }
+      });
+
+      const deleted = await app.inject({
+        method: "DELETE",
+        url: `/api/graduate-program-settings/requirement-types/${requirementTypeId}`
+      });
+      expect(deleted.statusCode).toBe(409);
+      await app.close();
+    });
+
+    it("fills default requirements when create payload has empty requirements", async () => {
+      const app = await createTestApp();
+      const settings = await loadGraduateSettings(app);
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/graduate-programs",
+        payload: {
+          companyName: "Telenor",
+          title: "Graduate",
+          statusId: settings.statuses[0].id,
+          locationIds: [],
+          trackTags: [],
+          requirements: []
+        }
+      });
+      expect(created.statusCode).toBe(200);
+      expect(created.json().requirements.length).toBe(settings.requirementTypes.length);
+      await app.close();
+    });
+  });
+
+  describe("internship listings", () => {
+    async function loadInternshipSettings(app: Awaited<ReturnType<typeof createTestApp>>) {
+      const settings = await app.inject({ method: "GET", url: "/api/internship-settings" });
+      expect(settings.statusCode).toBe(200);
+      return settings.json() as {
+        statuses: Array<{ id: string }>;
+        locations: Array<{ id: string }>;
+        requirementTypes: Array<{ id: string }>;
+      };
+    }
+
+    it("rejects create with invalid statusId", async () => {
+      const app = await createTestApp();
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/internships",
+        payload: {
+          companyName: "Test AS",
+          title: "Intern",
+          statusId: "missing-status",
+          locationIds: [],
+          trackTags: [],
+          requirements: []
+        }
+      });
+      expect(created.statusCode).toBe(422);
+      expect(created.json().message).toBe("Ugyldig status.");
+      await app.close();
+    });
+
+    it("rejects create with invalid companyId", async () => {
+      const app = await createTestApp();
+      const settings = await loadInternshipSettings(app);
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/internships",
+        payload: {
+          companyId: "missing-company",
+          companyName: "Test AS",
+          title: "Intern",
+          statusId: settings.statuses[0].id,
+          locationIds: [],
+          trackTags: [],
+          requirements: []
+        }
+      });
+      expect(created.statusCode).toBe(422);
+      expect(created.json().message).toBe("Ugyldig bedrift.");
+      await app.close();
+    });
+
+    it("rejects create with empty required fields", async () => {
+      const app = await createTestApp();
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/internships",
+        payload: { companyName: "", title: "", statusId: "", locationIds: [], trackTags: [], requirements: [] }
+      });
+      expect(created.statusCode).toBe(400);
+      await app.close();
+    });
+
+    it("updates an internship", async () => {
+      const app = await createTestApp();
+      const settings = await loadInternshipSettings(app);
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/internships",
+        payload: {
+          companyName: "Statkraft",
+          title: "Summer Intern",
+          statusId: settings.statuses[0].id,
+          locationIds: [settings.locations[0].id],
+          trackTags: ["ENERGY_QUANT"],
+          requirements: []
+        }
+      });
+      expect(created.statusCode).toBe(200);
+
+      const updated = await app.inject({
+        method: "PUT",
+        url: `/api/internships/${created.json().id}`,
+        payload: {
+          companyName: "Statkraft",
+          title: "Summer Intern (oppdatert)",
+          statusId: settings.statuses[0].id,
+          locationIds: [settings.locations[0].id],
+          trackTags: ["ENERGY_QUANT"],
+          requirements: []
+        }
+      });
+      expect(updated.statusCode).toBe(200);
+      expect(updated.json().title).toBe("Summer Intern (oppdatert)");
+      await app.close();
+    });
+
+    it("returns 404 when updating unknown internship", async () => {
+      const app = await createTestApp();
+      const settings = await loadInternshipSettings(app);
+      const updated = await app.inject({
+        method: "PUT",
+        url: "/api/internships/missing-id",
+        payload: {
+          companyName: "Statkraft",
+          title: "Ghost",
+          statusId: settings.statuses[0].id,
+          locationIds: [],
+          trackTags: [],
+          requirements: []
+        }
+      });
+      expect(updated.statusCode).toBe(404);
+      await app.close();
+    });
+
+    it("filters internships by status, location, track and search", async () => {
+      const app = await createTestApp();
+      const settings = await loadInternshipSettings(app);
+      await app.inject({
+        method: "POST",
+        url: "/api/internships",
+        payload: {
+          companyName: "Equinor",
+          title: "Energy Intern",
+          statusId: settings.statuses[0].id,
+          locationIds: [settings.locations[0].id],
+          trackTags: ["ENERGY_QUANT"],
+          requirements: []
+        }
+      });
+      await app.inject({
+        method: "POST",
+        url: "/api/internships",
+        payload: {
+          companyName: "NBIM",
+          title: "Investment Intern",
+          statusId: settings.statuses[1]?.id ?? settings.statuses[0].id,
+          locationIds: settings.locations[1] ? [settings.locations[1].id] : [],
+          trackTags: ["INVESTMENT_TECH"],
+          requirements: []
+        }
+      });
+
+      const bySearch = await app.inject({ method: "GET", url: "/api/internships?q=Equinor" });
+      expect(bySearch.json()).toHaveLength(1);
+
+      const byStatus = await app.inject({
+        method: "GET",
+        url: `/api/internships?statusId=${settings.statuses[0].id}`
+      });
+      expect(byStatus.json().every((item: { statusId: string }) => item.statusId === settings.statuses[0].id)).toBe(true);
+
+      const byTrack = await app.inject({ method: "GET", url: "/api/internships?track=INVESTMENT_TECH" });
+      expect(byTrack.json()).toHaveLength(1);
+
+      await app.close();
+    });
+
+    it("manages internship settings catalog", async () => {
+      const app = await createTestApp();
+      const location = await app.inject({
+        method: "POST",
+        url: "/api/internship-settings/locations",
+        payload: { label: "Kristiansand" }
+      });
+      expect(location.statusCode).toBe(200);
+
+      const updatedLocation = await app.inject({
+        method: "PUT",
+        url: `/api/internship-settings/locations/${location.json().id}`,
+        payload: { label: "Kristiansand (oppdatert)" }
+      });
+      expect(updatedLocation.statusCode).toBe(200);
+
+      const requirementType = await app.inject({
+        method: "POST",
+        url: "/api/internship-settings/requirement-types",
+        payload: { label: "Motivasjonsbrev", description: "Kort tekst" }
+      });
+      expect(requirementType.statusCode).toBe(200);
+
+      const deletedRequirement = await app.inject({
+        method: "DELETE",
+        url: `/api/internship-settings/requirement-types/${requirementType.json().id}`
+      });
+      expect(deletedRequirement.statusCode).toBe(204);
+
+      const deletedLocation = await app.inject({
+        method: "DELETE",
+        url: `/api/internship-settings/locations/${location.json().id}`
+      });
+      expect(deletedLocation.statusCode).toBe(204);
+
+      await app.close();
+    });
+
+    it("blocks deleting internship location in use", async () => {
+      const app = await createTestApp();
+      const settings = await loadInternshipSettings(app);
+      const locationId = settings.locations[0].id;
+      await app.inject({
+        method: "POST",
+        url: "/api/internships",
+        payload: {
+          companyName: "Yara",
+          title: "Intern",
+          statusId: settings.statuses[0].id,
+          locationIds: [locationId],
+          trackTags: [],
+          requirements: []
+        }
+      });
+
+      const deleted = await app.inject({
+        method: "DELETE",
+        url: `/api/internship-settings/locations/${locationId}`
+      });
+      expect(deleted.statusCode).toBe(409);
+      await app.close();
+    });
+
+    it("blocks deleting internship requirement type in use", async () => {
+      const app = await createTestApp();
+      const settings = await loadInternshipSettings(app);
+      const requirementTypeId = settings.requirementTypes[0].id;
+      await app.inject({
+        method: "POST",
+        url: "/api/internships",
+        payload: {
+          companyName: "Orkla",
+          title: "Intern",
+          statusId: settings.statuses[0].id,
+          locationIds: [],
+          trackTags: [],
+          requirements: [{ requirementTypeId, isRequired: true, isDone: false, notes: "" }]
+        }
+      });
+
+      const deleted = await app.inject({
+        method: "DELETE",
+        url: `/api/internship-settings/requirement-types/${requirementTypeId}`
+      });
+      expect(deleted.statusCode).toBe(409);
+      await app.close();
+    });
+
+    it("fills default requirements when create payload has empty requirements", async () => {
+      const app = await createTestApp();
+      const settings = await loadInternshipSettings(app);
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/internships",
+        payload: {
+          companyName: "Telenor",
+          title: "Intern",
+          statusId: settings.statuses[0].id,
+          locationIds: [],
+          trackTags: [],
+          requirements: []
+        }
+      });
+      expect(created.statusCode).toBe(200);
+      expect(created.json().requirements.length).toBe(settings.requirementTypes.length);
+      await app.close();
+    });
+  });
 });
