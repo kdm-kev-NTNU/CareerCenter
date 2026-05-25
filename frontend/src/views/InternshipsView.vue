@@ -384,7 +384,7 @@ function formatDeadline(value?: string) {
       </form>
       <template #footer>
         <button type="button" class="ghost" @click="closeModal">Avbryt</button>
-        <button type="button" class="primary" @click="submitInternship">
+        <button type="button" class="primary" :disabled="internshipsStore.isSubmitting" @click="submitInternship">
           {{ internshipsStore.isEditing ? "Lagre endringer" : "Legg til" }}
         </button>
       </template>
