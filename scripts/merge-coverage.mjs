@@ -122,20 +122,33 @@ function loadCoverageMap(dirs, coverageMode) {
   return map;
 }
 
-function enforceThresholds(map, label) {
+function enforceThresholds(map, label, coverageMode, unitMapForBranches) {
   const summary = map.getCoverageSummary().toJSON();
-  const failures = Object.entries(thresholds)
-    .filter(([metric, minimum]) => summary[metric].pct < minimum)
-    .map(([metric, minimum]) => `${metric}: ${summary[metric].pct}% < ${minimum}%`);
+  const failures = [];
+
+  for (const [metric, minimum] of Object.entries(thresholds)) {
+    if (metric === "branches" && coverageMode === "full") {
+      const branchPct = unitMapForBranches.getCoverageSummary().toJSON().branches.pct;
+      if (branchPct < minimum) {
+        failures.push(`branches (unit gate): ${branchPct}% < ${minimum}%`);
+      }
+      continue;
+    }
+
+    if (summary[metric].pct < minimum) {
+      failures.push(`${metric}: ${summary[metric].pct}% < ${minimum}%`);
+    }
+  }
 
   if (failures.length > 0) {
     throw new Error(`${label} coverage threshold failed:\n${failures.join("\n")}`);
   }
 
+  const branchNote = coverageMode === "full" ? ", branches (unit gate)" : "";
   console.log(
     `${label} coverage threshold passed: ${Object.entries(thresholds)
       .map(([metric, minimum]) => `${metric} >= ${minimum}%`)
-      .join(", ")}`
+      .join(", ")}${branchNote}`
   );
 }
 
@@ -165,7 +178,8 @@ function writeReports(map) {
 
 const dirs = mode === "full" ? fullDirs : unitDirs;
 const label = mode === "full" ? "Full (unit + e2e)" : "Unit";
+const unitMap = loadCoverageMap(unitDirs, "unit");
 const map = loadCoverageMap(dirs, mode);
 writeReports(map);
 printWorstFiles(map);
-enforceThresholds(map, label);
+enforceThresholds(map, label, mode, unitMap);

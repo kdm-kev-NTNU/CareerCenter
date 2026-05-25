@@ -87,6 +87,48 @@ describe("CareerCenter API", () => {
     await app.close();
   });
 
+  it("updates and returns 404 for unknown competitions", async () => {
+    const app = await createTestApp();
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/competitions",
+      payload: {
+        title: "Junction",
+        type: "hackathon",
+        scope: "NORDICS",
+        format: "hybrid",
+        startDate: "2026-11-14",
+        endDate: "2026-11-16",
+        registrationDeadline: "2026-10-01",
+        location: "Helsinki",
+        organizer: "Junction",
+        url: "https://junction.com",
+        status: "considering",
+        notes: "Case track",
+        sortOrder: 0
+      }
+    });
+    expect(created.statusCode).toBe(200);
+
+    const updated = await app.inject({
+      method: "PUT",
+      url: `/api/competitions/${created.json().id}`,
+      payload: { ...created.json(), title: "Junction (oppdatert)" }
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json().title).toBe("Junction (oppdatert)");
+
+    const missing = await app.inject({
+      method: "PUT",
+      url: "/api/competitions/missing",
+      payload: created.json()
+    });
+    expect(missing.statusCode).toBe(404);
+
+    await app.close();
+  });
+
   it("creates, lists and deletes competitions for the single app user", async () => {
     const app = await createTestApp();
 

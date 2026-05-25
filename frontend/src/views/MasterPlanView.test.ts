@@ -208,13 +208,13 @@ describe("MasterPlanView", () => {
           credits: 7.5,
           status: "confirmed",
           notes: "",
-          trackTags: ["ENERGY_QUANT", "FINANCE_QUANT"],
+          trackTags: ["ENERGY_QUANT", "AI_CONSULTING"],
           sortOrder: 0
         }
       ]);
 
       const t1 = careerMapStore.trackName("ENERGY_QUANT");
-      const t2 = careerMapStore.trackName("FINANCE_QUANT");
+      const t2 = careerMapStore.trackName("AI_CONSULTING");
       expect(wrapper.text()).toContain(`${t1}, ${t2}`);
     });
 

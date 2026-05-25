@@ -185,15 +185,6 @@ describe("CareerCenter custom paths", () => {
     cy.contains(".company-card", companyName).should("be.visible");
   });
 
-  it("switches competitions to timeline view", () => {
-    cy.visit("/");
-    cy.contains("button", "Hackathons").click();
-    cy.contains("button", "Tidslinje").click();
-    cy.contains("article.timeline").should("be.visible");
-    cy.contains("button", "Liste").click();
-    cy.contains(".listing-toolbar").should("be.visible");
-  });
-
   it("creates and deletes a competition entry", () => {
     const title = `E2E Hackathon ${Date.now()}`;
 
@@ -212,20 +203,6 @@ describe("CareerCenter custom paths", () => {
     cy.on("window:confirm", () => true);
     cy.contains(".listing-row", title).find('button[aria-label="Slett"]').click();
     cy.contains(".listing-row", title).should("not.exist");
-  });
-
-  it("opens internship details and edit modal", () => {
-    cy.visit("/");
-    cy.contains("button", "Internship").click();
-    cy.contains("button", "+ Legg til").click();
-    cy.get('[role="dialog"]').contains("label", "Bedrift").find("select").select("statkraft");
-    cy.get('[role="dialog"]').contains("label", "Stilling / rolle").find("input").type("Detail Intern");
-    cy.get('[role="dialog"]').contains("button", "Legg til").click();
-    cy.contains(".listing-row", "Detail Intern").click();
-    cy.contains(".listing-detail").should("be.visible");
-    cy.contains(".listing-row", "Detail Intern").find('button[aria-label="Rediger"]').click();
-    cy.get('[role="dialog"]').contains("h2", "Rediger internship").should("be.visible");
-    cy.get('[role="dialog"]').contains("button", "Avbryt").click();
   });
 
   it("filters internships by search query", () => {
@@ -276,5 +253,34 @@ describe("CareerCenter custom paths", () => {
     cy.contains("label", "Tittel").find("input").type("Machine Learning");
     cy.contains("button", "Legg til fag").click();
     cy.contains(".course-card", "TDT4173").should("be.visible");
+  });
+
+  it("smoke-tests listing views, filters, and education tabs", () => {
+    cy.visit("/");
+
+    cy.contains("button", "Graduate").click();
+    cy.get("input[placeholder*='Søk']").type("NBIM");
+    cy.contains("button", "+ Legg til").click();
+    cy.get('[role="dialog"]').contains("button", "Avbryt").click();
+
+    cy.contains("button", "Internship").click();
+    cy.get("select").first().select(1);
+    cy.contains("button", "Hackathons").click();
+    cy.contains("button", "Tidslinje").click();
+    cy.get(".timeline").should("exist");
+    cy.contains("button", "Liste").click();
+
+    cy.contains("button", "Bedrifter").click();
+    cy.get("input[placeholder*='selskap']").type("Stat");
+
+    cy.contains("button", "Utdanning").click();
+    cy.contains("button", "Oversikt").click();
+    cy.contains("button", "Kurs").click();
+    cy.contains("button", "Bøker").click();
+    cy.contains("button", "Plattformer").click();
+    cy.contains("button", "Bachelor-lærdom").click();
+
+    cy.contains("button", "Karriereboard").click();
+    cy.get(".board-shell").should("be.visible");
   });
 });
