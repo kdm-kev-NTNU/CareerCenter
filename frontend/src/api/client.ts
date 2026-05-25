@@ -8,7 +8,8 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers,
-    credentials: "include"
+    credentials: "include",
+    signal: options.signal ?? AbortSignal.timeout(15_000)
   });
   if (!response.ok) {
     let message = await response.text();

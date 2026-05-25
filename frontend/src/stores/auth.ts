@@ -15,7 +15,10 @@ export const useAuthStore = defineStore("auth", () => {
   }
 
   async function fetchMe() {
-    if (user.value !== null) return;
+    if (user.value !== null) {
+      loading.value = false;
+      return;
+    }
 
     loading.value = true;
     clearError();
