@@ -33,7 +33,7 @@ class MockDataTransfer implements DataTransfer {
   setDragImage(): void {}
 }
 
-// @ts-expect-error - Add to global for tests
+// Add to global for tests
 global.DataTransfer = MockDataTransfer;
 
 // Define DragEvent on global scope before tests

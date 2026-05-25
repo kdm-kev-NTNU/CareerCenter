@@ -4,6 +4,9 @@ export default defineConfig({
   test: {
     environment: "node",
     globals: true,
+    env: {
+      JWT_SECRET: "test-jwt-secret-for-ci-only"
+    },
     coverage: {
       provider: "v8",
       reporter: ["json"],
