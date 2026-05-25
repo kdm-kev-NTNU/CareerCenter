@@ -18,8 +18,13 @@ onMounted(() => {
     <Sidebar />
     <section class="content">
       <Topbar />
-      <ErrorBanner />
-      <RouterView />
+      <p v-if="appStore.isInitializing" class="app-loading" role="status" aria-live="polite">
+        Laster data...
+      </p>
+      <template v-else>
+        <ErrorBanner />
+        <RouterView />
+      </template>
     </section>
   </div>
 </template>

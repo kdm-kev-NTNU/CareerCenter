@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { CareerTrack, Internship } from "@careercenter/shared";
-import { computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
+import { debounce } from "../utils/debounce.js";
 import AppModal from "../components/listing/AppModal.vue";
 import CatalogSettingsPanel from "../components/listing/CatalogSettingsPanel.vue";
 import ListingRowActions from "../components/listing/ListingRowActions.vue";
@@ -22,6 +23,7 @@ const appStore = useAppStore();
 const { toggleExpand, isExpanded } = useListingExpand();
 
 const modalOpen = ref(false);
+const modalError = ref("");
 const newStatusLabel = ref("");
 const newLocationLabel = ref("");
 const newRequirementLabel = ref("");
@@ -50,34 +52,44 @@ function requirementBadges(internship: Internship) {
 async function reloadList() {
   try {
     await internshipsStore.loadInternships();
-  } catch (caught) {
-    appStore.setError(caught instanceof Error ? caught.message : "Kunne ikke laste internship.");
+  } catch {
+    appStore.setError(internshipsStore.loadError || "Kunne ikke laste internship.");
   }
 }
 
+const debouncedReloadList = debounce(reloadList, 300);
+
+onMounted(() => {
+  void reloadList();
+});
+
 function openAddModal() {
+  modalError.value = "";
   internshipsStore.resetForm();
   internshipsStore.syncFormFromSettings();
   modalOpen.value = true;
 }
 
 function openEditModal(internship: Internship) {
+  modalError.value = "";
   internshipsStore.startEdit(internship);
   modalOpen.value = true;
 }
 
 function closeModal() {
   modalOpen.value = false;
+  modalError.value = "";
   internshipsStore.resetForm();
 }
 
 async function submitInternship() {
+  modalError.value = "";
   try {
     await internshipsStore.saveInternship(companyOptions.value);
     await reloadList();
     closeModal();
   } catch (caught) {
-    appStore.setError(caught instanceof Error ? caught.message : "Kunne ikke lagre internship.");
+    modalError.value = caught instanceof Error ? caught.message : "Kunne ikke lagre internship.";
   }
 }
 
@@ -154,7 +166,7 @@ function formatDeadline(value?: string) {
   <section class="stack">
     <ListingToolbar @add="openAddModal">
       <template #filters>
-        <input v-model="internshipsStore.search" placeholder="Søk bedrift, rolle..." @input="reloadList" />
+        <input v-model="internshipsStore.search" placeholder="Søk bedrift, rolle..." @input="debouncedReloadList" />
         <select v-model="internshipsStore.statusFilter" @change="reloadList">
           <option value="">Alle statuser</option>
           <option v-for="status in settingsStore.statuses" :key="status.id" :value="status.id">{{ status.label }}</option>
@@ -167,7 +179,9 @@ function formatDeadline(value?: string) {
     </ListingToolbar>
 
     <ListingTable :columns="['Bedrift / rolle', 'Status', 'Sted', 'Frist', 'Krav', '']">
-      <p v-if="internshipsStore.internships.length === 0" class="listing-empty">Ingen internship-muligheter ennå.</p>
+      <p v-if="internshipsStore.isLoading" class="listing-loading">Laster internship-muligheter...</p>
+      <p v-else-if="internshipsStore.loadError" class="listing-error">{{ internshipsStore.loadError }}</p>
+      <p v-else-if="internshipsStore.internships.length === 0" class="listing-empty">Ingen internship-muligheter ennå.</p>
       <div v-for="internship in internshipsStore.internships" :key="internship.id" class="listing-entry">
         <div
           class="listing-row"
@@ -287,6 +301,7 @@ function formatDeadline(value?: string) {
 
     <AppModal :open="modalOpen" :title="modalTitle" @close="closeModal">
       <form class="form-grid" @submit.prevent="submitInternship">
+        <p v-if="modalError" class="form-error">{{ modalError }}</p>
         <label>
           Bedrift
           <select v-model="internshipsStore.companyPicker" @change="internshipsStore.applyCompanySelection(companyOptions)">

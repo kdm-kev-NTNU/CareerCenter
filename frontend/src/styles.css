@@ -514,6 +514,22 @@ nav button.active, nav button:hover { background: #1f2937; color: #ffffff; }
 
 .listing-view-tabs { width: fit-content; }
 .listing-empty { padding: 24px 16px; color: var(--muted); margin: 0; text-align: center; }
+.listing-loading { padding: 24px 16px; color: var(--muted); margin: 0; text-align: center; }
+.listing-error { padding: 24px 16px; color: #b42318; margin: 0; text-align: center; }
+.error-banner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.error-banner__message { margin: 0; flex: 1; }
+.error-banner__dismiss { flex-shrink: 0; }
+.app-loading {
+  padding: 32px 16px;
+  color: var(--muted);
+  text-align: center;
+  margin: 0;
+}
 
 .form-error {
   color: var(--danger, #c0392b);

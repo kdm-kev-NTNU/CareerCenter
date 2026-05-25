@@ -35,6 +35,8 @@ export const useInternshipsStore = defineStore("internships", () => {
   const trackFilter = ref("");
   const editingId = ref<string | null>(null);
   const isSubmitting = ref(false);
+  const isLoading = ref(false);
+  const loadError = ref("");
   const companyPicker = ref("");
   const form = ref<InternshipPayload>({
     companyId: null,
@@ -63,12 +65,21 @@ export const useInternshipsStore = defineStore("internships", () => {
   }
 
   async function loadInternships() {
-    internships.value = await api.internships({
-      q: search.value || undefined,
-      statusId: statusFilter.value || undefined,
-      locationId: locationFilter.value || undefined,
-      track: (trackFilter.value || undefined) as CareerTrack | undefined
-    });
+    isLoading.value = true;
+    loadError.value = "";
+    try {
+      internships.value = await api.internships({
+        q: search.value || undefined,
+        statusId: statusFilter.value || undefined,
+        locationId: locationFilter.value || undefined,
+        track: (trackFilter.value || undefined) as CareerTrack | undefined
+      });
+    } catch (caught) {
+      loadError.value = caught instanceof Error ? caught.message : "Kunne ikke laste internship.";
+      throw caught;
+    } finally {
+      isLoading.value = false;
+    }
   }
 
   function resetForm() {
@@ -182,6 +193,8 @@ export const useInternshipsStore = defineStore("internships", () => {
     trackFilter,
     editingId,
     isSubmitting,
+    isLoading,
+    loadError,
     companyPicker,
     form,
     isEditing,

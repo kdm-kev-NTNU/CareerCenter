@@ -35,6 +35,8 @@ export const useGraduateProgramsStore = defineStore("graduatePrograms", () => {
   const trackFilter = ref("");
   const editingId = ref<string | null>(null);
   const isSubmitting = ref(false);
+  const isLoading = ref(false);
+  const loadError = ref("");
   const companyPicker = ref("");
   const form = ref<GraduateProgramPayload>({
     companyId: null,
@@ -63,12 +65,22 @@ export const useGraduateProgramsStore = defineStore("graduatePrograms", () => {
   }
 
   async function loadGraduatePrograms() {
-    graduatePrograms.value = await api.graduatePrograms({
-      q: search.value || undefined,
-      statusId: statusFilter.value || undefined,
-      locationId: locationFilter.value || undefined,
-      track: (trackFilter.value || undefined) as CareerTrack | undefined
-    });
+    isLoading.value = true;
+    loadError.value = "";
+    try {
+      graduatePrograms.value = await api.graduatePrograms({
+        q: search.value || undefined,
+        statusId: statusFilter.value || undefined,
+        locationId: locationFilter.value || undefined,
+        track: (trackFilter.value || undefined) as CareerTrack | undefined
+      });
+    } catch (caught) {
+      loadError.value =
+        caught instanceof Error ? caught.message : "Kunne ikke laste graduate-programmer.";
+      throw caught;
+    } finally {
+      isLoading.value = false;
+    }
   }
 
   function resetForm() {
@@ -182,6 +194,8 @@ export const useGraduateProgramsStore = defineStore("graduatePrograms", () => {
     trackFilter,
     editingId,
     isSubmitting,
+    isLoading,
+    loadError,
     companyPicker,
     form,
     isEditing,
