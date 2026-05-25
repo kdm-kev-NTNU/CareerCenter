@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { CareerTrack, GraduateProgram } from "@careercenter/shared";
-import { computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
+import { debounce } from "../utils/debounce.js";
 import AppModal from "../components/listing/AppModal.vue";
 import CatalogSettingsPanel from "../components/listing/CatalogSettingsPanel.vue";
 import ListingRowActions from "../components/listing/ListingRowActions.vue";
@@ -22,6 +23,7 @@ const appStore = useAppStore();
 const { toggleExpand, isExpanded } = useListingExpand();
 
 const modalOpen = ref(false);
+const modalError = ref("");
 const newStatusLabel = ref("");
 const newLocationLabel = ref("");
 const newRequirementLabel = ref("");
@@ -50,34 +52,44 @@ function requirementBadges(program: GraduateProgram) {
 async function reloadList() {
   try {
     await programsStore.loadGraduatePrograms();
-  } catch (caught) {
-    appStore.setError(caught instanceof Error ? caught.message : "Kunne ikke laste graduate-programmer.");
+  } catch {
+    appStore.setError(programsStore.loadError || "Kunne ikke laste graduate-programmer.");
   }
 }
 
+const debouncedReloadList = debounce(reloadList, 300);
+
+onMounted(() => {
+  void reloadList();
+});
+
 function openAddModal() {
+  modalError.value = "";
   programsStore.resetForm();
   programsStore.syncFormFromSettings();
   modalOpen.value = true;
 }
 
 function openEditModal(program: GraduateProgram) {
+  modalError.value = "";
   programsStore.startEdit(program);
   modalOpen.value = true;
 }
 
 function closeModal() {
   modalOpen.value = false;
+  modalError.value = "";
   programsStore.resetForm();
 }
 
 async function submitProgram() {
+  modalError.value = "";
   try {
     await programsStore.saveGraduateProgram(companyOptions.value);
     await reloadList();
     closeModal();
   } catch (caught) {
-    appStore.setError(caught instanceof Error ? caught.message : "Kunne ikke lagre graduate-program.");
+    modalError.value = caught instanceof Error ? caught.message : "Kunne ikke lagre graduate-program.";
   }
 }
 
@@ -154,7 +166,7 @@ function formatDeadline(value?: string) {
   <section class="stack">
     <ListingToolbar @add="openAddModal">
       <template #filters>
-        <input v-model="programsStore.search" placeholder="Søk bedrift, program..." @input="reloadList" />
+        <input v-model="programsStore.search" placeholder="Søk bedrift, program..." @input="debouncedReloadList" />
         <select v-model="programsStore.statusFilter" @change="reloadList">
           <option value="">Alle statuser</option>
           <option v-for="status in settingsStore.statuses" :key="status.id" :value="status.id">{{ status.label }}</option>
@@ -167,7 +179,9 @@ function formatDeadline(value?: string) {
     </ListingToolbar>
 
     <ListingTable :columns="['Bedrift / program', 'Status', 'Sted', 'Frist', 'Krav', '']">
-      <p v-if="programsStore.graduatePrograms.length === 0" class="listing-empty">Ingen graduate-programmer ennå.</p>
+      <p v-if="programsStore.isLoading" class="listing-loading">Laster graduate-programmer...</p>
+      <p v-else-if="programsStore.loadError" class="listing-error">{{ programsStore.loadError }}</p>
+      <p v-else-if="programsStore.graduatePrograms.length === 0" class="listing-empty">Ingen graduate-programmer ennå.</p>
       <div v-for="program in programsStore.graduatePrograms" :key="program.id" class="listing-entry">
         <div
           class="listing-row"
@@ -293,6 +307,7 @@ function formatDeadline(value?: string) {
       @close="closeModal"
     >
       <form class="form-grid" @submit.prevent="submitProgram">
+        <p v-if="modalError" class="form-error">{{ modalError }}</p>
         <label>
           Bedrift
           <select v-model="programsStore.companyPicker" @change="programsStore.applyCompanySelection(companyOptions)">
@@ -390,7 +405,7 @@ function formatDeadline(value?: string) {
       </form>
       <template #footer>
         <button type="button" class="ghost" @click="closeModal">Avbryt</button>
-        <button type="button" class="primary" @click="submitProgram">
+        <button type="button" class="primary" :disabled="programsStore.isSubmitting" @click="submitProgram">
           {{ programsStore.isEditing ? "Lagre endringer" : "Legg til" }}
         </button>
       </template>

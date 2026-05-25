@@ -13,11 +13,16 @@ import type {
   GraduateProgramQuery,
   GraduateProgramRequirementItemInput
 } from "./repository.js";
+import { validateListingInput } from "./listingValidation.js";
 import { CatalogInUseError } from "./repository.js";
+
+export type MemoryGraduateProgramRepositoryDeps = {
+  companyExists?: (companyId: string) => boolean;
+};
 
 type StoredGraduateProgram = GraduateProgram & { userId: string };
 
-export function createMemoryGraduateProgramRepository() {
+export function createMemoryGraduateProgramRepository(deps: MemoryGraduateProgramRepositoryDeps = {}) {
   let catalogSeeded = false;
   const statuses = new Map<string, GraduateProgramStatusOption & { userId: string }>();
   const locations = new Map<string, GraduateProgramLocationOption & { userId: string }>();
@@ -191,24 +196,34 @@ export function createMemoryGraduateProgramRepository() {
       return Promise.resolve(rows.map((row) => hydrateGraduateProgram(row, settings)));
     },
 
-    createGraduateProgram(userId: string, input: GraduateProgramInput) {
+    async createGraduateProgram(userId: string, input: GraduateProgramInput) {
       const settings = getSettings(userId);
-      const entry = toGraduateProgram(nanoid(), userId, input, settings);
+      const validated = await validateListingInput(input, settings, {
+        companyExists: deps.companyExists
+          ? async (companyId) => deps.companyExists!(companyId)
+          : undefined
+      });
+      const entry = toGraduateProgram(nanoid(), userId, validated, settings);
       graduatePrograms.set(entry.id, entry);
-      return Promise.resolve(hydrateGraduateProgram(entry, settings));
+      return hydrateGraduateProgram(entry, settings);
     },
 
-    updateGraduateProgram(userId: string, id: string, input: GraduateProgramInput) {
+    async updateGraduateProgram(userId: string, id: string, input: GraduateProgramInput) {
       const existing = graduatePrograms.get(id);
-      if (!existing || existing.userId !== userId) return Promise.resolve(null);
+      if (!existing || existing.userId !== userId) return null;
       const settings = getSettings(userId);
+      const validated = await validateListingInput(input, settings, {
+        companyExists: deps.companyExists
+          ? async (companyId) => deps.companyExists!(companyId)
+          : undefined
+      });
       const entry: StoredGraduateProgram = {
-        ...toGraduateProgram(id, userId, input, settings),
+        ...toGraduateProgram(id, userId, validated, settings),
         createdAt: existing.createdAt,
         updatedAt: new Date().toISOString()
       };
       graduatePrograms.set(id, entry);
-      return Promise.resolve(hydrateGraduateProgram(entry, settings));
+      return hydrateGraduateProgram(entry, settings);
     },
 
     deleteGraduateProgram(userId: string, id: string) {

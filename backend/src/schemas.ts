@@ -12,11 +12,22 @@ import { z } from "zod";
 const optionalDateField = z
   .union([z.string(), z.null()])
   .optional()
+  .refine(
+    (value) => {
+      if (value === undefined || value === null || value === "") return true;
+      const parsed = new Date(value);
+      return !Number.isNaN(parsed.getTime());
+    },
+    { message: "Ugyldig dato." }
+  )
   .transform((value) => {
     if (!value || value === "") return null;
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
+    return new Date(value);
   });
+
+const applicationUrlField = z
+  .union([z.string().url({ message: "Ugyldig søknads-URL." }), z.literal("")])
+  .default("");
 
 const optionalUrlField = z
   .union([z.string().url(), z.literal(""), z.null()])
@@ -241,7 +252,7 @@ export const internshipSchema = z.object({
   companyName: z.string().min(1),
   title: z.string().min(1),
   description: z.string().default(""),
-  applicationUrl: z.string().default(""),
+  applicationUrl: applicationUrlField,
   notes: z.string().default(""),
   deadline: optionalDateField,
   statusId: z.string().min(1),
@@ -255,7 +266,7 @@ export const graduateProgramSchema = z.object({
   companyName: z.string().min(1),
   title: z.string().min(1),
   description: z.string().default(""),
-  applicationUrl: z.string().default(""),
+  applicationUrl: applicationUrlField,
   notes: z.string().default(""),
   deadline: optionalDateField,
   statusId: z.string().min(1),

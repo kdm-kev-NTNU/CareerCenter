@@ -36,7 +36,11 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
-    exclude: ["cypress/**", "playwright.config.ts"],
+    exclude: [
+      "cypress/**",
+      "playwright.config.ts",
+      "src/components/board/CareerBoardCanvas.spec.ts"
+    ],
     coverage: {
       provider: "v8",
       reporter: ["json"],

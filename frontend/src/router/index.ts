@@ -1,5 +1,6 @@
 import { getActivePinia } from "pinia";
 import { createRouter, createWebHistory } from "vue-router";
+import { useAppStore } from "../stores/app.js";
 import EducationLayout from "../components/education/EducationLayout.vue";
 import AppShell from "../components/layout/AppShell.vue";
 import CareerBoardView from "../views/CareerBoardView.vue";
@@ -141,6 +142,12 @@ router.beforeEach(async (to) => {
   }
 
   return true;
+});
+
+router.afterEach(() => {
+  const pinia = getActivePinia();
+  if (!pinia) return;
+  useAppStore(pinia).clearError();
 });
 
 export default router;

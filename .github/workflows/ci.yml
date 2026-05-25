@@ -1,3 +1,6 @@
+# CI: quality + unit coverage gate + e2e coverage gate + docker build
+# Local parity: npm run test:ci
+
 name: CI
 
 on:
@@ -7,8 +10,10 @@ on:
     branches: [main]
 
 jobs:
-  verify:
+  quality:
+    name: quality
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -16,13 +21,71 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run db:generate
-      - run: npm run build --workspace @careercenter/shared
-      - run: npm run typecheck
-      - run: npm run lint
-      - run: npm run test:coverage
+      - run: npm run db:generate --workspace=@careercenter/api
+      - run: npm run build --workspace=@careercenter/shared
+      - run: npm run typecheck --workspaces
+      - run: npm run lint --workspaces
+
+  unit:
+    name: unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate --workspace=@careercenter/api
+      - run: npm run build --workspace=@careercenter/shared
+      - run: npm run test:coverage --workspaces
+      - run: npm run coverage:merge:unit
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-unit
+          path: coverage/
+          retention-days: 1
+
+  e2e:
+    name: e2e
+    needs: unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate --workspace=@careercenter/api
+      - run: npm run build --workspace=@careercenter/shared
       - run: npx cypress install
+      - uses: actions/download-artifact@v4
+        with:
+          name: coverage-unit
+          path: coverage/
       - run: npm run test:e2e
-      - run: npm run coverage:merge
+      - run: npm run coverage:merge:full
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-full
+          path: |
+            coverage/
+            !coverage/**/coverage-unit-final.json
+          retention-days: 7
+
+  docker:
+    name: docker
+    needs: [quality, e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
       - run: docker build -f frontend/Dockerfile -t careercenter-frontend .
       - run: docker build -f backend/Dockerfile -t careercenter-backend .

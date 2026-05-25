@@ -6,6 +6,7 @@ import App from "./App.vue";
 import { authApi } from "./api/auth.js";
 import { api } from "./api/index.js";
 import router from "./router/index.js";
+import { useAppStore } from "./stores/app.js";
 import { useAuthStore } from "./stores/auth.js";
 import { useCareerMapStore } from "./stores/careerMap.js";
 
@@ -44,6 +45,8 @@ vi.mock("./api/index.js", () => ({
     competitions: vi.fn(),
     settings: vi.fn(),
     internships: vi.fn(),
+    graduateProgramSettings: vi.fn(),
+    graduatePrograms: vi.fn(),
     selfStudyCourses: vi.fn(),
     educationBooks: vi.fn(),
     learningPlatforms: vi.fn(),
@@ -87,8 +90,10 @@ function mockInitialData(
   mockedApi.courses.mockResolvedValue([]);
   mockedApi.paths.mockResolvedValue(paths);
   mockedApi.competitions.mockResolvedValue([]);
-  mockedApi.settings.mockResolvedValue({ statuses: [], locations: [], requirementTypes: [] });
-  mockedApi.internships.mockResolvedValue([]);
+    mockedApi.settings.mockResolvedValue({ statuses: [], locations: [], requirementTypes: [] });
+    mockedApi.internships.mockResolvedValue([]);
+    mockedApi.graduateProgramSettings.mockResolvedValue({ statuses: [], locations: [], requirementTypes: [] });
+    mockedApi.graduatePrograms.mockResolvedValue([]);
   mockedApi.selfStudyCourses.mockResolvedValue([]);
   mockedApi.educationBooks.mockResolvedValue([]);
   mockedApi.learningPlatforms.mockResolvedValue([]);
@@ -114,6 +119,11 @@ async function mountApp(route = "/") {
   });
   await router.push(route);
   await router.isReady();
+  await flushPromises();
+  const appStore = useAppStore(pinia);
+  if (!appStore.initialized) {
+    await appStore.initialize();
+  }
   await flushPromises();
   return wrapper;
 }
@@ -226,6 +236,27 @@ describe("App", () => {
     expect(wrapper.find(".board-canvas-stub").exists()).toBe(true);
     expect(wrapper.text()).toContain("Karrierekart");
     expect(mockedApi.boards).toHaveBeenCalled();
+  });
+
+  it("navigates to primary feature routes from the shell", async () => {
+    mockInitialData();
+    await mountApp();
+    const routes = [
+      ["/master", "master"],
+      ["/companies", "companies"],
+      ["/internships", "internships"],
+      ["/graduate", "graduate"],
+      ["/competitions", "competitions"],
+      ["/education/kurs", "education-courses"],
+      ["/education/boker", "education-books"],
+      ["/education/plattformer", "education-platforms"],
+      ["/education/bachelor", "education-bachelor"]
+    ] as const;
+
+    for (const [route, name] of routes) {
+      await goTo(route);
+      expect(router.currentRoute.value.name).toBe(name);
+    }
   });
 
   it("allows editing and resetting a career track label on the board page", async () => {

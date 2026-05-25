@@ -1,14 +1,7 @@
 import { careerTracks } from "@careercenter/shared";
 import type { FastifyInstance } from "fastify";
 import { companySchema } from "../schemas.js";
-import { CompanyDuplicateError, type Repository } from "../repository.js";
-
-async function handleCompanyError(error: unknown, reply: { code: (status: number) => { send: (body: unknown) => unknown } }) {
-  if (error instanceof CompanyDuplicateError) {
-    return reply.code(409).send({ message: error.message });
-  }
-  throw error;
-}
+import type { Repository } from "../repository.js";
 
 export async function companiesRoutes(app: FastifyInstance, repository: Repository) {
   app.get("/api/companies", async (request) => {
@@ -23,11 +16,7 @@ export async function companiesRoutes(app: FastifyInstance, repository: Reposito
     });
   });
 
-  app.post("/api/companies", async (request, reply) => {
-    try {
-      return await repository.createCompany(companySchema.parse(request.body));
-    } catch (error) {
-      return handleCompanyError(error, reply);
-    }
+  app.post("/api/companies", async (request) => {
+    return repository.createCompany(companySchema.parse(request.body));
   });
 }

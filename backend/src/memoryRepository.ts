@@ -49,8 +49,9 @@ type StoredTrack = CareerTrackSetting & { defaultLabel: string };
 type StoredNode = CareerMapNode & { defaultTitle: string; defaultItems: string[]; sortOrder: number };
 
 export class MemoryRepository implements Repository {
-  private readonly internshipRepo = createMemoryInternshipRepository();
-  private readonly graduateProgramRepo = createMemoryGraduateProgramRepository();
+  private companies = [...seededCompanies];
+  private readonly internshipRepo;
+  private readonly graduateProgramRepo;
   private users = new Map<string, AuthUserRecord>();
   private usersByName = new Map<string, string>();
   private courses = new Map<string, CoursePlan & { userId: string }>();
@@ -62,8 +63,13 @@ export class MemoryRepository implements Repository {
   private bachelorKnowledge = new Map<string, BachelorKnowledge & { userId: string }>();
   private bachelorFolders = new Map<string, BachelorFolder & { userId: string }>();
   private bachelorFiles = new Map<string, BachelorFile & { userId: string; storagePath: string }>();
-  private companies = [...seededCompanies];
   private tracks = new Map<string, StoredTrack>(careerTrackSeeds.map((track) => [track.id, { ...track, defaultLabel: track.label }]));
+
+  constructor() {
+    const companyExists = (companyId: string) => this.companies.some((company) => company.id === companyId);
+    this.internshipRepo = createMemoryInternshipRepository({ companyExists });
+    this.graduateProgramRepo = createMemoryGraduateProgramRepository({ companyExists });
+  }
   private mapNodes = new Map<string, StoredNode>(
     careerMapNodeSeeds.map((node) => [
       node.id,

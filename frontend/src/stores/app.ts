@@ -19,6 +19,7 @@ import { useBoardStore } from "./board.js";
 export const useAppStore = defineStore("app", () => {
   const error = ref("");
   const initialized = ref(false);
+  const isInitializing = ref(false);
 
   function setError(message: string) {
     error.value = message;
@@ -29,6 +30,7 @@ export const useAppStore = defineStore("app", () => {
   }
 
   async function initialize() {
+    isInitializing.value = true;
     localStorage.removeItem("careercenter-map-drafts");
     clearError();
     const careerMapStore = useCareerMapStore();
@@ -68,8 +70,10 @@ export const useAppStore = defineStore("app", () => {
       initialized.value = true;
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Kunne ikke laste appdata.");
+    } finally {
+      isInitializing.value = false;
     }
   }
 
-  return { error, initialized, setError, clearError, initialize };
+  return { error, initialized, isInitializing, setError, clearError, initialize };
 });

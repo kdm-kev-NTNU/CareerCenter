@@ -178,6 +178,13 @@ export class CatalogInUseError extends Error {
   }
 }
 
+export class InvalidReferenceError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidReferenceError";
+  }
+}
+
 export class CompanyDuplicateError extends Error {
   constructor(message = "En bedrift med dette navnet finnes allerede.") {
     super(message);

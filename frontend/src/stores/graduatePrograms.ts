@@ -34,6 +34,9 @@ export const useGraduateProgramsStore = defineStore("graduatePrograms", () => {
   const locationFilter = ref("");
   const trackFilter = ref("");
   const editingId = ref<string | null>(null);
+  const isSubmitting = ref(false);
+  const isLoading = ref(false);
+  const loadError = ref("");
   const companyPicker = ref("");
   const form = ref<GraduateProgramPayload>({
     companyId: null,
@@ -62,12 +65,22 @@ export const useGraduateProgramsStore = defineStore("graduatePrograms", () => {
   }
 
   async function loadGraduatePrograms() {
-    graduatePrograms.value = await api.graduatePrograms({
-      q: search.value || undefined,
-      statusId: statusFilter.value || undefined,
-      locationId: locationFilter.value || undefined,
-      track: (trackFilter.value || undefined) as CareerTrack | undefined
-    });
+    isLoading.value = true;
+    loadError.value = "";
+    try {
+      graduatePrograms.value = await api.graduatePrograms({
+        q: search.value || undefined,
+        statusId: statusFilter.value || undefined,
+        locationId: locationFilter.value || undefined,
+        track: (trackFilter.value || undefined) as CareerTrack | undefined
+      });
+    } catch (caught) {
+      loadError.value =
+        caught instanceof Error ? caught.message : "Kunne ikke laste graduate-programmer.";
+      throw caught;
+    } finally {
+      isLoading.value = false;
+    }
   }
 
   function resetForm() {
@@ -133,8 +146,11 @@ export const useGraduateProgramsStore = defineStore("graduatePrograms", () => {
   }
 
   async function saveGraduateProgram(companies: Array<{ id: string; name: string }>) {
+    if (isSubmitting.value) return;
     applyCompanySelection(companies);
-    if (!form.value.companyName.trim() || !form.value.title.trim() || !form.value.statusId) return;
+    if (!form.value.companyName.trim() || !form.value.title.trim() || !form.value.statusId) {
+      throw new Error("Bedriftsnavn, programnavn og status er obligatorisk.");
+    }
 
     const payload: GraduateProgramPayload = {
       ...form.value,
@@ -143,14 +159,19 @@ export const useGraduateProgramsStore = defineStore("graduatePrograms", () => {
       requirements: form.value.requirements.filter((item) => item.isRequired || item.isDone || item.notes)
     };
 
-    if (editingId.value) {
-      const updated = await api.updateGraduateProgram(editingId.value, payload);
-      graduatePrograms.value = graduatePrograms.value.map((item) => (item.id === updated.id ? updated : item));
-    } else {
-      const created = await api.createGraduateProgram(payload);
-      graduatePrograms.value = [created, ...graduatePrograms.value];
+    isSubmitting.value = true;
+    try {
+      if (editingId.value) {
+        const updated = await api.updateGraduateProgram(editingId.value, payload);
+        graduatePrograms.value = graduatePrograms.value.map((item) => (item.id === updated.id ? updated : item));
+      } else {
+        const created = await api.createGraduateProgram(payload);
+        graduatePrograms.value = [created, ...graduatePrograms.value];
+      }
+      resetForm();
+    } finally {
+      isSubmitting.value = false;
     }
-    resetForm();
   }
 
   async function removeGraduateProgram(id: string) {
@@ -172,6 +193,9 @@ export const useGraduateProgramsStore = defineStore("graduatePrograms", () => {
     locationFilter,
     trackFilter,
     editingId,
+    isSubmitting,
+    isLoading,
+    loadError,
     companyPicker,
     form,
     isEditing,

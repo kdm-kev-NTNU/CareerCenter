@@ -184,4 +184,103 @@ describe("CareerCenter custom paths", () => {
     cy.get("input[placeholder*='selskap']").clear().type(companyName);
     cy.contains(".company-card", companyName).should("be.visible");
   });
+
+  it("creates and deletes a competition entry", () => {
+    const title = `E2E Hackathon ${Date.now()}`;
+
+    cy.visit("/");
+    cy.contains("button", "Hackathons").click();
+    cy.contains("h1", "Hackathons & konkurranser").should("be.visible");
+
+    cy.contains("button", "+ Legg til").click();
+    cy.get('[role="dialog"]').contains("h2", "Legg til arrangement").should("be.visible");
+    cy.get('[role="dialog"]').contains("label", "Tittel").find("input").type(title);
+    cy.get('[role="dialog"]').contains("label", "Arrangør").find("input").type("E2E Org");
+    cy.get('[role="dialog"]').contains("button", "Legg til").click();
+
+    cy.contains(".listing-row", title).should("be.visible");
+
+    cy.on("window:confirm", () => true);
+    cy.contains(".listing-row", title).find('button[aria-label="Slett"]').click();
+    cy.contains(".listing-row", title).should("not.exist");
+  });
+
+  it("filters internships by search query", () => {
+    cy.visit("/internships");
+    cy.contains("button", "+ Legg til").click();
+    cy.get('[role="dialog"]').contains("label", "Bedrift").find("select").select("statkraft");
+    cy.get('[role="dialog"]').contains("label", "Stilling / rolle").find("input").type("Filter Intern");
+    cy.get('[role="dialog"]').contains("button", "Legg til").click();
+    cy.contains(".listing-row", "Filter Intern").should("be.visible");
+
+    cy.get("input[placeholder*='Søk']").type("Filter Intern");
+    cy.contains(".listing-row", "Filter Intern").should("be.visible");
+    cy.get("input[placeholder*='Søk']").clear().type("ingen-treff-xyz");
+    cy.contains(".listing-row", "Filter Intern").should("not.exist");
+  });
+
+  it("adds a bachelor folder under education", () => {
+    cy.visit("/");
+    cy.contains("button", "Utdanning").click();
+    cy.contains("button", "Bachelor-lærdom").click();
+    cy.contains("h2", "Mapper").should("be.visible");
+
+    cy.get('input[placeholder="Ny mappe"]').type("Algoritmer");
+    cy.get("form.folder-create").contains("button", "+").click();
+    cy.contains(".folder-tree", "Algoritmer").should("be.visible");
+  });
+
+  it("adds a book and platform under education", () => {
+    cy.visit("/");
+    cy.contains("button", "Utdanning").click();
+    cy.contains("button", "Bøker").click();
+    cy.contains("h2", "Bøker").should("be.visible");
+    cy.contains("label", "Tittel").find("input").type("Clean Code");
+    cy.contains("button", "Legg til bok").click();
+    cy.contains(".course-card", "Clean Code").should("be.visible");
+
+    cy.contains("button", "Plattformer").click();
+    cy.contains("h2", "Online learning platforms").should("be.visible");
+    cy.contains("label", "Navn").find("input").type("Udemy");
+    cy.contains("button", "Legg til plattform").click();
+    cy.contains(".course-card", "Udemy").should("be.visible");
+  });
+
+  it("adds a course on the master plan", () => {
+    cy.visit("/");
+    cy.contains("button", "Master Plan").click();
+    cy.contains("label", "Fagkode").find("input").type("TDT4173");
+    cy.contains("label", "Tittel").find("input").type("Machine Learning");
+    cy.contains("button", "Legg til fag").click();
+    cy.contains(".course-card", "TDT4173").should("be.visible");
+  });
+
+  it("smoke-tests listing views, filters, and education tabs", () => {
+    cy.visit("/");
+
+    cy.contains("button", "Graduate").click();
+    cy.get("input[placeholder*='Søk']").type("NBIM");
+    cy.contains("button", "+ Legg til").click();
+    cy.get('[role="dialog"]').contains("button", "Avbryt").click();
+
+    cy.contains("button", "Internship").click();
+    cy.get("select").first().select(1);
+    cy.contains("button", "Hackathons").click();
+    cy.contains("button", "Tidslinje").click();
+    cy.get(".timeline").should("exist");
+    cy.contains("button", "Liste").click();
+
+    cy.contains("button", "Bedrifter").click();
+    cy.get("input[placeholder*='selskap']").type("Stat");
+
+    cy.contains("button", "Utdanning").click();
+    cy.contains("button", "Oversikt").click();
+    cy.contains("button", "Kurs").click();
+    cy.contains("button", "Bøker").click();
+    cy.contains("button", "Plattformer").click();
+    cy.contains("button", "Bachelor-lærdom").click();
+
+    cy.contains("button", "Karriereboard").click();
+    cy.get(".board-shell").should("be.visible");
+  });
 });

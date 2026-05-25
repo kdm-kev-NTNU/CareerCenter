@@ -13,11 +13,16 @@ import type {
   InternshipQuery,
   InternshipRequirementItemInput
 } from "./repository.js";
+import { validateListingInput } from "./listingValidation.js";
 import { CatalogInUseError } from "./repository.js";
+
+export type MemoryInternshipRepositoryDeps = {
+  companyExists?: (companyId: string) => boolean;
+};
 
 type StoredInternship = Internship & { userId: string };
 
-export function createMemoryInternshipRepository() {
+export function createMemoryInternshipRepository(deps: MemoryInternshipRepositoryDeps = {}) {
   let catalogSeeded = false;
   const statuses = new Map<string, InternshipStatusOption & { userId: string }>();
   const locations = new Map<string, InternshipLocationOption & { userId: string }>();
@@ -191,24 +196,34 @@ export function createMemoryInternshipRepository() {
       return Promise.resolve(rows.map((row) => hydrateInternship(row, settings)));
     },
 
-    createInternship(userId: string, input: InternshipInput) {
+    async createInternship(userId: string, input: InternshipInput) {
       const settings = getSettings(userId);
-      const entry = toInternship(nanoid(), userId, input, settings);
+      const validated = await validateListingInput(input, settings, {
+        companyExists: deps.companyExists
+          ? async (companyId) => deps.companyExists!(companyId)
+          : undefined
+      });
+      const entry = toInternship(nanoid(), userId, validated, settings);
       internships.set(entry.id, entry);
-      return Promise.resolve(hydrateInternship(entry, settings));
+      return hydrateInternship(entry, settings);
     },
 
-    updateInternship(userId: string, id: string, input: InternshipInput) {
+    async updateInternship(userId: string, id: string, input: InternshipInput) {
       const existing = internships.get(id);
-      if (!existing || existing.userId !== userId) return Promise.resolve(null);
+      if (!existing || existing.userId !== userId) return null;
       const settings = getSettings(userId);
+      const validated = await validateListingInput(input, settings, {
+        companyExists: deps.companyExists
+          ? async (companyId) => deps.companyExists!(companyId)
+          : undefined
+      });
       const entry: StoredInternship = {
-        ...toInternship(id, userId, input, settings),
+        ...toInternship(id, userId, validated, settings),
         createdAt: existing.createdAt,
         updatedAt: new Date().toISOString()
       };
       internships.set(id, entry);
-      return Promise.resolve(hydrateInternship(entry, settings));
+      return hydrateInternship(entry, settings);
     },
 
     deleteInternship(userId: string, id: string) {

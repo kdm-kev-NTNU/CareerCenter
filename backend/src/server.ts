@@ -28,13 +28,16 @@ const TEST_AUTH_USER_PIN = "0000";
 export interface ServerOptions {
   repository: Repository;
   authDisabled?: boolean;
+  /** Raise in tests so lockout flows do not hit the auth rate limiter first. */
+  authRateLimitMax?: number;
 }
 
 function isPublicApiPath(url: string): boolean {
   return (
     url === "/api/health" ||
     url.startsWith("/api/auth/register") ||
-    url.startsWith("/api/auth/login")
+    url.startsWith("/api/auth/login") ||
+    url.startsWith("/api/auth/logout")
   );
 }
 
@@ -60,7 +63,9 @@ export async function buildServer(options: ServerOptions) {
   app.get("/", async () => ({ status: "ok" }));
 
   app.register(healthRoutes);
-  app.register((instance) => authRoutes(instance, repository));
+  app.register((instance) =>
+    authRoutes(instance, repository, { rateLimitMax: options.authRateLimitMax })
+  );
 
   if (authDisabled) {
     app.addHook("onRequest", async (request) => {

@@ -10,7 +10,6 @@ const title = computed(() => (route.meta.title as string) ?? "CareerCenter");
   <header class="topbar">
     <div>
       <h1>{{ title }}</h1>
-      <p>KI-master -> teknisk tung AI/data -> kommersiell verdiskaping.</p>
     </div>
   </header>
 </template>

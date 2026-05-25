@@ -34,6 +34,9 @@ export const useInternshipsStore = defineStore("internships", () => {
   const locationFilter = ref("");
   const trackFilter = ref("");
   const editingId = ref<string | null>(null);
+  const isSubmitting = ref(false);
+  const isLoading = ref(false);
+  const loadError = ref("");
   const companyPicker = ref("");
   const form = ref<InternshipPayload>({
     companyId: null,
@@ -62,12 +65,21 @@ export const useInternshipsStore = defineStore("internships", () => {
   }
 
   async function loadInternships() {
-    internships.value = await api.internships({
-      q: search.value || undefined,
-      statusId: statusFilter.value || undefined,
-      locationId: locationFilter.value || undefined,
-      track: (trackFilter.value || undefined) as CareerTrack | undefined
-    });
+    isLoading.value = true;
+    loadError.value = "";
+    try {
+      internships.value = await api.internships({
+        q: search.value || undefined,
+        statusId: statusFilter.value || undefined,
+        locationId: locationFilter.value || undefined,
+        track: (trackFilter.value || undefined) as CareerTrack | undefined
+      });
+    } catch (caught) {
+      loadError.value = caught instanceof Error ? caught.message : "Kunne ikke laste internship.";
+      throw caught;
+    } finally {
+      isLoading.value = false;
+    }
   }
 
   function resetForm() {
@@ -133,8 +145,11 @@ export const useInternshipsStore = defineStore("internships", () => {
   }
 
   async function saveInternship(companies: Array<{ id: string; name: string }>) {
+    if (isSubmitting.value) return;
     applyCompanySelection(companies);
-    if (!form.value.companyName.trim() || !form.value.title.trim() || !form.value.statusId) return;
+    if (!form.value.companyName.trim() || !form.value.title.trim() || !form.value.statusId) {
+      throw new Error("Bedriftsnavn, stillingstittel og status er obligatorisk.");
+    }
 
     const payload: InternshipPayload = {
       ...form.value,
@@ -143,14 +158,19 @@ export const useInternshipsStore = defineStore("internships", () => {
       requirements: form.value.requirements.filter((item) => item.isRequired || item.isDone || item.notes)
     };
 
-    if (editingId.value) {
-      const updated = await api.updateInternship(editingId.value, payload);
-      internships.value = internships.value.map((item) => (item.id === updated.id ? updated : item));
-    } else {
-      const created = await api.createInternship(payload);
-      internships.value = [created, ...internships.value];
+    isSubmitting.value = true;
+    try {
+      if (editingId.value) {
+        const updated = await api.updateInternship(editingId.value, payload);
+        internships.value = internships.value.map((item) => (item.id === updated.id ? updated : item));
+      } else {
+        const created = await api.createInternship(payload);
+        internships.value = [created, ...internships.value];
+      }
+      resetForm();
+    } finally {
+      isSubmitting.value = false;
     }
-    resetForm();
   }
 
   async function removeInternship(id: string) {
@@ -172,6 +192,9 @@ export const useInternshipsStore = defineStore("internships", () => {
     locationFilter,
     trackFilter,
     editingId,
+    isSubmitting,
+    isLoading,
+    loadError,
     companyPicker,
     form,
     isEditing,

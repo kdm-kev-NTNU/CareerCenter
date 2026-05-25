@@ -12,6 +12,7 @@ import type {
   InternshipQuery,
   InternshipRequirementItemInput
 } from "./repository.js";
+import { validateListingInput } from "./listingValidation.js";
 import { CatalogInUseError } from "./repository.js";
 
 const internshipInclude = {
@@ -198,20 +199,26 @@ export function createPrismaInternshipRepository(prisma: PrismaClient) {
 
     async createInternship(userId: string, input: InternshipInput) {
       const settings = await loadSettings(userId);
-      const requirements = buildRequirements(input.requirements, settings.requirementTypes);
+      const validated = await validateListingInput(input, settings, {
+        companyExists: async (companyId) => {
+          const company = await prisma.company.findFirst({ where: { id: companyId } });
+          return company !== null;
+        }
+      });
+      const requirements = buildRequirements(validated.requirements, settings.requirementTypes);
       const row = (await prisma.internship.create({
         data: {
           userId,
-          companyId: input.companyId ?? null,
-          companyName: input.companyName,
-          title: input.title,
-          description: input.description,
-          applicationUrl: input.applicationUrl,
-          notes: input.notes,
-          deadline: input.deadline ?? null,
-          statusId: input.statusId,
-          locationIds: input.locationIds,
-          trackTags: input.trackTags,
+          companyId: validated.companyId ?? null,
+          companyName: validated.companyName,
+          title: validated.title,
+          description: validated.description,
+          applicationUrl: validated.applicationUrl,
+          notes: validated.notes,
+          deadline: validated.deadline ?? null,
+          statusId: validated.statusId,
+          locationIds: validated.locationIds,
+          trackTags: validated.trackTags,
           requirements: { create: requirements }
         },
         include: internshipInclude
@@ -223,22 +230,28 @@ export function createPrismaInternshipRepository(prisma: PrismaClient) {
       const existing = await prisma.internship.findFirst({ where: { id, userId } });
       if (!existing) return null;
       const settings = await loadSettings(userId);
-      const requirements = buildRequirements(input.requirements, settings.requirementTypes);
+      const validated = await validateListingInput(input, settings, {
+        companyExists: async (companyId) => {
+          const company = await prisma.company.findFirst({ where: { id: companyId } });
+          return company !== null;
+        }
+      });
+      const requirements = buildRequirements(validated.requirements, settings.requirementTypes);
       const row = (await prisma.$transaction(async (tx) => {
         await tx.internshipRequirementItem.deleteMany({ where: { internshipId: id } });
         return tx.internship.update({
           where: { id },
           data: {
-            companyId: input.companyId ?? null,
-            companyName: input.companyName,
-            title: input.title,
-            description: input.description,
-            applicationUrl: input.applicationUrl,
-            notes: input.notes,
-            deadline: input.deadline ?? null,
-            statusId: input.statusId,
-            locationIds: input.locationIds,
-            trackTags: input.trackTags,
+            companyId: validated.companyId ?? null,
+            companyName: validated.companyName,
+            title: validated.title,
+            description: validated.description,
+            applicationUrl: validated.applicationUrl,
+            notes: validated.notes,
+            deadline: validated.deadline ?? null,
+            statusId: validated.statusId,
+            locationIds: validated.locationIds,
+            trackTags: validated.trackTags,
             requirements: { create: requirements }
           },
           include: internshipInclude

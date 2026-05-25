@@ -10,6 +10,7 @@ import {
   writeUploadedFile
 } from "../bachelorFileStorage.js";
 import type { Repository } from "../repository.js";
+import { InvalidReferenceError } from "../repository.js";
 import { bachelorFileUpdateSchema, bachelorFolderSchema } from "../schemas.js";
 
 async function deleteFolderFilesFromDisk(repository: Repository, userId: string, folderId: string) {
@@ -44,16 +45,12 @@ export async function bachelorStorageRoutes(app: FastifyInstance, repository: Re
   app.put("/api/education/bachelor/folders/:id", async (request, reply) => {
     const userId = request.user.id;
     const body = bachelorFolderSchema.parse(request.body);
-    try {
-      const result = await repository.updateBachelorFolder(userId, (request.params as { id: string }).id, {
-        name: body.name,
-        parentId: body.parentId ?? null,
-        sortOrder: body.sortOrder
-      });
-      return result ?? reply.code(404).send({ message: "Mappe ikke funnet." });
-    } catch (error) {
-      return reply.code(400).send({ message: error instanceof Error ? error.message : "Ugyldig forespørsel." });
-    }
+    const result = await repository.updateBachelorFolder(userId, (request.params as { id: string }).id, {
+      name: body.name,
+      parentId: body.parentId ?? null,
+      sortOrder: body.sortOrder
+    });
+    return result ?? reply.code(404).send({ message: "Mappe ikke funnet." });
   });
 
   app.delete("/api/education/bachelor/folders/:id", async (request, reply) => {
@@ -121,9 +118,14 @@ export async function bachelorStorageRoutes(app: FastifyInstance, repository: Re
 
     if (nextFolderId !== existing.folderId || nextName !== existing.originalName) {
       const nextPath = buildStoragePath(userId, nextFolderId, id, nextName);
-      await ensureDirForFile(nextPath);
-      await rename(resolveStoredPath(existing.storagePath), resolveStoredPath(nextPath));
-      storagePath = nextPath;
+      try {
+        await ensureDirForFile(nextPath);
+        await rename(resolveStoredPath(existing.storagePath), resolveStoredPath(nextPath));
+        storagePath = nextPath;
+      } catch (error) {
+        if (error instanceof InvalidReferenceError) throw error;
+        return reply.code(404).send({ message: "Kunne ikke flytte fil på disk." });
+      }
     }
 
     const updated = await repository.updateBachelorFile(userId, id, {
@@ -152,10 +154,15 @@ export async function bachelorStorageRoutes(app: FastifyInstance, repository: Re
     const record = await repository.getBachelorFileWithStorage(userId, id);
     if (!record) return reply.code(404).send({ message: "Fil ikke funnet." });
 
-    const absolutePath = resolveStoredPath(record.storagePath);
-    return reply
-      .header("Content-Type", record.mimeType)
-      .header("Content-Disposition", `attachment; filename="${encodeURIComponent(record.originalName)}"`)
-      .send(readStoredFile(absolutePath));
+    try {
+      const absolutePath = resolveStoredPath(record.storagePath);
+      return reply
+        .header("Content-Type", record.mimeType)
+        .header("Content-Disposition", `attachment; filename="${encodeURIComponent(record.originalName)}"`)
+        .send(readStoredFile(absolutePath));
+    } catch (error) {
+      if (error instanceof InvalidReferenceError) throw error;
+      return reply.code(404).send({ message: "Filen er ikke tilgjengelig." });
+    }
   });
 }

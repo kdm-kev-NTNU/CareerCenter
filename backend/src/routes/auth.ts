@@ -10,11 +10,15 @@ function isLocked(lockedUntil: Date | null): boolean {
   return lockedUntil !== null && lockedUntil.getTime() > Date.now();
 }
 
-export async function authRoutes(app: FastifyInstance, repository: Repository) {
-  app.get("/api/auth/me", async (request) => {
+export async function authRoutes(
+  app: FastifyInstance,
+  repository: Repository,
+  options: { rateLimitMax?: number } = {}
+) {
+  app.get("/api/auth/me", async (request, reply) => {
     const profile = await repository.getUserById(request.user.id);
     if (!profile) {
-      return { message: "Bruker ikke funnet." };
+      return reply.code(401).send({ message: "Ikke autentisert." });
     }
     return profile;
   });
@@ -26,7 +30,7 @@ export async function authRoutes(app: FastifyInstance, repository: Repository) {
 
   await app.register(async (rateLimited) => {
     await rateLimited.register(rateLimit, {
-      max: 5,
+      max: options.rateLimitMax ?? 5,
       timeWindow: "1 minute"
     });
 
