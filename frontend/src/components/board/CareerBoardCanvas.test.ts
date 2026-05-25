@@ -50,7 +50,8 @@ Object.defineProperty(global, "DragEvent", {
 });
 
 // Track all the callback handlers for VueFlow events (unused, kept for potential future use)
-const _vueFlowHandlers: Record<string, Function[]> = {};
+// eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+const _vueFlowHandlers: Record<string, ((...args: unknown[]) => unknown)[]> = {};
 
 // Vue Flow mock state
 const mockFitView = vi.fn();

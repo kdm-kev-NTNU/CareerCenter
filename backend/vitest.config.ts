@@ -5,7 +5,7 @@ export default defineConfig({
     environment: "node",
     globals: true,
     env: {
-      JWT_SECRET: "test-jwt-secret-for-ci-only"
+      JWT_SECRET: "test-jwt-secret-for-ci-only-32chars-long"
     },
     coverage: {
       provider: "v8",
