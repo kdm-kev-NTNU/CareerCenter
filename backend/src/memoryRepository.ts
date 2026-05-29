@@ -354,9 +354,12 @@ export class MemoryRepository implements Repository {
     return this.learningPlatforms.delete(id);
   }
 
-  async listBachelorKnowledge(userId: string): Promise<BachelorKnowledge[]> {
+  async listBachelorKnowledge(userId: string, folderId?: string | null): Promise<BachelorKnowledge[]> {
     return [...this.bachelorKnowledge.values()]
-      .filter((entry) => entry.userId === userId)
+      .filter(
+        (entry) =>
+          entry.userId === userId && (folderId === undefined || entry.folderId === folderId)
+      )
       .sort((a, b) => a.sortOrder - b.sortOrder);
   }
 
@@ -582,6 +585,7 @@ export class MemoryRepository implements Repository {
   private toBachelorKnowledge(id: string, input: BachelorKnowledgeInput): BachelorKnowledge {
     return {
       id,
+      folderId: input.folderId ?? null,
       courseName: input.courseName,
       topic: input.topic,
       notes: input.notes,

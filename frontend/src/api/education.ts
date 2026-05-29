@@ -48,7 +48,11 @@ export const educationApi = {
     request<LearningPlatform>("/api/education/platforms", { method: "POST", body: JSON.stringify(payload) }),
   deleteLearningPlatform: (id: string) => request<void>(`/api/education/platforms/${id}`, { method: "DELETE" }),
 
-  bachelorKnowledge: () => request<BachelorKnowledge[]>("/api/education/bachelor"),
+  bachelorKnowledge: (folderId?: string | null) => {
+    if (folderId === undefined) return request<BachelorKnowledge[]>("/api/education/bachelor");
+    const query = folderId === null ? "folderId=" : `folderId=${encodeURIComponent(folderId)}`;
+    return request<BachelorKnowledge[]>(`/api/education/bachelor?${query}`);
+  },
   createBachelorKnowledge: (payload: BachelorKnowledgePayload) =>
     request<BachelorKnowledge>("/api/education/bachelor", { method: "POST", body: JSON.stringify(payload) }),
   deleteBachelorKnowledge: (id: string) => request<void>(`/api/education/bachelor/${id}`, { method: "DELETE" }),

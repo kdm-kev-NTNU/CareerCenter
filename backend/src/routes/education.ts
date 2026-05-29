@@ -77,7 +77,11 @@ export async function educationRoutes(app: FastifyInstance, repository: Reposito
     return deleted ? reply.code(204).send() : reply.code(404).send({ message: "Plattform ikke funnet." });
   });
 
-  app.get("/api/education/bachelor", async (request) => repository.listBachelorKnowledge(request.user.id));
+  app.get("/api/education/bachelor", async (request) => {
+    const query = request.query as { folderId?: string };
+    const folderId = query.folderId === undefined ? undefined : query.folderId === "" ? null : query.folderId;
+    return repository.listBachelorKnowledge(request.user.id, folderId);
+  });
 
   app.post("/api/education/bachelor", async (request) =>
     repository.createBachelorKnowledge(request.user.id, bachelorKnowledgeSchema.parse(request.body))

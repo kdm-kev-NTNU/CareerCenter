@@ -198,26 +198,29 @@ model LearningPlatform {
 }
 
 model BachelorKnowledge {
-  id         String @id @default(cuid())
+  id         String          @id @default(cuid())
   userId     String
+  folderId   String?
   courseName String
   topic      String
-  notes      String @default("")
-  sortOrder  Int    @default(0)
-  user       User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notes      String          @default("")
+  sortOrder  Int             @default(0)
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folder     BachelorFolder? @relation(fields: [folderId], references: [id], onDelete: Cascade)
 }
 
 model BachelorFolder {
-  id        String           @id @default(cuid())
+  id        String              @id @default(cuid())
   userId    String
   parentId  String?
   name      String
-  sortOrder Int              @default(0)
-  createdAt DateTime         @default(now())
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  parent    BachelorFolder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
-  children  BachelorFolder[] @relation("FolderTree")
+  sortOrder Int                 @default(0)
+  createdAt DateTime            @default(now())
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent    BachelorFolder?     @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  BachelorFolder[]    @relation("FolderTree")
   files     BachelorFile[]
+  knowledge BachelorKnowledge[]
 }
 
 model BachelorFile {

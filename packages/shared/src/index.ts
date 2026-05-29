@@ -66,6 +66,7 @@ export interface LearningPlatform {
 
 export interface BachelorKnowledge {
   id: string;
+  folderId: string | null;
   courseName: string;
   topic: string;
   notes: string;

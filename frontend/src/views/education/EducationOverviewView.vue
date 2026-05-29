@@ -14,7 +14,7 @@ const sections = [
   { to: "/education/kurs", label: "Kurs", count: () => selfStudyStore.courses.length, hint: "Selvstudium og eksterne kurs" },
   { to: "/education/boker", label: "Bøker", count: () => booksStore.books.length, hint: "Bøker du leser eller har lest" },
   { to: "/education/plattformer", label: "Plattformer", count: () => platformsStore.platforms.length, hint: "Coursera, YouTube, osv." },
-  { to: "/education/bachelor", label: "Bachelor-lærdom", count: () => bachelorStore.entries.length, hint: "Fag og tema fra bachelor" }
+  { to: "/education/bachelor", label: "Bachelor-lærdom", count: () => bachelorStore.entryCount, hint: "Fag og tema fra bachelor" }
 ];
 </script>
 

@@ -117,6 +117,7 @@ export const learningPlatformSchema = z.object({
 });
 
 export const bachelorKnowledgeSchema = z.object({
+  folderId: z.union([z.string().min(1), z.null()]).optional(),
   courseName: z.string().min(1),
   topic: z.string().min(1),
   notes: z.string().default(""),

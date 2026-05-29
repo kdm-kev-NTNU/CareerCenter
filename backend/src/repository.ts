@@ -210,6 +210,7 @@ export interface LearningPlatformInput {
 }
 
 export interface BachelorKnowledgeInput {
+  folderId?: string | null;
   courseName: string;
   topic: string;
   notes: string;
@@ -293,7 +294,7 @@ export interface Repository {
   createLearningPlatform(userId: string, input: LearningPlatformInput): Promise<LearningPlatform>;
   updateLearningPlatform(userId: string, id: string, input: LearningPlatformInput): Promise<LearningPlatform | null>;
   deleteLearningPlatform(userId: string, id: string): Promise<boolean>;
-  listBachelorKnowledge(userId: string): Promise<BachelorKnowledge[]>;
+  listBachelorKnowledge(userId: string, folderId?: string | null): Promise<BachelorKnowledge[]>;
   createBachelorKnowledge(userId: string, input: BachelorKnowledgeInput): Promise<BachelorKnowledge>;
   updateBachelorKnowledge(userId: string, id: string, input: BachelorKnowledgeInput): Promise<BachelorKnowledge | null>;
   deleteBachelorKnowledge(userId: string, id: string): Promise<boolean>;

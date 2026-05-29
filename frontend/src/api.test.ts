@@ -296,7 +296,10 @@ describe("api client", () => {
     });
     await educationApi.deleteLearningPlatform("platform-1");
     await educationApi.bachelorKnowledge();
+    await educationApi.bachelorKnowledge(null);
+    await educationApi.bachelorKnowledge("folder-1");
     await educationApi.createBachelorKnowledge({
+      folderId: "folder-1",
       courseName: "TDT4120",
       topic: "Algoritmer",
       notes: "",

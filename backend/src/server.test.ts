@@ -512,6 +512,61 @@ describe("CareerCenter API", () => {
     await app.close();
   });
 
+  it("creates bachelor knowledge linked to folders", async () => {
+    const app = await createTestApp();
+
+    const folder = await app.inject({
+      method: "POST",
+      url: "/api/education/bachelor/folders",
+      payload: { name: "Algoritmer", parentId: null, sortOrder: 0 }
+    });
+    const folderId = folder.json().id as string;
+
+    const rootEntry = await app.inject({
+      method: "POST",
+      url: "/api/education/bachelor",
+      payload: {
+        folderId: null,
+        courseName: "Generelt",
+        topic: "Oversikt",
+        notes: "Rot-notat",
+        sortOrder: 0
+      }
+    });
+    expect(rootEntry.statusCode).toBe(200);
+    expect(rootEntry.json().folderId).toBeNull();
+
+    const folderEntry = await app.inject({
+      method: "POST",
+      url: "/api/education/bachelor",
+      payload: {
+        folderId,
+        courseName: "TDT4120",
+        topic: "Heap",
+        notes: "Prioritetskø",
+        sortOrder: 0
+      }
+    });
+    expect(folderEntry.statusCode).toBe(200);
+    expect(folderEntry.json().folderId).toBe(folderId);
+
+    const rootList = await app.inject({ method: "GET", url: "/api/education/bachelor?folderId=" });
+    expect(rootList.json()).toHaveLength(1);
+    expect(rootList.json()[0].topic).toBe("Oversikt");
+
+    const folderList = await app.inject({
+      method: "GET",
+      url: `/api/education/bachelor?folderId=${encodeURIComponent(folderId)}`
+    });
+    expect(folderList.json()).toHaveLength(1);
+    expect(folderList.json()[0].topic).toBe("Heap");
+
+    const allList = await app.inject({ method: "GET", url: "/api/education/bachelor" });
+    expect(allList.json()).toHaveLength(2);
+
+    await app.close();
+  });
+
   it("updates and deletes bachelor folders", async () => {
     const app = await createTestApp();
 

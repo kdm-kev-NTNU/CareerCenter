@@ -38,6 +38,7 @@ export function formatFileSize(bytes: number): string {
 
 export const useEducationBachelorStore = defineStore("educationBachelor", () => {
   const entries = ref<BachelorKnowledge[]>([]);
+  const entryCount = ref(0);
   const folderTree = ref<BachelorFolderTreeNode[]>([]);
   const files = ref<BachelorFile[]>([]);
   const currentFolderId = ref<string | null>(null);
@@ -52,7 +53,6 @@ export const useEducationBachelorStore = defineStore("educationBachelor", () => 
   });
 
   const newFolderName = ref("");
-  const showNotes = ref(false);
 
   const breadcrumbs = computed(() => {
     const path = findFolderPath(folderTree.value, currentFolderId.value) ?? [];
@@ -67,8 +67,13 @@ export const useEducationBachelorStore = defineStore("educationBachelor", () => 
     return current?.children ?? [];
   });
 
+  async function loadEntryCount() {
+    const all = await api.bachelorKnowledge();
+    entryCount.value = all.length;
+  }
+
   async function loadEntries() {
-    entries.value = await api.bachelorKnowledge();
+    entries.value = await api.bachelorKnowledge(currentFolderId.value);
   }
 
   async function loadFolderTree() {
@@ -80,12 +85,12 @@ export const useEducationBachelorStore = defineStore("educationBachelor", () => 
   }
 
   async function loadAll() {
-    await Promise.all([loadEntries(), loadFolderTree(), loadFiles()]);
+    await Promise.all([loadFolderTree(), loadFiles(), loadEntries(), loadEntryCount()]);
   }
 
   function navigateToFolder(folderId: string | null) {
     currentFolderId.value = folderId;
-    void loadFiles();
+    void Promise.all([loadFiles(), loadEntries()]);
   }
 
   function toggleFolderExpanded(folderId: string) {
@@ -98,10 +103,12 @@ export const useEducationBachelorStore = defineStore("educationBachelor", () => 
   async function addEntry() {
     const payload: BachelorKnowledgePayload = {
       ...newEntry.value,
+      folderId: currentFolderId.value,
       sortOrder: entries.value.length
     };
     const created = await api.createBachelorKnowledge(payload);
     entries.value.push(created);
+    entryCount.value += 1;
     newEntry.value = {
       courseName: newEntry.value.courseName,
       topic: "",
@@ -113,6 +120,7 @@ export const useEducationBachelorStore = defineStore("educationBachelor", () => 
   async function removeEntry(id: string) {
     await api.deleteBachelorKnowledge(id);
     entries.value = entries.value.filter((entry) => entry.id !== id);
+    entryCount.value = Math.max(0, entryCount.value - 1);
   }
 
   async function createFolder() {
@@ -143,7 +151,7 @@ export const useEducationBachelorStore = defineStore("educationBachelor", () => 
     await api.deleteBachelorFolder(folderId);
     if (currentFolderId.value === folderId) currentFolderId.value = null;
     await loadFolderTree();
-    await loadFiles();
+    await Promise.all([loadFiles(), loadEntries(), loadEntryCount()]);
   }
 
   async function uploadFiles(fileList: FileList | File[]) {
@@ -189,6 +197,7 @@ export const useEducationBachelorStore = defineStore("educationBachelor", () => 
 
   return {
     entries,
+    entryCount,
     folderTree,
     files,
     currentFolderId,
@@ -196,10 +205,10 @@ export const useEducationBachelorStore = defineStore("educationBachelor", () => 
     expandedFolderIds,
     newEntry,
     newFolderName,
-    showNotes,
     breadcrumbs,
     childFolders,
     loadEntries,
+    loadEntryCount,
     loadFolderTree,
     loadFiles,
     loadAll,

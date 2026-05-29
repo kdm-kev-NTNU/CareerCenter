@@ -141,6 +141,7 @@ type LearningPlatformRow = {
 type BachelorKnowledgeRow = {
   id: string;
   userId: string;
+  folderId: string | null;
   courseName: string;
   topic: string;
   notes: string;
@@ -450,9 +451,9 @@ export class PrismaRepository implements Repository {
     return result.count > 0;
   }
 
-  async listBachelorKnowledge(userId: string): Promise<BachelorKnowledge[]> {
+  async listBachelorKnowledge(userId: string, folderId?: string | null): Promise<BachelorKnowledge[]> {
     const rows = (await this.prisma.bachelorKnowledge.findMany({
-      where: { userId },
+      where: { userId, folderId: folderId === undefined ? undefined : folderId },
       orderBy: { sortOrder: "asc" }
     })) as BachelorKnowledgeRow[];
     return rows.map((row) => this.mapBachelorKnowledge(row));
@@ -845,6 +846,7 @@ export class PrismaRepository implements Repository {
   private mapBachelorKnowledge(row: BachelorKnowledgeRow): BachelorKnowledge {
     return {
       id: row.id,
+      folderId: row.folderId,
       courseName: row.courseName,
       topic: row.topic,
       notes: row.notes,

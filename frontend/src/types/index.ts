@@ -85,6 +85,7 @@ export interface LearningPlatformPayload {
 }
 
 export interface BachelorKnowledgePayload {
+  folderId?: string | null;
   courseName: string;
   topic: string;
   notes: string;
