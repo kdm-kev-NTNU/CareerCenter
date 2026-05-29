@@ -54,7 +54,7 @@ describe("useCoursesStore", () => {
       credits: 7.5,
       status: "planned" as const,
       notes: "Old",
-      trackTags: ["ENERGY_QUANT"] as const,
+      trackTags: ["ENERGY_QUANT" as const],
       sortOrder: 0
     };
     mockedApi.courses.mockResolvedValue([existing]);

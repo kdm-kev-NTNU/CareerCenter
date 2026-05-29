@@ -234,6 +234,20 @@ describe("CareerCenter", () => {
     cy.contains(".course-card", "TDT4173").should("be.visible");
   });
 
+  it("edits notes on a master plan course", () => {
+    const noteText = "Passer energispor";
+
+    cy.visit("/");
+    cy.contains("button", "Master Plan").click();
+    cy.contains("label", "Fagkode").find("input").type("TDT4999");
+    cy.contains("label", "Tittel").find("input").type("E2E Notes Course");
+    cy.contains("button", "Legg til fag").click();
+    cy.contains(".course-card", "TDT4999").contains("button", "Legg til notater").click();
+    cy.get('[role="dialog"]').find("textarea").type(noteText);
+    cy.get('[role="dialog"]').contains("button", "Lagre").click();
+    cy.contains(".course-card", "TDT4999").should("contain", noteText);
+  });
+
   it("smoke-tests listing views, filters, and education tabs", () => {
     cy.visit("/");
 
