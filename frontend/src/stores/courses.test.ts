@@ -7,6 +7,7 @@ vi.mock("../api/index.js", () => ({
   api: {
     courses: vi.fn(),
     createCourse: vi.fn(),
+    updateCourse: vi.fn(),
     deleteCourse: vi.fn()
   }
 }));
@@ -42,5 +43,37 @@ describe("useCoursesStore", () => {
     expect(store.courses).toHaveLength(1);
     await store.removeCourse("c1");
     expect(store.courses).toHaveLength(0);
+  });
+
+  it("updates course notes with full payload", async () => {
+    const existing = {
+      id: "c1",
+      semester: 7 as const,
+      courseCode: "TDT4173",
+      title: "ML",
+      credits: 7.5,
+      status: "planned" as const,
+      notes: "Old",
+      trackTags: ["ENERGY_QUANT" as const],
+      sortOrder: 0
+    };
+    mockedApi.courses.mockResolvedValue([existing]);
+    mockedApi.updateCourse.mockResolvedValue({ ...existing, notes: "New notes" });
+
+    const store = useCoursesStore();
+    await store.loadCourses();
+    await store.updateCourseNotes("c1", "New notes");
+
+    expect(mockedApi.updateCourse).toHaveBeenCalledWith("c1", {
+      semester: 7,
+      courseCode: "TDT4173",
+      title: "ML",
+      credits: 7.5,
+      status: "planned",
+      notes: "New notes",
+      trackTags: ["ENERGY_QUANT"],
+      sortOrder: 0
+    });
+    expect(store.courses[0]?.notes).toBe("New notes");
   });
 });

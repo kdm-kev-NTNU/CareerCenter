@@ -278,6 +278,7 @@ describe("api client", () => {
 
     await educationApi.selfStudyCourses();
     await educationApi.createSelfStudyCourse(selfStudyPayload);
+    await educationApi.updateSelfStudyCourse("course-1", selfStudyPayload);
     await educationApi.deleteSelfStudyCourse("course-1");
     await educationApi.educationBooks();
     await educationApi.createEducationBook({
@@ -286,11 +287,23 @@ describe("api client", () => {
       notes: "",
       sortOrder: 0
     });
+    await educationApi.updateEducationBook("book-1", {
+      title: "Book",
+      status: "planned",
+      notes: "Updated",
+      sortOrder: 0
+    });
     await educationApi.deleteEducationBook("book-1");
     await educationApi.learningPlatforms();
     await educationApi.createLearningPlatform({
       name: "Coursera",
       notes: "",
+      isActive: true,
+      sortOrder: 0
+    });
+    await educationApi.updateLearningPlatform("platform-1", {
+      name: "Coursera",
+      notes: "Updated",
       isActive: true,
       sortOrder: 0
     });
@@ -303,6 +316,13 @@ describe("api client", () => {
       courseName: "TDT4120",
       topic: "Algoritmer",
       notes: "",
+      sortOrder: 0
+    });
+    await educationApi.updateBachelorKnowledge("bk-1", {
+      folderId: "folder-1",
+      courseName: "TDT4120",
+      topic: "Algoritmer",
+      notes: "Updated",
       sortOrder: 0
     });
     await educationApi.deleteBachelorKnowledge("bk-1");

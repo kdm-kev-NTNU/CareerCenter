@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import type { BachelorFile, BachelorKnowledge } from "@careercenter/shared";
 import { ref } from "vue";
+import NotesEditModal from "../../components/NotesEditModal.vue";
 import BachelorFolderTreeItem from "../../components/education/BachelorFolderTreeItem.vue";
+import { useNotesEditModal } from "../../composables/useNotesEditModal.js";
 import {
   fileTypeIcon,
   formatFileSize,
@@ -8,6 +11,16 @@ import {
 } from "../../stores/educationBachelor.js";
 
 const store = useEducationBachelorStore();
+const {
+  open: notesModalOpen,
+  title: notesModalTitle,
+  notes: notesModalNotes,
+  saving: notesModalSaving,
+  error: notesModalError,
+  openNotesEdit,
+  closeNotesEdit,
+  saveNotesEdit
+} = useNotesEditModal();
 const dragOver = ref(false);
 const fileInput = ref<HTMLInputElement | null>(null);
 
@@ -37,9 +50,20 @@ function onRenameFile(fileId: string, currentName: string) {
   if (name?.trim()) void store.renameFile(fileId, name.trim());
 }
 
-function onEditNotes(fileId: string, currentNotes: string) {
-  const notes = window.prompt("Notater", currentNotes);
-  if (notes !== null) void store.updateFileNotes(fileId, notes);
+function openFileNotes(file: BachelorFile) {
+  openNotesEdit({
+    title: `Notater — ${file.originalName}`,
+    notes: file.notes,
+    save: (notes) => store.updateFileNotes(file.id, notes)
+  });
+}
+
+function openEntryNotes(entry: BachelorKnowledge) {
+  openNotesEdit({
+    title: `Notater — ${entry.courseName}`,
+    notes: entry.notes,
+    save: (notes) => store.updateEntryNotes(entry.id, notes)
+  });
 }
 
 function onMoveFile(fileId: string) {
@@ -131,7 +155,9 @@ function onMoveFile(fileId: string) {
               <div class="file-actions column">
                 <a class="secondary mini-link" :href="store.downloadUrl(file.id)" download>Last ned</a>
                 <button type="button" class="ghost mini-link" @click="onRenameFile(file.id, file.originalName)">Gi nytt navn</button>
-                <button type="button" class="ghost mini-link" @click="onEditNotes(file.id, file.notes)">Notater</button>
+                <button type="button" class="ghost mini-link" @click="openFileNotes(file)">
+                  {{ file.notes ? "Rediger notater" : "Legg til notater" }}
+                </button>
                 <button type="button" class="ghost mini-link" @click="onMoveFile(file.id)">Flytt</button>
                 <button type="button" class="ghost mini-link danger" @click="store.deleteFile(file.id)">Slett</button>
               </div>
@@ -154,11 +180,26 @@ function onMoveFile(fileId: string) {
               <strong>{{ entry.courseName }} — {{ entry.topic }}</strong>
               <p v-if="entry.notes">{{ entry.notes }}</p>
             </div>
-            <button type="button" class="icon" aria-label="Slett oppføring" @click="store.removeEntry(entry.id)">x</button>
+            <div class="actions column">
+              <button type="button" class="ghost mini-link" @click="openEntryNotes(entry)">
+                {{ entry.notes ? "Rediger notater" : "Legg til notater" }}
+              </button>
+              <button type="button" class="icon" aria-label="Slett oppføring" @click="store.removeEntry(entry.id)">x</button>
+            </div>
           </div>
           <p v-if="!store.entries.length">Ingen notater i denne mappen ennå.</p>
         </article>
       </div>
     </div>
+
+    <NotesEditModal
+      :open="notesModalOpen"
+      :title="notesModalTitle"
+      :notes="notesModalNotes"
+      :saving="notesModalSaving"
+      :error="notesModalError"
+      @close="closeNotesEdit()"
+      @save="saveNotesEdit"
+    />
   </section>
 </template>

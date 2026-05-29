@@ -4,6 +4,17 @@ import type { EducationBook } from "@careercenter/shared";
 import { api } from "../api/index.js";
 import type { EducationBookPayload } from "../types/index.js";
 
+function bookToPayload(book: EducationBook): EducationBookPayload {
+  return {
+    title: book.title,
+    author: book.author,
+    status: book.status,
+    url: book.url,
+    notes: book.notes,
+    sortOrder: book.sortOrder
+  };
+}
+
 export const useEducationBooksStore = defineStore("educationBooks", () => {
   const books = ref<EducationBook[]>([]);
   const newBook = ref<EducationBookPayload>({
@@ -43,5 +54,13 @@ export const useEducationBooksStore = defineStore("educationBooks", () => {
     books.value = books.value.filter((book) => book.id !== id);
   }
 
-  return { books, newBook, loadBooks, addBook, removeBook };
+  async function updateBookNotes(id: string, notes: string) {
+    const book = books.value.find((item) => item.id === id);
+    if (!book) return;
+    const updated = await api.updateEducationBook(id, { ...bookToPayload(book), notes });
+    const index = books.value.findIndex((item) => item.id === id);
+    if (index >= 0) books.value[index] = updated;
+  }
+
+  return { books, newBook, loadBooks, addBook, removeBook, updateBookNotes };
 });

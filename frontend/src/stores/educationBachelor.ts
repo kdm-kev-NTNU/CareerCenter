@@ -4,6 +4,16 @@ import type { BachelorFile, BachelorFolderTreeNode, BachelorKnowledge } from "@c
 import { api } from "../api/index.js";
 import type { BachelorKnowledgePayload } from "../types/index.js";
 
+function entryToPayload(entry: BachelorKnowledge): BachelorKnowledgePayload {
+  return {
+    folderId: entry.folderId,
+    courseName: entry.courseName,
+    topic: entry.topic,
+    notes: entry.notes,
+    sortOrder: entry.sortOrder
+  };
+}
+
 function findFolderPath(
   nodes: BachelorFolderTreeNode[],
   targetId: string | null,
@@ -123,6 +133,14 @@ export const useEducationBachelorStore = defineStore("educationBachelor", () => 
     entryCount.value = Math.max(0, entryCount.value - 1);
   }
 
+  async function updateEntryNotes(id: string, notes: string) {
+    const entry = entries.value.find((item) => item.id === id);
+    if (!entry) return;
+    const updated = await api.updateBachelorKnowledge(id, { ...entryToPayload(entry), notes });
+    const index = entries.value.findIndex((item) => item.id === id);
+    if (index >= 0) entries.value[index] = updated;
+  }
+
   async function createFolder() {
     const name = newFolderName.value.trim();
     if (!name) return;
@@ -216,6 +234,7 @@ export const useEducationBachelorStore = defineStore("educationBachelor", () => 
     toggleFolderExpanded,
     addEntry,
     removeEntry,
+    updateEntryNotes,
     createFolder,
     renameFolder,
     deleteFolder,

@@ -1,7 +1,28 @@
 <script setup lang="ts">
+import type { LearningPlatform } from "@careercenter/shared";
+import NotesEditModal from "../../components/NotesEditModal.vue";
+import { useNotesEditModal } from "../../composables/useNotesEditModal.js";
 import { useEducationPlatformsStore } from "../../stores/educationPlatforms.js";
 
 const store = useEducationPlatformsStore();
+const {
+  open: notesModalOpen,
+  title: notesModalTitle,
+  notes: notesModalNotes,
+  saving: notesModalSaving,
+  error: notesModalError,
+  openNotesEdit,
+  closeNotesEdit,
+  saveNotesEdit
+} = useNotesEditModal();
+
+function openPlatformNotes(platform: LearningPlatform) {
+  openNotesEdit({
+    title: `Notater — ${platform.name}`,
+    notes: platform.notes,
+    save: (notes) => store.updatePlatformNotes(platform.id, notes)
+  });
+}
 </script>
 
 <template>
@@ -23,9 +44,24 @@ const store = useEducationPlatformsStore();
           <p v-if="platform.url"><a :href="platform.url" target="_blank" rel="noreferrer">{{ platform.url }}</a></p>
           <p v-if="platform.notes">{{ platform.notes }}</p>
         </div>
-        <button type="button" class="icon" aria-label="Slett plattform" @click="store.removePlatform(platform.id)">x</button>
+        <div class="actions column">
+          <button type="button" class="ghost mini-link" @click="openPlatformNotes(platform)">
+            {{ platform.notes ? "Rediger notater" : "Legg til notater" }}
+          </button>
+          <button type="button" class="icon" aria-label="Slett plattform" @click="store.removePlatform(platform.id)">x</button>
+        </div>
       </div>
       <p v-if="!store.platforms.length">Ingen plattformer lagt inn ennå.</p>
     </article>
+
+    <NotesEditModal
+      :open="notesModalOpen"
+      :title="notesModalTitle"
+      :notes="notesModalNotes"
+      :saving="notesModalSaving"
+      :error="notesModalError"
+      @close="closeNotesEdit()"
+      @save="saveNotesEdit"
+    />
   </section>
 </template>
