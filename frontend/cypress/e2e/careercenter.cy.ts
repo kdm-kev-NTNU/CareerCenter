@@ -1,28 +1,27 @@
-describe("CareerCenter custom paths", () => {
-  it("creates, displays, deletes, and persists removal of a custom path", () => {
-    cy.visit("/");
+describe("CareerCenter", () => {
+  it("promotes a free-text internship company to Bedriftsbase", () => {
+    const companyName = `E2EPromote ${Date.now()}`;
 
-    cy.contains("h1", "Dashboard").should("be.visible");
-    cy.contains("button", "Custom Paths").click();
+    cy.visit("/internships");
+    cy.contains("button", "+ Legg til").click();
+    cy.get('[role="dialog"]').contains("label", "Bedrift").find("select").select("Annet (fritekst)");
+    cy.get('[role="dialog"]').contains("label", "Bedriftsnavn").find("input").type(companyName);
+    cy.get('[role="dialog"]').contains("label", "Stilling / rolle").find("input").type("Summer Analyst");
+    cy.get('[role="dialog"]').contains("button", "Legg til").click();
 
-    cy.get("input[placeholder*='selskap']").clear().type("Statkraft");
-    cy.contains(".company-card", "Statkraft").contains("button", "Legg til").click();
+    cy.contains(".listing-row", companyName).find('button[aria-label="Legg til i Bedriftsbase"]').click();
+    cy.get(".modal-body textarea[placeholder*='bedriften']").type("Promotert fra internship");
+    cy.get(".modal-body input[placeholder='Oslo / Norge']").type("Oslo");
+    cy.get(".modal-body input[placeholder='Data Scientist']").type("Analyst");
+    cy.get(".role-type-input button").click();
+    cy.contains(".modal-footer button", "Legg til i Bedriftsbase").click();
 
-    cy.get("input[placeholder*='selskap']").clear().type("InCommodities");
-    cy.contains(".company-card", "InCommodities").contains("button", "Legg til").click();
+    cy.contains(".listing-row", companyName).find('button[aria-label="Legg til i Bedriftsbase"]').should("not.exist");
+    cy.contains(".listing-row", companyName).find('[aria-label="I Bedriftsbasen"]').should("be.visible");
 
-    cy.contains("button", "Lagre custom path").click();
-    cy.contains("h2", "Energy Quant-ruten").should("be.visible");
-    cy.contains(".path-line.saved", "Statkraft").should("be.visible");
-    cy.contains(".path-line.saved", "InCommodities").should("be.visible");
-
-    cy.on("window:confirm", () => true);
-    cy.contains("button", "Slett").click();
-    cy.contains("h2", "Energy Quant-ruten").should("not.exist");
-
-    cy.reload();
-    cy.contains("button", "Custom Paths").click();
-    cy.contains("h2", "Energy Quant-ruten").should("not.exist");
+    cy.visit("/companies");
+    cy.get("input[placeholder*='selskap']").clear().type(companyName);
+    cy.contains(".company-card", companyName).should("be.visible");
   });
 
   it("loads the career board and shows company nodes", () => {
@@ -33,26 +32,6 @@ describe("CareerCenter custom paths", () => {
     cy.get(".vue-flow").should("exist");
     cy.contains(".board-palette", "Bedrifter").should("be.visible");
     cy.contains(".board-node", "Statkraft").should("be.visible");
-  });
-
-  it("renames a custom path and persists the new name", () => {
-    cy.visit("/");
-
-    cy.contains("button", "Custom Paths").click();
-    cy.get("input[placeholder*='selskap']").clear().type("Statkraft");
-    cy.contains(".company-card", "Statkraft").contains("button", "Legg til").click();
-    cy.contains("button", "Lagre custom path").click();
-    cy.contains("h2", "Energy Quant-ruten").should("be.visible");
-
-    cy.contains("article.panel", "Energy Quant-ruten").contains("button", "Rediger navn").click();
-    cy.get(".path-header .inline-title").clear().type("Min Energy-rute");
-    cy.get(".path-header .actions").contains("button", "Lagre").click();
-
-    cy.contains("h2", "Min Energy-rute").should("be.visible");
-
-    cy.reload();
-    cy.contains("button", "Custom Paths").click();
-    cy.contains("h2", "Min Energy-rute").should("be.visible");
   });
 
   it("adds a note on the career board via pane click", () => {

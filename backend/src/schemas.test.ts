@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { courseSchema, pathSchema } from "./schemas.js";
+import { companySchema, courseSchema } from "./schemas.js";
 
 describe("schemas", () => {
   it("parses valid course payloads", () => {
@@ -16,7 +16,7 @@ describe("schemas", () => {
     expect(parsed.courseCode).toBe("TDT4173");
   });
 
-  it("rejects invalid path payloads", () => {
-    expect(() => pathSchema.parse({ name: "" })).toThrow();
+  it("rejects invalid company payloads", () => {
+    expect(() => companySchema.parse({ name: "" })).toThrow();
   });
 });

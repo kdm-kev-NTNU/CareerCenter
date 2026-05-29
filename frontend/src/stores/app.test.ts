@@ -8,7 +8,6 @@ vi.mock("../api/index.js", () => ({
     tracks: vi.fn(),
     companies: vi.fn(),
     courses: vi.fn(),
-    paths: vi.fn(),
     competitions: vi.fn(),
     settings: vi.fn(),
     internships: vi.fn(),
@@ -33,7 +32,6 @@ describe("useAppStore", () => {
     mockedApi.tracks.mockResolvedValue([]);
     mockedApi.companies.mockResolvedValue([]);
     mockedApi.courses.mockResolvedValue([]);
-    mockedApi.paths.mockResolvedValue([]);
     mockedApi.competitions.mockResolvedValue([]);
     mockedApi.settings.mockResolvedValue({ statuses: [], locations: [], requirementTypes: [] });
     mockedApi.internships.mockResolvedValue([]);

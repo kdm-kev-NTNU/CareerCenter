@@ -85,25 +85,32 @@ describe("useEducationBachelorStore", () => {
   });
 
   it("loadAll populates entries, folders, and files", async () => {
+    mockedApi.bachelorKnowledge.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
     const store = useEducationBachelorStore();
     await store.loadAll();
     expect(store.entries).toEqual([]);
+    expect(store.entryCount).toBe(0);
     expect(store.folderTree).toEqual(folderTree);
     expect(store.files).toEqual([]);
+    expect(mockedApi.bachelorKnowledge).toHaveBeenCalledWith(null);
+    expect(mockedApi.bachelorKnowledge).toHaveBeenCalledWith();
   });
 
   it("navigates folders and builds breadcrumbs", async () => {
+    mockedApi.bachelorKnowledge.mockResolvedValue([]);
     const store = useEducationBachelorStore();
     await store.loadAll();
     await store.navigateToFolder("folder-2");
     expect(mockedApi.bachelorFiles).toHaveBeenLastCalledWith("folder-2");
+    expect(mockedApi.bachelorKnowledge).toHaveBeenLastCalledWith("folder-2");
     expect(store.breadcrumbs.map((crumb) => crumb.name)).toEqual(["Rot", "Algoritmer", "Sortering"]);
     expect(store.childFolders).toHaveLength(0);
   });
 
-  it("creates and removes knowledge entries", async () => {
+  it("creates and removes knowledge entries in the current folder", async () => {
     mockedApi.createBachelorKnowledge.mockResolvedValue({
       id: "k1",
+      folderId: null,
       courseName: "Algoritmer",
       topic: "Heap",
       notes: "",
@@ -113,9 +120,14 @@ describe("useEducationBachelorStore", () => {
     store.newEntry.courseName = "Algoritmer";
     store.newEntry.topic = "Heap";
     await store.addEntry();
+    expect(mockedApi.createBachelorKnowledge).toHaveBeenCalledWith(
+      expect.objectContaining({ folderId: null, courseName: "Algoritmer", topic: "Heap" })
+    );
     expect(store.entries).toHaveLength(1);
+    expect(store.entryCount).toBe(1);
     await store.removeEntry("k1");
     expect(mockedApi.deleteBachelorKnowledge).toHaveBeenCalledWith("k1");
+    expect(store.entryCount).toBe(0);
   });
 
   it("creates, renames, and deletes folders", async () => {

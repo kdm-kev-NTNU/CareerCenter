@@ -15,7 +15,6 @@ model User {
   lockedUntil        DateTime?
   createdAt          DateTime            @default(now())
   courses            CoursePlan[]
-  paths              CareerPath[]
   selfStudyCourses   SelfStudyCourse[]
   educationBooks     EducationBook[]
   learningPlatforms  LearningPlatform[]
@@ -60,7 +59,6 @@ model Company {
   upside         String
   relevanceScore Int
   websiteUrl     String?
-  pathSteps        CareerPathStep[]
   internships      Internship[]
   graduatePrograms GraduateProgram[]
 }
@@ -83,30 +81,6 @@ model CareerMapNode {
   trackId      String?
   sortOrder    Int              @default(0)
   track        CareerTrackSetting? @relation(fields: [trackId], references: [id], onDelete: SetNull)
-}
-
-model CareerPath {
-  id          String           @id @default(cuid())
-  userId      String
-  name        String
-  description String           @default("")
-  targetRole  String           @default("")
-  horizon     String           @default("")
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  steps       CareerPathStep[]
-}
-
-model CareerPathStep {
-  id         String     @id @default(cuid())
-  pathId     String
-  companyId  String
-  order      Int
-  note       String     @default("")
-  targetRole String     @default("")
-  path       CareerPath @relation(fields: [pathId], references: [id], onDelete: Cascade)
-  company    Company    @relation(fields: [companyId], references: [id])
 }
 
 model InternshipStatusOption {
@@ -224,26 +198,29 @@ model LearningPlatform {
 }
 
 model BachelorKnowledge {
-  id         String @id @default(cuid())
+  id         String          @id @default(cuid())
   userId     String
+  folderId   String?
   courseName String
   topic      String
-  notes      String @default("")
-  sortOrder  Int    @default(0)
-  user       User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notes      String          @default("")
+  sortOrder  Int             @default(0)
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folder     BachelorFolder? @relation(fields: [folderId], references: [id], onDelete: Cascade)
 }
 
 model BachelorFolder {
-  id        String           @id @default(cuid())
+  id        String              @id @default(cuid())
   userId    String
   parentId  String?
   name      String
-  sortOrder Int              @default(0)
-  createdAt DateTime         @default(now())
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  parent    BachelorFolder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
-  children  BachelorFolder[] @relation("FolderTree")
+  sortOrder Int                 @default(0)
+  createdAt DateTime            @default(now())
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent    BachelorFolder?     @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  BachelorFolder[]    @relation("FolderTree")
   files     BachelorFile[]
+  knowledge BachelorKnowledge[]
 }
 
 model BachelorFile {

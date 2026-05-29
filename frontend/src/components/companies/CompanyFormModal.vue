@@ -4,9 +4,21 @@ import AppModal from "../listing/AppModal.vue";
 import { useCareerMapStore } from "../../stores/careerMap.js";
 import { useCompaniesStore } from "../../stores/companies.js";
 
-defineProps<{
-  open: boolean;
-}>();
+const props = withDefaults(
+  defineProps<{
+    open: boolean;
+    title?: string;
+    submitLabel?: string;
+    error?: string | null;
+    delegateSave?: boolean;
+  }>(),
+  {
+    title: "Legg til bedrift",
+    submitLabel: "Legg til bedrift",
+    error: null,
+    delegateSave: false
+  }
+);
 
 const emit = defineEmits<{
   close: [];
@@ -20,6 +32,10 @@ const difficulties = ["Medium", "Medium/high", "High", "Very high"] as const;
 const upsides = ["High", "Very high"] as const;
 
 async function save() {
+  if (props.delegateSave) {
+    emit("saved");
+    return;
+  }
   const created = await companiesStore.saveCompany();
   if (created) {
     emit("saved");
@@ -36,12 +52,12 @@ function onClose() {
 <template>
   <AppModal
     :open="open"
-    title="Legg til bedrift"
+    :title="props.title"
     size="md"
     persist-key="company-form"
     @close="onClose"
   >
-    <p v-if="companiesStore.error" class="form-error">{{ companiesStore.error }}</p>
+    <p v-if="props.error || companiesStore.error" class="form-error">{{ props.error || companiesStore.error }}</p>
     <form class="form-grid" @submit.prevent="save">
       <label class="wide-field">
         Navn
@@ -117,7 +133,7 @@ function onClose() {
     <template #footer>
       <button type="button" class="ghost" @click="onClose">Avbryt</button>
       <button type="button" class="primary" :disabled="companiesStore.saving" @click="save">
-        {{ companiesStore.saving ? "Lagrer…" : "Legg til bedrift" }}
+        {{ companiesStore.saving ? "Lagrer…" : props.submitLabel }}
       </button>
     </template>
   </AppModal>

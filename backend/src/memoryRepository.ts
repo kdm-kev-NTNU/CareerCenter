@@ -7,8 +7,6 @@ import type {
   CareerBoard,
   CareerBoardSummary,
   CareerMapNode,
-  CareerPath,
-  CareerPathStep,
   CareerTrack,
   CareerTrackSetting,
   Company,
@@ -37,7 +35,6 @@ import type {
   CourseInput,
   EducationBookInput,
   LearningPlatformInput,
-  PathInput,
   Repository,
   SelfStudyCourseInput
 } from "./repository.js";
@@ -55,7 +52,6 @@ export class MemoryRepository implements Repository {
   private users = new Map<string, AuthUserRecord>();
   private usersByName = new Map<string, string>();
   private courses = new Map<string, CoursePlan & { userId: string }>();
-  private paths = new Map<string, CareerPath & { userId: string }>();
   private competitions = new Map<string, CompetitionEntry & { userId: string }>();
   private selfStudyCourses = new Map<string, SelfStudyCourse & { userId: string }>();
   private educationBooks = new Map<string, EducationBook & { userId: string }>();
@@ -253,36 +249,6 @@ export class MemoryRepository implements Repository {
     return company;
   }
 
-  async listPaths(userId: string): Promise<CareerPath[]> {
-    return [...this.paths.values()].filter((path) => path.userId === userId).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  }
-
-  async getPath(userId: string, id: string): Promise<CareerPath | null> {
-    const path = this.paths.get(id);
-    return path?.userId === userId ? this.hydratePath(path) : null;
-  }
-
-  async createPath(userId: string, input: PathInput): Promise<CareerPath> {
-    const now = new Date().toISOString();
-    const path: CareerPath & { userId: string } = { id: nanoid(), userId, ...input, steps: this.createSteps(input.steps), createdAt: now, updatedAt: now };
-    this.paths.set(path.id, path);
-    return this.hydratePath(path);
-  }
-
-  async updatePath(userId: string, id: string, input: PathInput): Promise<CareerPath | null> {
-    const existing = this.paths.get(id);
-    if (!existing || existing.userId !== userId) return null;
-    const path: CareerPath & { userId: string } = { ...existing, ...input, steps: this.createSteps(input.steps), updatedAt: new Date().toISOString() };
-    this.paths.set(id, path);
-    return this.hydratePath(path);
-  }
-
-  async deletePath(userId: string, id: string): Promise<boolean> {
-    const existing = this.paths.get(id);
-    if (!existing || existing.userId !== userId) return false;
-    return this.paths.delete(id);
-  }
-
   async listCompetitions(userId: string): Promise<CompetitionEntry[]> {
     return [...this.competitions.values()]
       .filter((entry) => entry.userId === userId)
@@ -388,9 +354,12 @@ export class MemoryRepository implements Repository {
     return this.learningPlatforms.delete(id);
   }
 
-  async listBachelorKnowledge(userId: string): Promise<BachelorKnowledge[]> {
+  async listBachelorKnowledge(userId: string, folderId?: string | null): Promise<BachelorKnowledge[]> {
     return [...this.bachelorKnowledge.values()]
-      .filter((entry) => entry.userId === userId)
+      .filter(
+        (entry) =>
+          entry.userId === userId && (folderId === undefined || entry.folderId === folderId)
+      )
       .sort((a, b) => a.sortOrder - b.sortOrder);
   }
 
@@ -616,6 +585,7 @@ export class MemoryRepository implements Repository {
   private toBachelorKnowledge(id: string, input: BachelorKnowledgeInput): BachelorKnowledge {
     return {
       id,
+      folderId: input.folderId ?? null,
       courseName: input.courseName,
       topic: input.topic,
       notes: input.notes,
@@ -644,19 +614,6 @@ export class MemoryRepository implements Repository {
 
   private cloneCompetition(entry: CompetitionEntry): CompetitionEntry {
     return { ...entry };
-  }
-
-  private createSteps(steps: PathInput["steps"]): CareerPathStep[] {
-    return steps.map((step) => ({ ...step, id: nanoid() })).sort((a, b) => a.order - b.order);
-  }
-
-  private hydratePath(path: CareerPath): CareerPath {
-    return {
-      ...path,
-      steps: path.steps
-        .map((step) => ({ ...step, company: this.companies.find((company) => company.id === step.companyId) }))
-        .sort((a, b) => a.order - b.order)
-    };
   }
 
   private cloneNode(node: StoredNode): CareerMapNode {

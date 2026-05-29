@@ -36,12 +36,8 @@ vi.mock("./api/index.js", () => ({
     resetTrack: vi.fn(),
     companies: vi.fn(),
     courses: vi.fn(),
-    paths: vi.fn(),
     createCourse: vi.fn(),
     deleteCourse: vi.fn(),
-    createPath: vi.fn(),
-    updatePath: vi.fn(),
-    deletePath: vi.fn(),
     competitions: vi.fn(),
     settings: vi.fn(),
     internships: vi.fn(),
@@ -76,10 +72,7 @@ const defaultBoard = {
   updatedAt: "2026-01-01"
 };
 
-function mockInitialData(
-  paths: any[] = [{ id: "path-1", name: "Saved Quant Path", description: "A saved path", targetRole: "Quant", horizon: "5+ years", steps: [], createdAt: "2026-01-01", updatedAt: "2026-01-01" }],
-  companies: any[] = []
-) {
+function mockInitialData(companies: any[] = []) {
   mockedApi.tracks.mockResolvedValue(careerTrackDefaults);
   mockedApi.boards.mockResolvedValue([
     { id: defaultBoard.id, name: defaultBoard.name, description: defaultBoard.description, isDefault: true, createdAt: defaultBoard.createdAt, updatedAt: defaultBoard.updatedAt }
@@ -88,7 +81,6 @@ function mockInitialData(
   mockedApi.updateBoard.mockResolvedValue(defaultBoard);
   mockedApi.companies.mockResolvedValue(companies);
   mockedApi.courses.mockResolvedValue([]);
-  mockedApi.paths.mockResolvedValue(paths);
   mockedApi.competitions.mockResolvedValue([]);
     mockedApi.settings.mockResolvedValue({ statuses: [], locations: [], requirementTypes: [] });
     mockedApi.internships.mockResolvedValue([]);
@@ -152,36 +144,6 @@ describe("App", () => {
     expect(wrapper.text()).toContain("Master Plan");
   });
 
-  it("removes a saved path after a successful delete", async () => {
-    mockInitialData();
-    mockedApi.deletePath.mockResolvedValue(undefined);
-    vi.stubGlobal("confirm", () => true);
-    const wrapper = await mountApp();
-    await goTo("/paths");
-    expect(wrapper.text()).toContain("Saved Quant Path");
-
-    await wrapper.get(".actions .danger").trigger("click");
-    vi.unstubAllGlobals();
-    await flushPromises();
-
-    expect(mockedApi.deletePath).toHaveBeenCalledWith("path-1");
-    expect(wrapper.text()).not.toContain("Saved Quant Path");
-  });
-
-  it("keeps a saved path visible when delete fails", async () => {
-    mockInitialData();
-    mockedApi.deletePath.mockRejectedValue(new Error("Delete failed"));
-    vi.stubGlobal("confirm", () => true);
-    const wrapper = await mountApp();
-    await goTo("/paths");
-    await wrapper.get(".actions .danger").trigger("click");
-    vi.unstubAllGlobals();
-    await flushPromises();
-
-    expect(wrapper.text()).toContain("Saved Quant Path");
-    expect(wrapper.text()).toContain("Delete failed");
-  });
-
   it("adds and removes a course from the master plan", async () => {
     mockInitialData([]);
     mockedApi.createCourse.mockResolvedValue({ id: "course-1", semester: 7, courseCode: "TDT1000", title: "Data Science", credits: 7.5, status: "planned", notes: "Forecasting", trackTags: ["ENERGY_QUANT"], sortOrder: 0 });
@@ -200,32 +162,6 @@ describe("App", () => {
 
     expect(mockedApi.deleteCourse).toHaveBeenCalledWith("course-1");
     expect(wrapper.text()).not.toContain("TDT1000");
-  });
-
-  it("builds and duplicates a custom path", async () => {
-    const statkraft: any = { id: "statkraft", name: "Statkraft", description: "Power trading", tracks: ["ENERGY_QUANT"], tier: 1, geography: "Norway", roleTypes: ["Quant"], difficulty: "High", upside: "High", relevanceScore: 95 };
-    mockInitialData([], [statkraft]);
-    mockedApi.createPath
-      .mockResolvedValueOnce({ id: "path-2", name: "Energy Quant-ruten", description: "NTNU KI til global commodity trading", targetRole: "Quantitative Analyst", horizon: "5+ years", steps: [{ id: "step-1", companyId: "statkraft", order: 0, note: "Forste sterke signal", targetRole: "Quantitative Analyst", company: statkraft }], createdAt: "2026-01-01", updatedAt: "2026-01-01" })
-      .mockResolvedValueOnce({ id: "path-3", name: "Energy Quant-ruten kopi", description: "NTNU KI til global commodity trading", targetRole: "Quantitative Analyst", horizon: "5+ years", steps: [{ id: "step-2", companyId: "statkraft", order: 0, note: "Forste sterke signal", targetRole: "Quantitative Analyst", company: statkraft }], createdAt: "2026-01-01", updatedAt: "2026-01-01" });
-    const wrapper = await mountApp();
-    await goTo("/paths");
-    await wrapper.get(".company-card .secondary").trigger("click");
-    await wrapper.get(".builder .primary").trigger("click");
-    await flushPromises();
-
-    expect(mockedApi.createPath).toHaveBeenCalledWith(expect.objectContaining({ name: "Energy Quant-ruten" }));
-    expect(wrapper.text()).toContain("Energy Quant-ruten");
-
-    const duplicateButton = wrapper
-      .findAll(".actions button.secondary")
-      .find((button) => button.text() === "Dupliser");
-    expect(duplicateButton).toBeDefined();
-    await duplicateButton!.trigger("click");
-    await flushPromises();
-
-    expect(mockedApi.createPath).toHaveBeenLastCalledWith(expect.objectContaining({ name: "Energy Quant-ruten kopi" }));
-    expect(wrapper.text()).toContain("Energy Quant-ruten kopi");
   });
 
   it("renders the career board canvas", async () => {

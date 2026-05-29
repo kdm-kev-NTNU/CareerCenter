@@ -139,33 +139,26 @@ function onMoveFile(fileId: string) {
           </div>
           <p v-else>Ingen filer i denne mappen ennå.</p>
         </article>
+
+        <article class="panel">
+          <h2>Notater (lærdom)</h2>
+          <p class="muted-hint">Notater knyttet til {{ store.breadcrumbs[store.breadcrumbs.length - 1]?.name ?? "Rot" }}.</p>
+          <form class="form-grid" @submit.prevent="store.addEntry()">
+            <label>Fagnavn<input v-model="store.newEntry.courseName" placeholder="Algoritmer og datastrukturer" required /></label>
+            <label>Tema / konsept<input v-model="store.newEntry.topic" placeholder="Grafalgoritmer, BFS/DFS" required /></label>
+            <label class="wide-field">Notater<textarea v-model="store.newEntry.notes" placeholder="Det du har lært og vil huske" /></label>
+            <button class="primary" type="submit">Legg til lærdom</button>
+          </form>
+          <div v-for="entry in store.entries" :key="entry.id" class="course-card">
+            <div>
+              <strong>{{ entry.courseName }} — {{ entry.topic }}</strong>
+              <p v-if="entry.notes">{{ entry.notes }}</p>
+            </div>
+            <button type="button" class="icon" aria-label="Slett oppføring" @click="store.removeEntry(entry.id)">x</button>
+          </div>
+          <p v-if="!store.entries.length">Ingen notater i denne mappen ennå.</p>
+        </article>
       </div>
     </div>
-
-    <article class="panel">
-      <div class="panel-header-row">
-        <h2>Notater (lærdom)</h2>
-        <button type="button" class="ghost" @click="store.showNotes = !store.showNotes">
-          {{ store.showNotes ? "Skjul" : "Vis" }}
-        </button>
-      </div>
-      <template v-if="store.showNotes">
-        <form class="form-grid" @submit.prevent="store.addEntry()">
-          <label>Fagnavn<input v-model="store.newEntry.courseName" placeholder="Algoritmer og datastrukturer" required /></label>
-          <label>Tema / konsept<input v-model="store.newEntry.topic" placeholder="Grafalgoritmer, BFS/DFS" required /></label>
-          <label class="wide-field">Notater<textarea v-model="store.newEntry.notes" placeholder="Det du har lært og vil huske" /></label>
-          <button class="primary" type="submit">Legg til lærdom</button>
-        </form>
-        <div v-for="entry in store.entries" :key="entry.id" class="course-card">
-          <div>
-            <strong>{{ entry.courseName }} — {{ entry.topic }}</strong>
-            <p v-if="entry.notes">{{ entry.notes }}</p>
-          </div>
-          <button type="button" class="icon" aria-label="Slett oppføring" @click="store.removeEntry(entry.id)">x</button>
-        </div>
-        <p v-if="!store.entries.length">Ingen bachelor-lærdom lagt inn ennå.</p>
-      </template>
-      <p v-else class="muted-hint">Tekstnotater fra bachelor — skjult som standard når du jobber med filer.</p>
-    </article>
   </section>
 </template>

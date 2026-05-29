@@ -1,7 +1,6 @@
 import { careerMapApi } from "./careerMap.js";
 import { companiesApi } from "./companies.js";
 import { coursesApi } from "./courses.js";
-import { pathsApi } from "./paths.js";
 import { competitionsApi } from "./competitions.js";
 import { graduateProgramSettingsApi } from "./graduateProgramSettings.js";
 import { graduateProgramsApi } from "./graduatePrograms.js";
@@ -14,7 +13,6 @@ export const api = {
   ...careerMapApi,
   ...coursesApi,
   ...companiesApi,
-  ...pathsApi,
   ...competitionsApi,
   ...internshipsApi,
   ...internshipSettingsApi,
@@ -27,7 +25,6 @@ export const api = {
 export { careerMapApi } from "./careerMap.js";
 export { companiesApi } from "./companies.js";
 export { coursesApi } from "./courses.js";
-export { pathsApi } from "./paths.js";
 export { competitionsApi } from "./competitions.js";
 export { graduateProgramSettingsApi } from "./graduateProgramSettings.js";
 export { graduateProgramsApi } from "./graduatePrograms.js";
@@ -53,7 +50,6 @@ export type {
   InternshipRequirementItemPayload,
   LearningPlatformPayload,
   MapNodePayload,
-  PathPayload,
   SelfStudyCoursePayload,
   TrackPayload
 } from "../types/index.js";

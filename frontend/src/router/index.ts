@@ -13,7 +13,6 @@ import EducationOverviewView from "../views/education/EducationOverviewView.vue"
 import EducationPlatformsView from "../views/education/EducationPlatformsView.vue";
 import LoginView from "../views/LoginView.vue";
 import MasterPlanView from "../views/MasterPlanView.vue";
-import PathsView from "../views/PathsView.vue";
 import CompetitionsView from "../views/CompetitionsView.vue";
 import GraduateProgramsView from "../views/GraduateProgramsView.vue";
 import InternshipsView from "../views/InternshipsView.vue";
@@ -56,12 +55,6 @@ const router = createRouter({
           name: "companies",
           component: CompaniesView,
           meta: { title: "Bedriftsbase" }
-        },
-        {
-          path: "paths",
-          name: "paths",
-          component: PathsView,
-          meta: { title: "Custom Paths" }
         },
         {
           path: "internships",

@@ -19,14 +19,6 @@ export interface CoursePayload {
   sortOrder: number;
 }
 
-export interface PathPayload {
-  name: string;
-  description: string;
-  targetRole: string;
-  horizon: string;
-  steps: Array<{ companyId: string; order: number; note: string; targetRole: string }>;
-}
-
 export interface MapNodePayload {
   title: string;
   items: string[];
@@ -93,6 +85,7 @@ export interface LearningPlatformPayload {
 }
 
 export interface BachelorKnowledgePayload {
+  folderId?: string | null;
   courseName: string;
   topic: string;
   notes: string;

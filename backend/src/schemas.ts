@@ -45,21 +45,6 @@ export const courseSchema = z.object({
   sortOrder: z.number().int().default(0)
 });
 
-export const pathSchema = z.object({
-  name: z.string().min(1),
-  description: z.string().default(""),
-  targetRole: z.string().default(""),
-  horizon: z.string().default(""),
-  steps: z.array(
-    z.object({
-      companyId: z.string().min(1),
-      order: z.number().int().min(0),
-      note: z.string().default(""),
-      targetRole: z.string().default("")
-    })
-  )
-});
-
 export const mapNodeSchema = z.object({
   title: z.string().min(1),
   items: z.array(z.string().min(1))
@@ -132,6 +117,7 @@ export const learningPlatformSchema = z.object({
 });
 
 export const bachelorKnowledgeSchema = z.object({
+  folderId: z.union([z.string().min(1), z.null()]).optional(),
   courseName: z.string().min(1),
   topic: z.string().min(1),
   notes: z.string().default(""),

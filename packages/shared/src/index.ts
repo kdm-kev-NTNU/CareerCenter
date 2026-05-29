@@ -66,6 +66,7 @@ export interface LearningPlatform {
 
 export interface BachelorKnowledge {
   id: string;
+  folderId: string | null;
   courseName: string;
   topic: string;
   notes: string;
@@ -124,26 +125,6 @@ export interface Company {
   upside: "High" | "Very high";
   relevanceScore: number;
   websiteUrl?: string;
-}
-
-export interface CareerPathStep {
-  id: string;
-  companyId: string;
-  order: number;
-  note: string;
-  targetRole: string;
-  company?: Company;
-}
-
-export interface CareerPath {
-  id: string;
-  name: string;
-  description: string;
-  targetRole: string;
-  horizon: string;
-  steps: CareerPathStep[];
-  createdAt: string;
-  updatedAt: string;
 }
 
 export interface CareerMapNode {
@@ -228,10 +209,6 @@ export function assertSemester(value: number): 7 | 8 | 9 | 10 {
     return value as 7 | 8 | 9 | 10;
   }
   throw new Error("Semester må være 7, 8, 9 eller 10.");
-}
-
-export function formatPath(companies: Pick<Company, "name">[]): string {
-  return ["NTNU KI", ...companies.map((company) => company.name)].join(" -> ");
 }
 
 export const competitionTypes = ["hackathon", "competition", "case_competition", "datathon", "other"] as const;
