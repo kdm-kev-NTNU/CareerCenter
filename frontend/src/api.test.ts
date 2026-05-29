@@ -24,14 +24,18 @@ describe("api client", () => {
   });
 
   it("sets a JSON content type when sending a body", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({ id: "path-1" }));
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({ id: "company-1" }));
 
-    await api.createPath({
-      name: "Energy Quant-ruten",
-      description: "",
-      targetRole: "Quant",
-      horizon: "5+ years",
-      steps: []
+    await api.createCompany({
+      name: "NyBedrift AS",
+      description: "Test",
+      tracks: ["ENERGY_QUANT"],
+      tier: 1,
+      geography: "Oslo",
+      roleTypes: ["Data Scientist"],
+      difficulty: "High",
+      upside: "High",
+      relevanceScore: 80
     });
 
     const [, options] = fetchMock.mock.calls[0];
@@ -41,7 +45,7 @@ describe("api client", () => {
   it("does not send a JSON content type for empty DELETE requests", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 204 }));
 
-    await api.deletePath("path-1");
+    await api.deleteCourse("course-1");
 
     const [, options] = fetchMock.mock.calls[0];
     expect((options?.headers as Headers).has("content-type")).toBe(false);
@@ -74,14 +78,6 @@ describe("api client", () => {
       trackTags: ["ENERGY_QUANT"],
       sortOrder: 0
     });
-    await api.paths();
-    await api.updatePath("path-1", {
-      name: "Energy Quant-ruten",
-      description: "",
-      targetRole: "Quant",
-      horizon: "5+ years",
-      steps: []
-    });
     await api.createCourse({
       semester: 8,
       courseCode: "TDT4171",
@@ -106,8 +102,6 @@ describe("api client", () => {
       "/api/companies",
       "/api/courses",
       "/api/courses/course-1",
-      "/api/paths",
-      "/api/paths/path-1",
       "/api/courses",
       "/api/courses/course-1",
       "/api/career-map/nodes/energy-1",
@@ -118,21 +112,20 @@ describe("api client", () => {
       "/api/career-tracks/ENERGY_QUANT"
     ]);
     expect(fetchMock.mock.calls[4][1]?.method).toBe("PUT");
-    expect(fetchMock.mock.calls[6][1]?.method).toBe("PUT");
-    expect(fetchMock.mock.calls[7][1]?.method).toBe("POST");
-    expect(fetchMock.mock.calls[8][1]?.method).toBe("DELETE");
-    expect(fetchMock.mock.calls[9][1]?.method).toBe("PUT");
-    expect(fetchMock.mock.calls[10][1]?.method).toBe("POST");
-    expect(fetchMock.mock.calls[12][1]?.method).toBe("PUT");
-    expect(fetchMock.mock.calls[13][1]?.method).toBe("POST");
-    expect(fetchMock.mock.calls[14][1]?.method).toBe("DELETE");
+    expect(fetchMock.mock.calls[5][1]?.method).toBe("POST");
+    expect(fetchMock.mock.calls[6][1]?.method).toBe("DELETE");
+    expect(fetchMock.mock.calls[7][1]?.method).toBe("PUT");
+    expect(fetchMock.mock.calls[8][1]?.method).toBe("POST");
+    expect(fetchMock.mock.calls[10][1]?.method).toBe("PUT");
+    expect(fetchMock.mock.calls[11][1]?.method).toBe("POST");
+    expect(fetchMock.mock.calls[12][1]?.method).toBe("DELETE");
     expect(fetchMock.mock.calls.every(([, init]) => init?.credentials === "include")).toBe(true);
   });
 
   it("throws response text for failed requests", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("Path ikke funnet.", { status: 404 }));
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("Kurs ikke funnet.", { status: 404 }));
 
-    await expect(api.deletePath("missing")).rejects.toThrow("Path ikke funnet.");
+    await expect(api.deleteCourse("missing")).rejects.toThrow("Kurs ikke funnet.");
   });
 
   it("throws a default message when a failed request has no response text", async () => {

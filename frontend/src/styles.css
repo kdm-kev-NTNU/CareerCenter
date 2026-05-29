@@ -137,7 +137,7 @@ nav button.active, nav button:hover { background: #1f2937; color: #ffffff; }
 }
 .panel.strong { background: linear-gradient(135deg, #ffffff, #eef8f3); }
 .panel.strong strong { display: block; font-size: 2.2rem; line-height: 1; margin-bottom: 10px; }
-.company-row, .course-card, .company-card, .path-header {
+.company-row, .course-card, .company-card {
   display: flex;
   justify-content: space-between;
   gap: 14px;
@@ -254,27 +254,6 @@ nav button.active, nav button:hover { background: #1f2937; color: #ffffff; }
 .company-list { max-height: 720px; overflow: auto; }
 .company-card { align-items: center; }
 .company-card p { margin-bottom: 8px; }
-.path-line {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
-  padding: 12px;
-  background: #f8fafc;
-  border: 1px dashed #cbd5e1;
-  border-radius: 8px;
-}
-.path-line span {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 11px;
-  border-radius: 8px;
-  background: #fff;
-  border: 1px solid var(--border);
-  font-weight: 800;
-}
-.path-line.saved { border-style: solid; }
 .actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .filter-toggle {
   display: flex;
@@ -408,6 +387,24 @@ nav button.active, nav button:hover { background: #1f2937; color: #ffffff; }
 .listing-icon-btn:hover { background: #e2e8f0; }
 .listing-icon-btn--danger { color: #b42318; }
 .listing-icon-btn--danger:hover { background: #fee2e2; }
+.listing-linked-hint {
+  display: block;
+  color: var(--accent, #0f766e);
+  font-size: 0.75rem;
+  margin-top: 2px;
+}
+.listing-db-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: var(--accent-soft, #e8f5ef);
+  color: var(--accent, #0f766e);
+  font-weight: 800;
+  font-size: 0.85rem;
+}
 
 .listing-detail {
   padding: 14px 16px 16px;

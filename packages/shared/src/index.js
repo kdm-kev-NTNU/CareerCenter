@@ -25,9 +25,6 @@ export function assertSemester(value) {
     }
     throw new Error("Semester må være 7, 8, 9 eller 10.");
 }
-export function formatPath(companies) {
-    return ["NTNU KI", ...companies.map((company) => company.name)].join(" -> ");
-}
 export const competitionTypes = ["hackathon", "competition", "case_competition", "datathon", "other"];
 export const competitionScopes = ["NORWAY", "NORDICS", "EUROPE", "GLOBAL"];
 export const competitionFormats = ["online", "onsite", "hybrid"];

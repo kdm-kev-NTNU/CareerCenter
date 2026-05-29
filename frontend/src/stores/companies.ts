@@ -43,6 +43,13 @@ export const useCompaniesStore = defineStore("companies", () => {
     error.value = null;
   }
 
+  function prepareForm(initialName?: string) {
+    resetForm();
+    if (initialName?.trim()) {
+      form.value.name = initialName.trim();
+    }
+  }
+
   function toggleTrack(track: CareerTrack) {
     const tracks = form.value.tracks;
     if (tracks.includes(track)) {
@@ -65,14 +72,21 @@ export const useCompaniesStore = defineStore("companies", () => {
     form.value.roleTypes = form.value.roleTypes.filter((entry) => entry !== role);
   }
 
-  async function saveCompany(): Promise<Company | null> {
-    error.value = null;
+  function validateForm(): string | null {
     if (!form.value.name.trim() || !form.value.description.trim() || !form.value.geography.trim()) {
-      error.value = "Navn, beskrivelse og geografi er påkrevd.";
-      return null;
+      return "Navn, beskrivelse og geografi er påkrevd.";
     }
     if (form.value.roleTypes.length === 0) {
-      error.value = "Legg til minst én rolletype.";
+      return "Legg til minst én rolletype.";
+    }
+    return null;
+  }
+
+  async function saveCompany(): Promise<Company | null> {
+    error.value = null;
+    const validationError = validateForm();
+    if (validationError) {
+      error.value = validationError;
       return null;
     }
     saving.value = true;
@@ -109,6 +123,8 @@ export const useCompaniesStore = defineStore("companies", () => {
     careerTrackOptions,
     loadCompanies,
     resetForm,
+    prepareForm,
+    validateForm,
     toggleTrack,
     addRoleType,
     removeRoleType,

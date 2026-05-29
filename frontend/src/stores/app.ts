@@ -4,7 +4,6 @@ import { api } from "../api/index.js";
 import { useCareerMapStore } from "./careerMap.js";
 import { useCompaniesStore } from "./companies.js";
 import { useCoursesStore } from "./courses.js";
-import { usePathsStore } from "./paths.js";
 import { useCompetitionsStore } from "./competitions.js";
 import { useEducationBachelorStore } from "./educationBachelor.js";
 import { useEducationBooksStore } from "./educationBooks.js";
@@ -36,7 +35,6 @@ export const useAppStore = defineStore("app", () => {
     const careerMapStore = useCareerMapStore();
     const companiesStore = useCompaniesStore();
     const coursesStore = useCoursesStore();
-    const pathsStore = usePathsStore();
     const competitionsStore = useCompetitionsStore();
     const internshipSettingsStore = useInternshipSettingsStore();
     const internshipsStore = useInternshipsStore();
@@ -53,7 +51,6 @@ export const useAppStore = defineStore("app", () => {
         api.tracks(),
         companiesStore.loadCompanies(),
         coursesStore.loadCourses(),
-        pathsStore.loadPaths(),
         competitionsStore.loadCompetitions()
       ]);
       careerMapStore.setTracks(tracks);

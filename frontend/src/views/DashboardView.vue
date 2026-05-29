@@ -4,10 +4,8 @@ import { competitionScopeLabels } from "@careercenter/shared";
 import { useCompaniesStore } from "../stores/companies.js";
 import { useCompetitionsStore } from "../stores/competitions.js";
 import { useCoursesStore } from "../stores/courses.js";
-import { usePathsStore } from "../stores/paths.js";
 
 const coursesStore = useCoursesStore();
-const pathsStore = usePathsStore();
 const companiesStore = useCompaniesStore();
 const competitionsStore = useCompetitionsStore();
 
@@ -25,13 +23,13 @@ function formatUpcomingDate(value?: string): string {
       <p>fag er lagt inn for semester 7-10.</p>
     </article>
     <article class="panel strong">
-      <h2>Lagrede paths</h2>
-      <strong>{{ pathsStore.paths.length }}</strong>
-      <p>custom paths er aktive i databasen.</p>
+      <h2>Bedrifter</h2>
+      <strong>{{ companiesStore.companies.length }}</strong>
+      <p>bedrifter er registrert i Bedriftsbasen.</p>
     </article>
     <article class="panel strong">
       <h2>Neste steg</h2>
-      <p>Start med 3-5 selskaper i en path og knytt fagvalgene til samme spor.</p>
+      <p>Legg til internship eller graduate-programmer og koble dem til bedrifter i Bedriftsbasen.</p>
     </article>
     <article class="panel wide">
       <div class="panel-heading-row">

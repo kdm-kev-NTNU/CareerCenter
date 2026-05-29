@@ -8,17 +8,6 @@ async function createTestApp() {
   return app;
 }
 
-const pathPayload = (name: string) => ({
-  name,
-  description: "NTNU til global commodity trading",
-  targetRole: "Quantitative Analyst",
-  horizon: "5+ years",
-  steps: [
-    { companyId: "statkraft", order: 0, note: "Norsk start", targetRole: "Data Scientist" },
-    { companyId: "incommodities", order: 1, note: "Algo trading", targetRole: "Algo Trader" }
-  ]
-});
-
 describe("CareerCenter API", () => {
   it("rejects login with wrong pin", async () => {
     const app = await buildServer({ repository: new MemoryRepository(), authDisabled: false });
@@ -183,49 +172,11 @@ describe("CareerCenter API", () => {
     await app.close();
   });
 
-  it("searches companies and creates a custom path", async () => {
+  it("searches companies by query and track", async () => {
     const app = await createTestApp();
 
     const companies = await app.inject({ method: "GET", url: "/api/companies?q=Statkraft&track=ENERGY_QUANT" });
     expect(companies.json()[0].name).toBe("Statkraft");
-
-    const created = await app.inject({
-      method: "POST",
-      url: "/api/paths",
-      payload: {
-        ...pathPayload("Energy Quant-ruten"),
-        steps: [...pathPayload("Energy Quant-ruten").steps, { companyId: "vitol", order: 2, note: "Global elite", targetRole: "Quant Analyst" }]
-      }
-    });
-    expect(created.statusCode).toBe(200);
-    expect(created.json().steps.map((step: any) => step.company.name)).toEqual(["Statkraft", "InCommodities", "Vitol"]);
-
-    await app.close();
-  });
-
-  it("deletes a custom path and removes it from future lists", async () => {
-    const app = await createTestApp();
-
-    const first = await app.inject({ method: "POST", url: "/api/paths", payload: pathPayload("Delete me") });
-    const second = await app.inject({ method: "POST", url: "/api/paths", payload: pathPayload("Keep me") });
-    expect(first.statusCode).toBe(200);
-    expect(second.statusCode).toBe(200);
-
-    const deleted = await app.inject({ method: "DELETE", url: `/api/paths/${first.json().id}` });
-    expect(deleted.statusCode).toBe(204);
-
-    const paths = await app.inject({ method: "GET", url: "/api/paths" });
-    expect(paths.json().map((path: any) => path.name)).toEqual(["Keep me"]);
-
-    await app.close();
-  });
-
-  it("returns 404 when deleting an unknown custom path", async () => {
-    const app = await createTestApp();
-
-    const deleted = await app.inject({ method: "DELETE", url: "/api/paths/missing-path" });
-    expect(deleted.statusCode).toBe(404);
-    expect(deleted.json()).toEqual({ message: "Path ikke funnet." });
 
     await app.close();
   });
@@ -242,12 +193,6 @@ describe("CareerCenter API", () => {
 
     const missingCourseDelete = await app.inject({ method: "DELETE", url: "/api/courses/missing-course" });
     expect(missingCourseDelete.statusCode).toBe(404);
-
-    const missingPathUpdate = await app.inject({ method: "PUT", url: "/api/paths/missing-path", payload: pathPayload("Missing") });
-    expect(missingPathUpdate.statusCode).toBe(404);
-
-    const missingPathGet = await app.inject({ method: "GET", url: "/api/paths/missing-path" });
-    expect(missingPathGet.statusCode).toBe(404);
 
     await app.close();
   });
@@ -665,14 +610,14 @@ describe("CareerCenter API", () => {
   it("returns 400 for invalid request bodies", async () => {
     const app = await createTestApp();
 
-    const invalidPath = await app.inject({
+    const invalidCompany = await app.inject({
       method: "POST",
-      url: "/api/paths",
+      url: "/api/companies",
       payload: { name: "" }
     });
-    expect(invalidPath.statusCode).toBe(400);
-    expect(invalidPath.json().message).toBe("Ugyldig forespørsel.");
-    expect(invalidPath.json().issues).toBeDefined();
+    expect(invalidCompany.statusCode).toBe(400);
+    expect(invalidCompany.json().message).toBe("Ugyldig forespørsel.");
+    expect(invalidCompany.json().issues).toBeDefined();
 
     await app.close();
   });

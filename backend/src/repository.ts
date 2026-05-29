@@ -8,8 +8,6 @@ import type {
   CareerBoard,
   CareerBoardSummary,
   CareerMapNode,
-  CareerPath,
-  CareerPathStep,
   CareerTrack,
   CareerTrackSetting,
   Company,
@@ -74,14 +72,6 @@ export interface CompanyInput {
   upside: Company["upside"];
   relevanceScore: number;
   websiteUrl?: string;
-}
-
-export interface PathInput {
-  name: string;
-  description: string;
-  targetRole: string;
-  horizon: string;
-  steps: Array<Omit<CareerPathStep, "id" | "company">>;
 }
 
 export interface CareerMapNodeInput {
@@ -287,11 +277,6 @@ export interface Repository {
   deleteCourse(userId: string, id: string): Promise<boolean>;
   listCompanies(query: CompanyQuery): Promise<Company[]>;
   createCompany(input: CompanyInput): Promise<Company>;
-  listPaths(userId: string): Promise<CareerPath[]>;
-  getPath(userId: string, id: string): Promise<CareerPath | null>;
-  createPath(userId: string, input: PathInput): Promise<CareerPath>;
-  updatePath(userId: string, id: string, input: PathInput): Promise<CareerPath | null>;
-  deletePath(userId: string, id: string): Promise<boolean>;
   listCompetitions(userId: string): Promise<CompetitionEntry[]>;
   createCompetition(userId: string, input: CompetitionInput): Promise<CompetitionEntry>;
   updateCompetition(userId: string, id: string, input: CompetitionInput): Promise<CompetitionEntry | null>;

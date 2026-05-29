@@ -8,6 +8,7 @@ import ListingRowActions from "../components/listing/ListingRowActions.vue";
 import ListingTable from "../components/listing/ListingTable.vue";
 import ListingToolbar from "../components/listing/ListingToolbar.vue";
 import StatusBadge from "../components/listing/StatusBadge.vue";
+import CompanyFormModal from "../components/companies/CompanyFormModal.vue";
 import { useListingExpand } from "../composables/useListingExpand.js";
 import { useCareerMapStore } from "../stores/careerMap.js";
 import { useCompaniesStore } from "../stores/companies.js";
@@ -23,6 +24,9 @@ const appStore = useAppStore();
 const { toggleExpand, isExpanded } = useListingExpand();
 
 const modalOpen = ref(false);
+const promoteModalOpen = ref(false);
+const promotingProgramId = ref<string | null>(null);
+const promoteError = ref("");
 const modalError = ref("");
 const newStatusLabel = ref("");
 const newLocationLabel = ref("");
@@ -90,6 +94,36 @@ async function submitProgram() {
     closeModal();
   } catch (caught) {
     modalError.value = caught instanceof Error ? caught.message : "Kunne ikke lagre graduate-program.";
+  }
+}
+
+function openPromoteModal(program: GraduateProgram) {
+  promoteError.value = "";
+  promotingProgramId.value = program.id;
+  companiesStore.prepareForm(program.companyName);
+  promoteModalOpen.value = true;
+}
+
+function closePromoteModal() {
+  promoteModalOpen.value = false;
+  promotingProgramId.value = null;
+  promoteError.value = "";
+  companiesStore.resetForm();
+}
+
+async function submitPromote() {
+  if (!promotingProgramId.value) return;
+  promoteError.value = "";
+  const validationError = companiesStore.validateForm();
+  if (validationError) {
+    promoteError.value = validationError;
+    return;
+  }
+  try {
+    await programsStore.promoteToCompany(promotingProgramId.value, companiesStore.form);
+    closePromoteModal();
+  } catch (caught) {
+    promoteError.value = caught instanceof Error ? caught.message : "Kunne ikke legge til bedrift i Bedriftsbasen.";
   }
 }
 
@@ -194,6 +228,7 @@ function formatDeadline(value?: string) {
           <div class="listing-cell-title">
             <strong>{{ program.companyName }}</strong>
             <small>{{ program.title }}</small>
+            <small v-if="program.companyId" class="listing-linked-hint">I Bedriftsbasen</small>
           </div>
           <StatusBadge :label="program.status?.label ?? '—'" variant="accent" />
           <span class="listing-cell-muted">{{ locationLabel(program) }}</span>
@@ -201,6 +236,9 @@ function formatDeadline(value?: string) {
           <span class="listing-cell-progress">{{ programsStore.progressLabel(program) }}</span>
           <ListingRowActions
             :url="program.applicationUrl || null"
+            :show-promote="!program.companyId"
+            :in-database="!!program.companyId"
+            @promote="openPromoteModal(program)"
             @edit="openEditModal(program)"
             @delete="deleteProgram(program.id)"
           />
@@ -410,5 +448,15 @@ function formatDeadline(value?: string) {
         </button>
       </template>
     </AppModal>
+
+    <CompanyFormModal
+      :open="promoteModalOpen"
+      title="Legg til i Bedriftsbase"
+      submit-label="Legg til i Bedriftsbase"
+      delegate-save
+      :error="promoteError"
+      @close="closePromoteModal"
+      @saved="submitPromote"
+    />
   </section>
 </template>

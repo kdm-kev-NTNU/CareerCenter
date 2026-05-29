@@ -16,7 +16,6 @@ import { graduateProgramSettingsRoutes } from "./routes/graduateProgramSettings.
 import { graduateProgramsRoutes } from "./routes/graduatePrograms.js";
 import { internshipSettingsRoutes } from "./routes/internshipSettings.js";
 import { internshipsRoutes } from "./routes/internships.js";
-import { pathsRoutes } from "./routes/paths.js";
 import { bachelorStorageRoutes } from "./routes/bachelorStorage.js";
 import { educationRoutes } from "./routes/education.js";
 import { competitionsRoutes } from "./routes/competitions.js";
@@ -93,7 +92,6 @@ export async function buildServer(options: ServerOptions) {
   app.register((instance) => careerMapRoutes(instance, repository));
   app.register((instance) => coursesRoutes(instance, repository));
   app.register((instance) => companiesRoutes(instance, repository));
-  app.register((instance) => pathsRoutes(instance, repository));
   app.register((instance) => internshipsRoutes(instance, repository));
   app.register((instance) => internshipSettingsRoutes(instance, repository));
   app.register((instance) => graduateProgramsRoutes(instance, repository));

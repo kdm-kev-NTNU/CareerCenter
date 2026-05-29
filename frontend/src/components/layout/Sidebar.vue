@@ -11,7 +11,6 @@ const navItems = [
   { to: "/education", label: "Utdanning" },
   { to: "/map", label: "Karriereboard" },
   { to: "/companies", label: "Bedrifter" },
-  { to: "/paths", label: "Custom Paths" },
   { to: "/internships", label: "Internship" },
   { to: "/graduate", label: "Graduate" },
   { to: "/competitions", label: "Hackathons & konkurranser" }

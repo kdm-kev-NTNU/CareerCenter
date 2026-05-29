@@ -1,7 +1,8 @@
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import type { CareerTrack, Internship } from "@careercenter/shared";
-import { api, type InternshipPayload } from "../api/index.js";
+import { api, type CompanyPayload, type InternshipPayload } from "../api/index.js";
+import { useCompaniesStore } from "./companies.js";
 import { useInternshipSettingsStore } from "./internshipSettings.js";
 
 const CUSTOM_COMPANY = "__custom__";
@@ -179,6 +180,52 @@ export const useInternshipsStore = defineStore("internships", () => {
     if (editingId.value === id) resetForm();
   }
 
+  function internshipToPayload(internship: Internship): InternshipPayload {
+    return {
+      companyId: internship.companyId ?? null,
+      companyName: internship.companyName,
+      title: internship.title,
+      description: internship.description,
+      applicationUrl: internship.applicationUrl,
+      notes: internship.notes,
+      deadline: internship.deadline?.slice(0, 10) ?? null,
+      statusId: internship.statusId,
+      locationIds: [...internship.locationIds],
+      trackTags: [...internship.trackTags],
+      requirements: internship.requirements.map((item) => ({
+        requirementTypeId: item.requirementTypeId,
+        isRequired: item.isRequired,
+        isDone: item.isDone,
+        notes: item.notes
+      }))
+    };
+  }
+
+  async function promoteToCompany(internshipId: string, companyPayload: CompanyPayload) {
+    const internship = internships.value.find((item) => item.id === internshipId);
+    if (!internship || internship.companyId) {
+      throw new Error("Oppføringen er allerede koblet til Bedriftsbasen.");
+    }
+
+    const created = await api.createCompany({
+      ...companyPayload,
+      name: companyPayload.name.trim(),
+      description: companyPayload.description.trim(),
+      geography: companyPayload.geography.trim(),
+      websiteUrl: companyPayload.websiteUrl?.trim() || undefined
+    });
+
+    const updated = await api.updateInternship(internshipId, {
+      ...internshipToPayload(internship),
+      companyId: created.id,
+      companyName: created.name
+    });
+
+    internships.value = internships.value.map((item) => (item.id === updated.id ? updated : item));
+    await useCompaniesStore().loadCompanies();
+    return updated;
+  }
+
   function progressLabel(internship: Internship) {
     const required = internship.requirements.filter((item) => item.isRequired);
     const done = required.filter((item) => item.isDone).length;
@@ -209,6 +256,7 @@ export const useInternshipsStore = defineStore("internships", () => {
     requirementFor,
     saveInternship,
     removeInternship,
+    promoteToCompany,
     progressLabel
   };
 });
