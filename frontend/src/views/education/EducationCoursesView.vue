@@ -1,9 +1,29 @@
 <script setup lang="ts">
 import { learningStatuses } from "@careercenter/shared";
-import type { LearningStatus } from "@careercenter/shared";
+import type { LearningStatus, SelfStudyCourse } from "@careercenter/shared";
+import NotesEditModal from "../../components/NotesEditModal.vue";
+import { useNotesEditModal } from "../../composables/useNotesEditModal.js";
 import { useEducationSelfStudyStore } from "../../stores/educationSelfStudy.js";
 
 const store = useEducationSelfStudyStore();
+const {
+  open: notesModalOpen,
+  title: notesModalTitle,
+  notes: notesModalNotes,
+  saving: notesModalSaving,
+  error: notesModalError,
+  openNotesEdit,
+  closeNotesEdit,
+  saveNotesEdit
+} = useNotesEditModal();
+
+function openCourseNotes(course: SelfStudyCourse) {
+  openNotesEdit({
+    title: `Notater — ${course.title}`,
+    notes: course.notes,
+    save: (notes) => store.updateCourseNotes(course.id, notes)
+  });
+}
 const statuses: LearningStatus[] = [...learningStatuses];
 
 const statusLabels: Record<LearningStatus, string> = {
@@ -33,9 +53,24 @@ const statusLabels: Record<LearningStatus, string> = {
           <p v-if="course.url"><a :href="course.url" target="_blank" rel="noreferrer">{{ course.url }}</a></p>
           <p v-if="course.notes">{{ course.notes }}</p>
         </div>
-        <button type="button" class="icon" aria-label="Slett kurs" @click="store.removeCourse(course.id)">x</button>
+        <div class="actions column">
+          <button type="button" class="ghost mini-link" @click="openCourseNotes(course)">
+            {{ course.notes ? "Rediger notater" : "Legg til notater" }}
+          </button>
+          <button type="button" class="icon" aria-label="Slett kurs" @click="store.removeCourse(course.id)">x</button>
+        </div>
       </div>
       <p v-if="!store.courses.length">Ingen kurs lagt inn ennå.</p>
     </article>
+
+    <NotesEditModal
+      :open="notesModalOpen"
+      :title="notesModalTitle"
+      :notes="notesModalNotes"
+      :saving="notesModalSaving"
+      :error="notesModalError"
+      @close="closeNotesEdit()"
+      @save="saveNotesEdit"
+    />
   </section>
 </template>

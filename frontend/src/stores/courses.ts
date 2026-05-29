@@ -3,6 +3,19 @@ import { ref } from "vue";
 import type { CoursePlan } from "@careercenter/shared";
 import { api, type CoursePayload } from "../api/index.js";
 
+function courseToPayload(course: CoursePlan): CoursePayload {
+  return {
+    semester: course.semester,
+    courseCode: course.courseCode,
+    title: course.title,
+    credits: course.credits,
+    status: course.status,
+    notes: course.notes,
+    trackTags: course.trackTags,
+    sortOrder: course.sortOrder
+  };
+}
+
 export const useCoursesStore = defineStore("courses", () => {
   const courses = ref<CoursePlan[]>([]);
   const newCourse = ref<CoursePayload>({
@@ -40,5 +53,13 @@ export const useCoursesStore = defineStore("courses", () => {
     courses.value = courses.value.filter((course) => course.id !== id);
   }
 
-  return { courses, newCourse, loadCourses, addCourse, removeCourse };
+  async function updateCourseNotes(id: string, notes: string) {
+    const course = courses.value.find((item) => item.id === id);
+    if (!course) return;
+    const updated = await api.updateCourse(id, { ...courseToPayload(course), notes });
+    const index = courses.value.findIndex((item) => item.id === id);
+    if (index >= 0) courses.value[index] = updated;
+  }
+
+  return { courses, newCourse, loadCourses, addCourse, removeCourse, updateCourseNotes };
 });

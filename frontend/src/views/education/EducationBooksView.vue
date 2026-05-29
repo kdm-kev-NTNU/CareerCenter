@@ -1,9 +1,29 @@
 <script setup lang="ts">
 import { learningStatuses } from "@careercenter/shared";
-import type { LearningStatus } from "@careercenter/shared";
+import type { EducationBook, LearningStatus } from "@careercenter/shared";
+import NotesEditModal from "../../components/NotesEditModal.vue";
+import { useNotesEditModal } from "../../composables/useNotesEditModal.js";
 import { useEducationBooksStore } from "../../stores/educationBooks.js";
 
 const store = useEducationBooksStore();
+const {
+  open: notesModalOpen,
+  title: notesModalTitle,
+  notes: notesModalNotes,
+  saving: notesModalSaving,
+  error: notesModalError,
+  openNotesEdit,
+  closeNotesEdit,
+  saveNotesEdit
+} = useNotesEditModal();
+
+function openBookNotes(book: EducationBook) {
+  openNotesEdit({
+    title: `Notater — ${book.title}`,
+    notes: book.notes,
+    save: (notes) => store.updateBookNotes(book.id, notes)
+  });
+}
 const statuses: LearningStatus[] = [...learningStatuses];
 
 const statusLabels: Record<LearningStatus, string> = {
@@ -34,9 +54,24 @@ const statusLabels: Record<LearningStatus, string> = {
           <p v-if="book.url"><a :href="book.url" target="_blank" rel="noreferrer">{{ book.url }}</a></p>
           <p v-if="book.notes">{{ book.notes }}</p>
         </div>
-        <button type="button" class="icon" aria-label="Slett bok" @click="store.removeBook(book.id)">x</button>
+        <div class="actions column">
+          <button type="button" class="ghost mini-link" @click="openBookNotes(book)">
+            {{ book.notes ? "Rediger notater" : "Legg til notater" }}
+          </button>
+          <button type="button" class="icon" aria-label="Slett bok" @click="store.removeBook(book.id)">x</button>
+        </div>
       </div>
       <p v-if="!store.books.length">Ingen bøker lagt inn ennå.</p>
     </article>
+
+    <NotesEditModal
+      :open="notesModalOpen"
+      :title="notesModalTitle"
+      :notes="notesModalNotes"
+      :saving="notesModalSaving"
+      :error="notesModalError"
+      @close="closeNotesEdit()"
+      @save="saveNotesEdit"
+    />
   </section>
 </template>

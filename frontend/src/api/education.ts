@@ -36,16 +36,22 @@ export const educationApi = {
   selfStudyCourses: () => request<SelfStudyCourse[]>("/api/education/courses"),
   createSelfStudyCourse: (payload: SelfStudyCoursePayload) =>
     request<SelfStudyCourse>("/api/education/courses", { method: "POST", body: JSON.stringify(payload) }),
+  updateSelfStudyCourse: (id: string, payload: SelfStudyCoursePayload) =>
+    request<SelfStudyCourse>(`/api/education/courses/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   deleteSelfStudyCourse: (id: string) => request<void>(`/api/education/courses/${id}`, { method: "DELETE" }),
 
   educationBooks: () => request<EducationBook[]>("/api/education/books"),
   createEducationBook: (payload: EducationBookPayload) =>
     request<EducationBook>("/api/education/books", { method: "POST", body: JSON.stringify(payload) }),
+  updateEducationBook: (id: string, payload: EducationBookPayload) =>
+    request<EducationBook>(`/api/education/books/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   deleteEducationBook: (id: string) => request<void>(`/api/education/books/${id}`, { method: "DELETE" }),
 
   learningPlatforms: () => request<LearningPlatform[]>("/api/education/platforms"),
   createLearningPlatform: (payload: LearningPlatformPayload) =>
     request<LearningPlatform>("/api/education/platforms", { method: "POST", body: JSON.stringify(payload) }),
+  updateLearningPlatform: (id: string, payload: LearningPlatformPayload) =>
+    request<LearningPlatform>(`/api/education/platforms/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   deleteLearningPlatform: (id: string) => request<void>(`/api/education/platforms/${id}`, { method: "DELETE" }),
 
   bachelorKnowledge: (folderId?: string | null) => {
@@ -55,6 +61,8 @@ export const educationApi = {
   },
   createBachelorKnowledge: (payload: BachelorKnowledgePayload) =>
     request<BachelorKnowledge>("/api/education/bachelor", { method: "POST", body: JSON.stringify(payload) }),
+  updateBachelorKnowledge: (id: string, payload: BachelorKnowledgePayload) =>
+    request<BachelorKnowledge>(`/api/education/bachelor/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   deleteBachelorKnowledge: (id: string) => request<void>(`/api/education/bachelor/${id}`, { method: "DELETE" }),
 
   bachelorFolderTree: () =>

@@ -308,7 +308,7 @@ describe("MasterPlanView", () => {
         }
       ]);
 
-      expect(wrapper.find("button[type='button']").attributes("aria-label")).toBe("Slett fag");
+      expect(wrapper.find("button[aria-label='Slett fag']").exists()).toBe(true);
     });
   });
 

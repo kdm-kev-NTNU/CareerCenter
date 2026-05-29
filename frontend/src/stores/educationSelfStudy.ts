@@ -4,6 +4,18 @@ import type { SelfStudyCourse } from "@careercenter/shared";
 import { api } from "../api/index.js";
 import type { SelfStudyCoursePayload } from "../types/index.js";
 
+function courseToPayload(course: SelfStudyCourse): SelfStudyCoursePayload {
+  return {
+    title: course.title,
+    provider: course.provider,
+    status: course.status,
+    url: course.url,
+    notes: course.notes,
+    completedAt: course.completedAt,
+    sortOrder: course.sortOrder
+  };
+}
+
 export const useEducationSelfStudyStore = defineStore("educationSelfStudy", () => {
   const courses = ref<SelfStudyCourse[]>([]);
   const newCourse = ref<SelfStudyCoursePayload>({
@@ -42,5 +54,13 @@ export const useEducationSelfStudyStore = defineStore("educationSelfStudy", () =
     courses.value = courses.value.filter((course) => course.id !== id);
   }
 
-  return { courses, newCourse, loadCourses, addCourse, removeCourse };
+  async function updateCourseNotes(id: string, notes: string) {
+    const course = courses.value.find((item) => item.id === id);
+    if (!course) return;
+    const updated = await api.updateSelfStudyCourse(id, { ...courseToPayload(course), notes });
+    const index = courses.value.findIndex((item) => item.id === id);
+    if (index >= 0) courses.value[index] = updated;
+  }
+
+  return { courses, newCourse, loadCourses, addCourse, removeCourse, updateCourseNotes };
 });

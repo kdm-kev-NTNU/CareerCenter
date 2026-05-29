@@ -4,6 +4,16 @@ import type { LearningPlatform } from "@careercenter/shared";
 import { api } from "../api/index.js";
 import type { LearningPlatformPayload } from "../types/index.js";
 
+function platformToPayload(platform: LearningPlatform): LearningPlatformPayload {
+  return {
+    name: platform.name,
+    url: platform.url,
+    notes: platform.notes,
+    isActive: platform.isActive,
+    sortOrder: platform.sortOrder
+  };
+}
+
 export const useEducationPlatformsStore = defineStore("educationPlatforms", () => {
   const platforms = ref<LearningPlatform[]>([]);
   const newPlatform = ref<LearningPlatformPayload>({
@@ -40,5 +50,13 @@ export const useEducationPlatformsStore = defineStore("educationPlatforms", () =
     platforms.value = platforms.value.filter((platform) => platform.id !== id);
   }
 
-  return { platforms, newPlatform, loadPlatforms, addPlatform, removePlatform };
+  async function updatePlatformNotes(id: string, notes: string) {
+    const platform = platforms.value.find((item) => item.id === id);
+    if (!platform) return;
+    const updated = await api.updateLearningPlatform(id, { ...platformToPayload(platform), notes });
+    const index = platforms.value.findIndex((item) => item.id === id);
+    if (index >= 0) platforms.value[index] = updated;
+  }
+
+  return { platforms, newPlatform, loadPlatforms, addPlatform, removePlatform, updatePlatformNotes };
 });

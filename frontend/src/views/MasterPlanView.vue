@@ -1,10 +1,30 @@
 <script setup lang="ts">
-import type { CourseStatus } from "@careercenter/shared";
+import type { CoursePlan, CourseStatus } from "@careercenter/shared";
+import NotesEditModal from "../components/NotesEditModal.vue";
+import { useNotesEditModal } from "../composables/useNotesEditModal.js";
 import { useCareerMapStore } from "../stores/careerMap.js";
 import { useCoursesStore } from "../stores/courses.js";
 
 const coursesStore = useCoursesStore();
 const careerMapStore = useCareerMapStore();
+const {
+  open: notesModalOpen,
+  title: notesModalTitle,
+  notes: notesModalNotes,
+  saving: notesModalSaving,
+  error: notesModalError,
+  openNotesEdit,
+  closeNotesEdit,
+  saveNotesEdit
+} = useNotesEditModal();
+
+function openCourseNotes(course: CoursePlan) {
+  openNotesEdit({
+    title: `Notater — ${course.courseCode}`,
+    notes: course.notes,
+    save: (notes) => coursesStore.updateCourseNotes(course.id, notes)
+  });
+}
 
 const semesters = [7, 8, 9, 10] as const;
 const statuses: CourseStatus[] = ["planned", "considering", "confirmed", "completed"];
@@ -29,11 +49,26 @@ const statuses: CourseStatus[] = ["planned", "considering", "confirmed", "comple
           <div>
             <strong>{{ course.courseCode }} - {{ course.title }}</strong>
             <small>{{ course.credits }} stp - {{ course.status }} - {{ course.trackTags.map((track) => careerMapStore.trackName(track)).join(", ") }}</small>
-            <p>{{ course.notes }}</p>
+            <p v-if="course.notes">{{ course.notes }}</p>
           </div>
-          <button type="button" class="icon" aria-label="Slett fag" @click="coursesStore.removeCourse(course.id)">x</button>
+          <div class="actions column">
+            <button type="button" class="ghost mini-link" @click="openCourseNotes(course)">
+              {{ course.notes ? "Rediger notater" : "Legg til notater" }}
+            </button>
+            <button type="button" class="icon" aria-label="Slett fag" @click="coursesStore.removeCourse(course.id)">x</button>
+          </div>
         </div>
       </article>
     </div>
+
+    <NotesEditModal
+      :open="notesModalOpen"
+      :title="notesModalTitle"
+      :notes="notesModalNotes"
+      :saving="notesModalSaving"
+      :error="notesModalError"
+      @close="closeNotesEdit()"
+      @save="saveNotesEdit"
+    />
   </section>
 </template>
