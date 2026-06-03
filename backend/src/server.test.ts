@@ -730,6 +730,105 @@ describe("CareerCenter API", () => {
     await app.close();
   });
 
+  it("imports, filters, exports, updates, and deletes AI resources", async () => {
+    const app = await createTestApp();
+
+    const manual = await app.inject({
+      method: "POST",
+      url: "/api/education/ai-resources",
+      payload: {
+        name: "Review checklist",
+        kind: "workflow_checklist",
+        targetTools: ["cursor", "codex"],
+        status: "draft",
+        tags: ["review"],
+        installPath: "",
+        content: "- Run tests",
+        frontmatter: {},
+        configFormat: "markdown",
+        notes: ""
+      }
+    });
+    expect(manual.statusCode, manual.body).toBe(200);
+
+    const imported = await app.inject({
+      method: "POST",
+      url: "/api/education/ai-resources/import",
+      payload: {
+        files: [
+          {
+            fileName: "tailwind.mdc",
+            content: [
+              "---",
+              'description: "Tailwind component rules"',
+              'globs: "**/*.vue"',
+              "alwaysApply: false",
+              "---",
+              "# Tailwind",
+              "Use existing utility patterns."
+            ].join("\n")
+          },
+          { fileName: "AGENTS.md", content: "# Codex instructions\nRun typecheck before final handoff." },
+          {
+            fileName: "mcp.json",
+            content: JSON.stringify({ mcpServers: { docs: { command: "npx", args: ["docs-mcp"], env: { API_KEY: "${API_KEY}" } } } })
+          }
+        ]
+      }
+    });
+    expect(imported.statusCode).toBe(200);
+    expect(imported.json().created).toHaveLength(3);
+    expect(imported.json().rejected).toHaveLength(0);
+
+    const reimported = await app.inject({
+      method: "POST",
+      url: "/api/education/ai-resources/import",
+      payload: { files: [{ fileName: "AGENTS.md", content: "# Codex instructions\nUpdated." }] }
+    });
+    expect(reimported.statusCode).toBe(200);
+    expect(reimported.json().updated).toHaveLength(1);
+
+    const codexList = await app.inject({ method: "GET", url: "/api/education/ai-resources?target=codex" });
+    expect(codexList.statusCode).toBe(200);
+    expect(codexList.json().some((resource: { kind: string }) => resource.kind === "codex_instruction")).toBe(true);
+
+    const cursorExport = await app.inject({ method: "GET", url: "/api/education/ai-resources/export?target=cursor" });
+    expect(cursorExport.statusCode).toBe(200);
+    expect(cursorExport.json().files.map((file: { path: string }) => file.path)).toContain(".cursor/rules/tailwind.mdc");
+    expect(cursorExport.json().files.map((file: { path: string }) => file.path)).toContain(".cursor/mcp.json");
+    expect(cursorExport.json().files.find((file: { path: string }) => file.path === ".cursor/mcp.json").writeStrategy).toBe("json_mcp_merge");
+
+    const codexExport = await app.inject({ method: "GET", url: "/api/education/ai-resources/export?target=codex" });
+    expect(codexExport.statusCode).toBe(200);
+    expect(codexExport.json().files.map((file: { path: string }) => file.path)).toContain("AGENTS.md");
+    expect(codexExport.json().files.map((file: { path: string }) => file.path)).toContain(".codex/config.toml");
+    expect(codexExport.json().files.find((file: { path: string }) => file.path === "AGENTS.md").writeStrategy).toBe("managed_markdown_block");
+    expect(codexExport.json().files.find((file: { path: string }) => file.path === ".codex/config.toml").writeStrategy).toBe("toml_managed_block");
+
+    const missingUpdate = await app.inject({
+      method: "PUT",
+      url: "/api/education/ai-resources/missing",
+      payload: {
+        name: "Ghost",
+        kind: "prompt_snippet",
+        targetTools: ["codex"],
+        status: "draft",
+        tags: [],
+        installPath: "",
+        content: "Ghost",
+        frontmatter: {},
+        configFormat: "plain",
+        notes: ""
+      }
+    });
+    expect(missingUpdate.statusCode).toBe(404);
+
+    const deleted = await app.inject({ method: "DELETE", url: `/api/education/ai-resources/${manual.json().id}` });
+    expect(deleted.statusCode).toBe(204);
+
+    await app.close();
+  });
+
   it("creates education books and platforms and returns 404 for unknown ids", async () => {
     const app = await createTestApp();
 

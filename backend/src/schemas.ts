@@ -139,6 +139,15 @@ export const aiResourceSchema = z.object({
   notes: z.string().default("")
 });
 
+export const aiResourceImportSchema = z.object({
+  files: z.array(z.object({
+    fileName: z.string().trim().min(1).max(260),
+    content: z.string().refine(noPotentialSecret, {
+      message: "Innholdet ser ut til å inneholde en hemmelig nøkkel. Bruk env-placeholder i stedet."
+    })
+  })).min(1).max(25)
+});
+
 export const bachelorKnowledgeSchema = z.object({
   folderId: z.union([z.string().min(1), z.null()]).optional(),
   courseName: z.string().min(1),

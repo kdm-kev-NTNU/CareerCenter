@@ -1,7 +1,13 @@
 import type { FastifyInstance } from "fastify";
-import type { AiResource } from "@careercenter/shared";
+import { aiResourceExportTargets, type AiResource, type AiResourceExportTarget } from "@careercenter/shared";
+import {
+  buildAiResourceExportBundle,
+  inferAiResourceFromFile,
+  AiResourceImportError
+} from "../aiResources.js";
 import type { Repository } from "../repository.js";
 import {
+  aiResourceImportSchema,
   aiResourceSchema,
   bachelorKnowledgeSchema,
   educationBookSchema,
@@ -94,6 +100,60 @@ export async function educationRoutes(app: FastifyInstance, repository: Reposito
   app.post("/api/education/ai-resources", async (request) =>
     repository.createAiResource(request.user.id, aiResourceSchema.parse(request.body))
   );
+
+  app.post("/api/education/ai-resources/import", async (request) => {
+    const payload = aiResourceImportSchema.parse(request.body);
+    const existingResources = await repository.listAiResources(request.user.id);
+    const existingByPath = new Map(
+      existingResources
+        .filter((resource) => resource.installPath)
+        .map((resource) => [resource.installPath.toLowerCase(), resource])
+    );
+    const result: {
+      created: AiResource[];
+      updated: AiResource[];
+      rejected: Array<{ fileName: string; message: string }>;
+    } = { created: [], updated: [], rejected: [] };
+
+    for (const file of payload.files) {
+      try {
+        const input = inferAiResourceFromFile(file);
+        const existing = input.installPath ? existingByPath.get(input.installPath.toLowerCase()) : undefined;
+        if (existing) {
+          const updated = await repository.updateAiResource(request.user.id, existing.id, input);
+          if (updated) {
+            result.updated.push(updated);
+            existingByPath.set(updated.installPath.toLowerCase(), updated);
+          }
+        } else {
+          const created = await repository.createAiResource(request.user.id, input);
+          result.created.push(created);
+          if (created.installPath) {
+            existingByPath.set(created.installPath.toLowerCase(), created);
+          }
+        }
+      } catch (error) {
+        result.rejected.push({
+          fileName: file.fileName,
+          message: error instanceof AiResourceImportError || error instanceof Error
+            ? error.message
+            : "Kunne ikke importere filen."
+        });
+      }
+    }
+
+    return result;
+  });
+
+  app.get("/api/education/ai-resources/export", async (request, reply) => {
+    const query = request.query as { target?: string };
+    const target = (query.target ?? "all") as AiResourceExportTarget;
+    if (!aiResourceExportTargets.includes(target)) {
+      return reply.code(400).send({ message: "Ugyldig eksportmål." });
+    }
+    const resources = (await repository.listAiResources(request.user.id)).filter((resource) => resource.status !== "archived");
+    return buildAiResourceExportBundle(resources, target);
+  });
 
   app.put("/api/education/ai-resources/:id", async (request, reply) => {
     const result = await repository.updateAiResource(
