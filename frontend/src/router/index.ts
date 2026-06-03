@@ -6,6 +6,7 @@ import AppShell from "../components/layout/AppShell.vue";
 import CareerBoardView from "../views/CareerBoardView.vue";
 import CompaniesView from "../views/CompaniesView.vue";
 import DashboardView from "../views/DashboardView.vue";
+import EducationAiResourcesView from "../views/education/EducationAiResourcesView.vue";
 import EducationBachelorView from "../views/education/EducationBachelorView.vue";
 import EducationBooksView from "../views/education/EducationBooksView.vue";
 import EducationCoursesView from "../views/education/EducationCoursesView.vue";
@@ -108,6 +109,12 @@ const router = createRouter({
               name: "education-bachelor",
               component: EducationBachelorView,
               meta: { title: "Bachelor-lærdom" }
+            },
+            {
+              path: "ai",
+              name: "education-ai-resources",
+              component: EducationAiResourcesView,
+              meta: { title: "AI-ressurser" }
             }
           ]
         }

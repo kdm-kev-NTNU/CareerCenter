@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { RouterLink } from "vue-router";
+import { useEducationAiResourcesStore } from "../../stores/educationAiResources.js";
 import { useEducationBachelorStore } from "../../stores/educationBachelor.js";
 import { useEducationBooksStore } from "../../stores/educationBooks.js";
 import { useEducationPlatformsStore } from "../../stores/educationPlatforms.js";
@@ -9,12 +10,14 @@ const selfStudyStore = useEducationSelfStudyStore();
 const booksStore = useEducationBooksStore();
 const platformsStore = useEducationPlatformsStore();
 const bachelorStore = useEducationBachelorStore();
+const aiResourcesStore = useEducationAiResourcesStore();
 
 const sections = [
   { to: "/education/kurs", label: "Kurs", count: () => selfStudyStore.courses.length, hint: "Selvstudium og eksterne kurs" },
   { to: "/education/boker", label: "Bøker", count: () => booksStore.books.length, hint: "Bøker du leser eller har lest" },
   { to: "/education/plattformer", label: "Plattformer", count: () => platformsStore.platforms.length, hint: "Coursera, YouTube, osv." },
-  { to: "/education/bachelor", label: "Bachelor-lærdom", count: () => bachelorStore.entryCount, hint: "Fag og tema fra bachelor" }
+  { to: "/education/bachelor", label: "Bachelor-lærdom", count: () => bachelorStore.entryCount, hint: "Fag og tema fra bachelor" },
+  { to: "/education/ai", label: "AI-ressurser", count: () => aiResourcesStore.resources.length, hint: "Cursor, Codex, MCP og skills" }
 ];
 </script>
 

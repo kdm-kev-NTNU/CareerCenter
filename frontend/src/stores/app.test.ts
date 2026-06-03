@@ -16,6 +16,7 @@ vi.mock("../api/index.js", () => ({
     selfStudyCourses: vi.fn(),
     educationBooks: vi.fn(),
     learningPlatforms: vi.fn(),
+    aiResources: vi.fn(),
     bachelorKnowledge: vi.fn(),
     bachelorFolderTree: vi.fn(),
     bachelorFiles: vi.fn(),
@@ -40,6 +41,7 @@ describe("useAppStore", () => {
     mockedApi.selfStudyCourses.mockResolvedValue([]);
     mockedApi.educationBooks.mockResolvedValue([]);
     mockedApi.learningPlatforms.mockResolvedValue([]);
+    mockedApi.aiResources.mockResolvedValue([]);
     mockedApi.bachelorKnowledge.mockResolvedValue([]);
     mockedApi.bachelorFolderTree.mockResolvedValue([]);
     mockedApi.bachelorFiles.mockResolvedValue([]);

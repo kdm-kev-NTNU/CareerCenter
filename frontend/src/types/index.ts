@@ -5,6 +5,10 @@ import type {
   CompetitionStatus,
   CompetitionType,
   CourseStatus,
+  AiResourceConfigFormat,
+  AiResourceKind,
+  AiResourceStatus,
+  AiResourceTargetTool,
   LearningStatus
 } from "@careercenter/shared";
 
@@ -82,6 +86,26 @@ export interface LearningPlatformPayload {
   notes: string;
   isActive: boolean;
   sortOrder: number;
+}
+
+export interface AiResourcePayload {
+  name: string;
+  kind: AiResourceKind;
+  targetTools: AiResourceTargetTool[];
+  status: AiResourceStatus;
+  tags: string[];
+  installPath: string;
+  content: string;
+  frontmatter: Record<string, unknown>;
+  configFormat: AiResourceConfigFormat;
+  notes: string;
+}
+
+export interface AiResourceImportPayload {
+  files: Array<{
+    fileName: string;
+    content: string;
+  }>;
 }
 
 export interface BachelorKnowledgePayload {

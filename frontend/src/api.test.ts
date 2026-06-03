@@ -318,6 +318,35 @@ describe("api client", () => {
       sortOrder: 0
     });
     await educationApi.deleteLearningPlatform("platform-1");
+    await educationApi.aiResources();
+    await educationApi.aiResources("?target=codex");
+    await educationApi.createAiResource({
+      name: "AGENTS",
+      kind: "codex_instruction",
+      targetTools: ["codex"],
+      status: "active",
+      tags: ["codex"],
+      installPath: "AGENTS.md",
+      content: "# Instructions",
+      frontmatter: {},
+      configFormat: "markdown",
+      notes: ""
+    });
+    await educationApi.updateAiResource("ai-1", {
+      name: "AGENTS",
+      kind: "codex_instruction",
+      targetTools: ["codex"],
+      status: "active",
+      tags: ["codex"],
+      installPath: "AGENTS.md",
+      content: "# Instructions updated",
+      frontmatter: {},
+      configFormat: "markdown",
+      notes: "Updated"
+    });
+    await educationApi.importAiResources({ files: [{ fileName: "AGENTS.md", content: "# Instructions" }] });
+    await educationApi.exportAiResources("codex");
+    await educationApi.deleteAiResource("ai-1");
     await educationApi.bachelorKnowledge();
     await educationApi.bachelorKnowledge(null);
     await educationApi.bachelorKnowledge("folder-1");
@@ -356,6 +385,9 @@ describe("api client", () => {
     expect(urls).toContain("/api/competitions");
     expect(urls.some((url) => typeof url === "string" && url.startsWith("/api/internships?"))).toBe(true);
     expect(urls).toContain("/api/education/bachelor/files");
+    expect(urls).toContain("/api/education/ai-resources");
+    expect(urls).toContain("/api/education/ai-resources/import");
+    expect(urls).toContain("/api/education/ai-resources/export?target=codex");
     expect(urls).toContain("/api/auth/me");
     expect(fetchMock.mock.calls.every(([, init]) => init?.credentials === "include")).toBe(true);
   });

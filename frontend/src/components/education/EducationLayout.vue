@@ -6,7 +6,8 @@ const tabs = [
   { to: "/education/kurs", label: "Kurs" },
   { to: "/education/boker", label: "Bøker" },
   { to: "/education/plattformer", label: "Plattformer" },
-  { to: "/education/bachelor", label: "Bachelor-lærdom" }
+  { to: "/education/bachelor", label: "Bachelor-lærdom" },
+  { to: "/education/ai", label: "AI-ressurser" }
 ];
 </script>
 

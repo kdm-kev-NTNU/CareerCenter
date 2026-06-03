@@ -46,6 +46,7 @@ vi.mock("./api/index.js", () => ({
     selfStudyCourses: vi.fn(),
     educationBooks: vi.fn(),
     learningPlatforms: vi.fn(),
+    aiResources: vi.fn(),
     bachelorKnowledge: vi.fn(),
     bachelorFolderTree: vi.fn(),
     bachelorFiles: vi.fn()
@@ -89,6 +90,7 @@ function mockInitialData(companies: any[] = []) {
   mockedApi.selfStudyCourses.mockResolvedValue([]);
   mockedApi.educationBooks.mockResolvedValue([]);
   mockedApi.learningPlatforms.mockResolvedValue([]);
+  mockedApi.aiResources.mockResolvedValue([]);
   mockedApi.bachelorKnowledge.mockResolvedValue([]);
   mockedApi.bachelorFolderTree.mockResolvedValue([]);
   mockedApi.bachelorFiles.mockResolvedValue([]);
@@ -186,7 +188,8 @@ describe("App", () => {
       ["/education/kurs", "education-courses"],
       ["/education/boker", "education-books"],
       ["/education/plattformer", "education-platforms"],
-      ["/education/bachelor", "education-bachelor"]
+      ["/education/bachelor", "education-bachelor"],
+      ["/education/ai", "education-ai-resources"]
     ] as const;
 
     for (const [route, name] of routes) {
