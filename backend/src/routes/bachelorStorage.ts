@@ -1,5 +1,8 @@
+import type { BachelorFolderTreeNode } from "@careercenter/shared";
 import type { FastifyInstance } from "fastify";
+import { Readable } from "node:stream";
 import { rename } from "node:fs/promises";
+import { buffer } from "node:stream/consumers";
 import { nanoid } from "nanoid";
 import {
   buildStoragePath,
@@ -9,9 +12,21 @@ import {
   resolveStoredPath,
   writeUploadedFile
 } from "../bachelorFileStorage.js";
+import {
+  BachelorFileUploadError,
+  validateBachelorFileUpload
+} from "../bachelorFileValidation.js";
 import type { Repository } from "../repository.js";
 import { InvalidReferenceError } from "../repository.js";
 import { bachelorFileUpdateSchema, bachelorFolderSchema } from "../schemas.js";
+
+function folderExistsInTree(nodes: BachelorFolderTreeNode[], folderId: string): boolean {
+  for (const node of nodes) {
+    if (node.id === folderId) return true;
+    if (folderExistsInTree(node.children, folderId)) return true;
+  }
+  return false;
+}
 
 async function deleteFolderFilesFromDisk(repository: Repository, userId: string, folderId: string) {
   const files = await repository.listBachelorFilesInFolderRecursive(userId, folderId);
@@ -70,37 +85,71 @@ export async function bachelorStorageRoutes(app: FastifyInstance, repository: Re
 
   app.post("/api/education/bachelor/files", async (request, reply) => {
     const userId = request.user.id;
-    const data = await request.file();
-    if (!data) return reply.code(400).send({ message: "Ingen fil mottatt." });
+    if (!request.isMultipart()) {
+      return reply.code(400).send({ message: "Ingen fil mottatt." });
+    }
 
-    const folderIdField = data.fields.folderId;
-    const notesField = data.fields.notes;
-    const folderIdRaw =
-      folderIdField && typeof folderIdField === "object" && "value" in folderIdField
-        ? String(folderIdField.value)
-        : "";
+    let fileBuffer: Buffer | null = null;
+    let fileName = "";
+    let mimeType = "application/octet-stream";
+    let folderIdRaw = "";
+    let notes = "";
+
+    for await (const part of request.parts()) {
+      if (part.type === "file") {
+        if (!fileBuffer) {
+          fileBuffer = await buffer(part.file);
+          fileName = part.filename;
+          mimeType = part.mimetype || mimeType;
+        } else {
+          part.file.resume();
+        }
+        continue;
+      }
+      if (part.type === "field") {
+        const value = String(part.value);
+        if (part.fieldname === "folderId") folderIdRaw = value;
+        if (part.fieldname === "notes") notes = value;
+      }
+    }
+
+    if (!fileBuffer) return reply.code(400).send({ message: "Ingen fil mottatt." });
+    if (fileBuffer.length === 0) return reply.code(400).send({ message: "Filen er tom." });
+
     const folderId = folderIdRaw.length > 0 ? folderIdRaw : null;
-    const notes =
-      notesField && typeof notesField === "object" && "value" in notesField ? String(notesField.value) : "";
-
-    const fileId = nanoid();
-    const originalName = data.filename || "fil";
-    const storagePath = buildStoragePath(userId, folderId, fileId, originalName);
+    const originalName = fileName.trim();
+    let storagePath: string | null = null;
 
     try {
-      const sizeBytes = await writeUploadedFile(storagePath, data.file);
+      await validateBachelorFileUpload(
+        { folderId, originalName },
+        {
+          folderExists: async (id) => {
+            const tree = await repository.getBachelorFolderTree(userId);
+            return folderExistsInTree(tree, id);
+          }
+        }
+      );
+
+      const fileId = nanoid();
+      storagePath = buildStoragePath(userId, folderId, fileId, originalName);
+      const sizeBytes = await writeUploadedFile(storagePath, Readable.from(fileBuffer));
       const created = await repository.createBachelorFile(userId, {
         folderId,
         originalName,
         storagePath,
-        mimeType: data.mimetype || "application/octet-stream",
+        mimeType,
         sizeBytes,
         notes,
         sortOrder: 0
       });
       return reply.code(201).send(created);
     } catch (error) {
-      await deleteStoredFile(storagePath);
+      if (storagePath) await deleteStoredFile(storagePath);
+      if (error instanceof InvalidReferenceError) throw error;
+      if (error instanceof BachelorFileUploadError) {
+        return reply.code(400).send({ message: error.message });
+      }
       return reply.code(400).send({ message: error instanceof Error ? error.message : "Opplasting feilet." });
     }
   });

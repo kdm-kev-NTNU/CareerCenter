@@ -662,6 +662,59 @@ describe("CareerCenter API", () => {
     await app.close();
   });
 
+  it("rejects bachelor upload without multipart body", async () => {
+    const app = await createTestApp();
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/education/bachelor/files",
+      payload: { notes: "test" }
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().message).toBe("Ingen fil mottatt.");
+    await app.close();
+  });
+
+  it("rejects bachelor upload with missing file name", async () => {
+    const app = await createTestApp();
+    const boundary = "----CareerCenterBoundary";
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/education/bachelor/files",
+      headers: { "content-type": `multipart/form-data; boundary=${boundary}` },
+      payload:
+        `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="file"; filename=""\r\n` +
+        `Content-Type: text/plain\r\n\r\n` +
+        `hello\r\n` +
+        `--${boundary}--\r\n`
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().message).toBe("Filnavn mangler.");
+    await app.close();
+  });
+
+  it("rejects bachelor upload to missing folder", async () => {
+    const app = await createTestApp();
+    const boundary = "----CareerCenterBoundary";
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/education/bachelor/files",
+      headers: { "content-type": `multipart/form-data; boundary=${boundary}` },
+      payload:
+        `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="folderId"\r\n\r\n` +
+        `missing-folder\r\n` +
+        `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="file"; filename="notes.txt"\r\n` +
+        `Content-Type: text/plain\r\n\r\n` +
+        `hello bachelor\r\n` +
+        `--${boundary}--\r\n`
+    });
+    expect(response.statusCode).toBe(422);
+    expect(response.json().message).toBe("Mappe finnes ikke.");
+    await app.close();
+  });
+
   it("returns 400 for invalid request bodies", async () => {
     const app = await createTestApp();
 
