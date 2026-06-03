@@ -137,6 +137,21 @@ describe("EducationAiResourcesView", () => {
     expect(store.resources).toEqual([cursorRule]);
   });
 
+  it("opens the edit form when clicking edit on a resource card", async () => {
+    mockedApi.aiResources.mockResolvedValue([cursorRule]);
+
+    const wrapper = mountView();
+    const store = useEducationAiResourcesStore();
+    await store.loadResources();
+    await flushPromises();
+
+    await wrapper.find("[data-test='edit-resource']").trigger("click");
+    await flushPromises();
+
+    expect(store.editingId).toBe("ai-2");
+    expect(wrapper.find("[data-test='edit-resource-form']").exists()).toBe(true);
+  });
+
   it("filters visible resources from the toolbar", async () => {
     mockedApi.aiResources.mockResolvedValue([resource, cursorRule]);
 

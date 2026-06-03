@@ -57,12 +57,12 @@ describe("AI resources", () => {
   it("creates, filters, edits, and deletes AI resources from the UI", () => {
     cy.visit("/education/ai");
 
-    cy.contains("form.ai-resource-form", "Legg til ressurs").within(() => {
-      cy.contains("label", "Navn").find("input").type("E2E Prompt");
-      cy.contains("label", "Type").find("select").select("prompt_snippet");
-      cy.contains("label", "Innhold").find("textarea").type("# Prompt\nBe concise.", { parseSpecialCharSequences: false });
-      cy.contains("button", "Legg til ressurs").click();
+    cy.contains("form.ai-resource-form label", "Navn").find("input").type("E2E Prompt");
+    cy.contains("form.ai-resource-form label", "Type").find("select").select("prompt_snippet");
+    cy.contains("form.ai-resource-form label", "Innhold").find("textarea").type("# Prompt\nBe concise.", {
+      parseSpecialCharSequences: false
     });
+    cy.contains("form.ai-resource-form button", "Legg til ressurs").click();
 
     cy.contains(".ai-resource-card", "E2E Prompt").should("be.visible");
 
@@ -71,17 +71,16 @@ describe("AI resources", () => {
     cy.contains(".ai-resource-toolbar label", "Type").find("select").select("prompt_snippet");
     cy.contains(".ai-resource-card", "E2E Prompt").should("be.visible");
 
-    cy.contains(".ai-resource-card", "E2E Prompt").within(() => {
-      cy.contains("button", "Rediger").click();
-      cy.contains("label", "Navn").find("input").clear().type("E2E Prompt Updated");
-      cy.contains("button", "Lagre").click();
-    });
+    cy.contains(".ai-resource-card", "E2E Prompt")
+      .find("[data-test='edit-resource']")
+      .click();
+    cy.get("[data-test='edit-resource-form']", { timeout: 10000 }).should("be.visible");
+    cy.get("[data-test='edit-resource-form'] label").contains("Navn").find("input").clear().type("E2E Prompt Updated");
+    cy.get("[data-test='edit-resource-form']").contains("button", "Lagre").click();
 
     cy.contains(".ai-resource-card", "E2E Prompt Updated").should("be.visible");
 
-    cy.contains(".ai-resource-card", "E2E Prompt Updated").within(() => {
-      cy.contains("button", "Slett").click();
-    });
+    cy.contains(".ai-resource-card", "E2E Prompt Updated").contains("button", "Slett").click();
 
     cy.contains(".ai-resource-card", "E2E Prompt Updated").should("not.exist");
   });

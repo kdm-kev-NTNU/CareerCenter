@@ -33,6 +33,10 @@ function emptyResource(): AiResourcePayload {
   };
 }
 
+function cloneFrontmatter(value: Record<string, unknown>) {
+  return JSON.parse(JSON.stringify(value ?? {})) as Record<string, unknown>;
+}
+
 function resourceToPayload(resource: AiResource): AiResourcePayload {
   return {
     name: resource.name,
@@ -42,7 +46,7 @@ function resourceToPayload(resource: AiResource): AiResourcePayload {
     tags: [...resource.tags],
     installPath: resource.installPath,
     content: resource.content,
-    frontmatter: structuredClone(resource.frontmatter),
+    frontmatter: cloneFrontmatter(resource.frontmatter),
     configFormat: resource.configFormat,
     notes: resource.notes
   };

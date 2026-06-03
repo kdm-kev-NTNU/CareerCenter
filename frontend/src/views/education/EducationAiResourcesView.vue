@@ -273,12 +273,12 @@ async function copySyncCommand() {
           <p v-if="resource.notes">{{ resource.notes }}</p>
         </div>
         <div class="actions column">
-          <button type="button" class="ghost mini-link" @click="store.startEdit(resource)">Rediger</button>
+          <button type="button" class="ghost mini-link" data-test="edit-resource" @click="store.startEdit(resource)">Rediger</button>
           <button type="button" class="ghost mini-link" @click="copyResource(resource)">{{ copiedId === resource.id ? "Kopiert" : "Kopier" }}</button>
           <button type="button" class="ghost mini-link danger" @click="store.removeResource(resource.id)">Slett</button>
         </div>
 
-        <form v-if="store.editingId === resource.id && store.editingResource" class="ai-edit-form" @submit.prevent="store.saveEdit()">
+        <form v-if="store.editingId === resource.id && store.editingResource" class="ai-edit-form" data-test="edit-resource-form" @submit.prevent="store.saveEdit()">
           <label>Navn<input v-model="store.editingResource.name" required /></label>
           <label>Type
             <select v-model="store.editingResource.kind">
