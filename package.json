@@ -16,6 +16,7 @@
     "test": "npm run test --workspaces",
     "test:coverage": "npm run test:coverage --workspaces",
     "test:e2e": "node scripts/run-cypress-e2e.mjs",
+    "test:ai-sync:live": "node scripts/ai-resource-sync.live-smoke.mjs",
     "coverage:merge": "node scripts/merge-coverage.mjs full",
     "coverage:merge:unit": "node scripts/merge-coverage.mjs unit",
     "coverage:merge:full": "node scripts/merge-coverage.mjs full",
