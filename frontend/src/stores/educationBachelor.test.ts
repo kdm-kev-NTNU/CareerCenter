@@ -184,4 +184,54 @@ describe("useEducationBachelorStore", () => {
     expect(mockedApi.deleteBachelorFile).toHaveBeenCalledWith("file-1");
     expect(store.downloadUrl("file-1")).toContain("file-1");
   });
+
+  it("continues batch upload after failures and reports feedback", async () => {
+    mockedApi.uploadBachelorFile
+      .mockResolvedValueOnce(sampleFile)
+      .mockRejectedValueOnce(new Error("Mappe finnes ikke."));
+
+    const store = useEducationBachelorStore();
+    await store.loadAll();
+
+    const okFile = new File(["hello"], "ok.pdf", { type: "application/pdf" });
+    const badFile = new File(["hello"], "bad.pdf", { type: "application/pdf" });
+    await store.uploadFiles([okFile, badFile]);
+
+    expect(store.files).toHaveLength(1);
+    expect(store.uploadResults).toEqual([
+      { fileName: "ok.pdf", ok: true },
+      { fileName: "bad.pdf", ok: false, message: "Mappe finnes ikke." }
+    ]);
+    expect(store.uploadError).toContain("bad.pdf");
+    expect(store.uploadError).toContain("Mappe finnes ikke.");
+  });
+
+  it("rejects oversize and empty files before calling the API", async () => {
+    const store = useEducationBachelorStore();
+    await store.loadAll();
+
+    const emptyFile = new File([], "empty.pdf", { type: "application/pdf" });
+    const hugeFile = new File([new Uint8Array(50 * 1024 * 1024 + 1)], "huge.pdf", {
+      type: "application/pdf"
+    });
+    const okFile = new File(["hello"], "ok.pdf", { type: "application/pdf" });
+    mockedApi.uploadBachelorFile.mockResolvedValue(sampleFile);
+
+    await store.uploadFiles([emptyFile, hugeFile, okFile]);
+
+    expect(mockedApi.uploadBachelorFile).toHaveBeenCalledTimes(1);
+    expect(store.files).toHaveLength(1);
+    expect(store.uploadResults.filter((result) => !result.ok)).toHaveLength(2);
+    expect(store.uploadError).toContain("empty.pdf");
+    expect(store.uploadError).toContain("huge.pdf");
+  });
+
+  it("clears upload feedback", async () => {
+    const store = useEducationBachelorStore();
+    store.uploadError = "Feil";
+    store.uploadResults = [{ fileName: "a.pdf", ok: false, message: "Feil" }];
+    store.clearUploadFeedback();
+    expect(store.uploadError).toBe("");
+    expect(store.uploadResults).toEqual([]);
+  });
 });

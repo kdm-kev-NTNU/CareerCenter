@@ -5,7 +5,7 @@ import { pipeline } from "node:stream/promises";
 import type { Readable } from "node:stream";
 import { env } from "./config/env.js";
 
-const MAX_FILE_BYTES = 50 * 1024 * 1024;
+export const MAX_FILE_BYTES = 50 * 1024 * 1024;
 
 export function getUploadRoot(): string {
   return path.resolve(env.UPLOAD_DIR);
@@ -55,9 +55,17 @@ export async function writeUploadedFile(storagePath: string, stream: Readable): 
       writeStream.destroy();
     }
   });
-  await pipeline(stream, writeStream);
-  const fileStat = await stat(absolute);
-  return fileStat.size;
+  try {
+    await pipeline(stream, writeStream);
+    const fileStat = await stat(absolute);
+    if (fileStat.size === 0) {
+      throw new Error("Filen er tom.");
+    }
+    return fileStat.size;
+  } catch (error) {
+    await deleteStoredFile(storagePath);
+    throw error;
+  }
 }
 
 export function readStoredFile(storagePath: string): Readable {

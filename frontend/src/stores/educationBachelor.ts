@@ -2,7 +2,14 @@ import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import type { BachelorFile, BachelorFolderTreeNode, BachelorKnowledge } from "@careercenter/shared";
 import { api } from "../api/index.js";
+import { MAX_BACHELOR_FILE_BYTES } from "../api/client.js";
 import type { BachelorKnowledgePayload } from "../types/index.js";
+
+export type BachelorUploadResult = {
+  fileName: string;
+  ok: boolean;
+  message?: string;
+};
 
 function entryToPayload(entry: BachelorKnowledge): BachelorKnowledgePayload {
   return {
@@ -53,6 +60,9 @@ export const useEducationBachelorStore = defineStore("educationBachelor", () => 
   const files = ref<BachelorFile[]>([]);
   const currentFolderId = ref<string | null>(null);
   const uploading = ref(false);
+  const uploadError = ref("");
+  const uploadResults = ref<BachelorUploadResult[]>([]);
+  const uploadProgress = ref({ current: 0, total: 0 });
   const expandedFolderIds = ref<Set<string>>(new Set());
 
   const newEntry = ref<BachelorKnowledgePayload>({
@@ -176,14 +186,55 @@ export const useEducationBachelorStore = defineStore("educationBachelor", () => 
     const items = [...fileList];
     if (!items.length) return;
     uploading.value = true;
+    uploadError.value = "";
+    uploadResults.value = [];
+    uploadProgress.value = { current: 0, total: items.length };
+    const failures: string[] = [];
+
     try {
       for (const file of items) {
-        const created = await api.uploadBachelorFile(file, currentFolderId.value);
-        files.value.push(created);
+        uploadProgress.value = {
+          current: uploadProgress.value.current + 1,
+          total: items.length
+        };
+
+        if (file.size === 0) {
+          const message = "Filen er tom.";
+          uploadResults.value.push({ fileName: file.name, ok: false, message });
+          failures.push(`${file.name}: ${message}`);
+          continue;
+        }
+
+        if (file.size > MAX_BACHELOR_FILE_BYTES) {
+          const message = "Filen er for stor (maks 50 MB).";
+          uploadResults.value.push({ fileName: file.name, ok: false, message });
+          failures.push(`${file.name}: ${message}`);
+          continue;
+        }
+
+        try {
+          const created = await api.uploadBachelorFile(file, currentFolderId.value);
+          files.value.push(created);
+          uploadResults.value.push({ fileName: file.name, ok: true });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Opplasting feilet.";
+          uploadResults.value.push({ fileName: file.name, ok: false, message });
+          failures.push(`${file.name}: ${message}`);
+        }
       }
     } finally {
       uploading.value = false;
+      uploadProgress.value = { current: 0, total: 0 };
     }
+
+    if (failures.length) {
+      uploadError.value = failures.join(" ");
+    }
+  }
+
+  function clearUploadFeedback() {
+    uploadError.value = "";
+    uploadResults.value = [];
   }
 
   async function deleteFile(id: string) {
@@ -220,6 +271,9 @@ export const useEducationBachelorStore = defineStore("educationBachelor", () => 
     files,
     currentFolderId,
     uploading,
+    uploadError,
+    uploadResults,
+    uploadProgress,
     expandedFolderIds,
     newEntry,
     newFolderName,
@@ -239,6 +293,7 @@ export const useEducationBachelorStore = defineStore("educationBachelor", () => 
     renameFolder,
     deleteFolder,
     uploadFiles,
+    clearUploadFeedback,
     deleteFile,
     updateFileNotes,
     renameFile,

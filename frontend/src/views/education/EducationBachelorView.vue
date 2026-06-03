@@ -25,6 +25,7 @@ const dragOver = ref(false);
 const fileInput = ref<HTMLInputElement | null>(null);
 
 function onDragOver(event: DragEvent) {
+  if (store.uploading) return;
   event.preventDefault();
   dragOver.value = true;
 }
@@ -36,10 +37,12 @@ function onDragLeave() {
 async function onDrop(event: DragEvent) {
   event.preventDefault();
   dragOver.value = false;
-  if (event.dataTransfer?.files?.length) await store.uploadFiles(event.dataTransfer.files);
+  if (store.uploading || !event.dataTransfer?.files?.length) return;
+  await store.uploadFiles(event.dataTransfer.files);
 }
 
 function onFileInput(event: Event) {
+  if (store.uploading) return;
   const input = event.target as HTMLInputElement;
   if (input.files?.length) void store.uploadFiles(input.files);
   input.value = "";
@@ -112,18 +115,41 @@ function onMoveFile(fileId: string) {
 
         <div
           class="panel upload-zone"
-          :class="{ 'upload-zone-active': dragOver, 'upload-zone-busy': store.uploading }"
+          :class="{ 'upload-zone-active': dragOver && !store.uploading, 'upload-zone-busy': store.uploading }"
           @dragover="onDragOver"
           @dragleave="onDragLeave"
           @drop="onDrop"
         >
-          <p v-if="store.uploading">Laster opp …</p>
+          <p v-if="store.uploading">
+            Laster opp {{ store.uploadProgress.current }} av {{ store.uploadProgress.total }} …
+          </p>
           <template v-else>
             <p><strong>Dra filer hit</strong> eller velg fra datamaskinen</p>
             <p class="upload-hint">PDF, bilder, dokumenter, kode — maks 50 MB per fil</p>
             <button class="primary" type="button" @click="fileInput?.click()">Velg filer</button>
             <input ref="fileInput" type="file" multiple hidden @change="onFileInput" />
           </template>
+        </div>
+
+        <div
+          v-if="store.uploadError || store.uploadResults.length"
+          class="panel upload-feedback"
+          role="status"
+          aria-live="polite"
+        >
+          <div v-if="store.uploadError" class="upload-feedback-error" role="alert">
+            <p>{{ store.uploadError }}</p>
+          </div>
+          <ul v-if="store.uploadResults.length" class="upload-feedback-list">
+            <li
+              v-for="result in store.uploadResults"
+              :key="result.fileName"
+              :class="result.ok ? 'upload-feedback-ok' : 'upload-feedback-fail'"
+            >
+              {{ result.fileName }} — {{ result.ok ? "Lastet opp" : result.message }}
+            </li>
+          </ul>
+          <button type="button" class="ghost mini-link" @click="store.clearUploadFeedback()">Lukk</button>
         </div>
 
         <article v-if="store.childFolders.length" class="panel">

@@ -51,6 +51,16 @@ describe("api client", () => {
     expect((options?.headers as Headers).has("content-type")).toBe(false);
   });
 
+  it("parses JSON error messages from failed uploads", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({ message: "Mappe finnes ikke." }, { status: 422 })
+    );
+
+    await expect(
+      educationApi.uploadBachelorFile(new File(["x"], "notes.pdf"), "missing-folder")
+    ).rejects.toThrow("Mappe finnes ikke.");
+  });
+
   it("builds GET and PUT requests for all API resources", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(() => Promise.resolve(jsonResponse([])));
 
@@ -332,9 +342,6 @@ describe("api client", () => {
     await educationApi.deleteBachelorFolder("folder-1");
     await educationApi.bachelorFiles(null);
     await educationApi.uploadBachelorFile(new File(["x"], "notes.pdf"), "folder-1", "notes");
-    await expect(
-      educationApi.uploadBachelorFile(new File(["x"], "bad.pdf"), null)
-    ).rejects.toThrow("Upload failed");
     await educationApi.updateBachelorFile("file-1", { notes: "Updated" });
     await educationApi.deleteBachelorFile("file-1");
     expect(educationApi.bachelorFileDownloadUrl("file-1")).toBe("/api/education/bachelor/files/file-1/download");
