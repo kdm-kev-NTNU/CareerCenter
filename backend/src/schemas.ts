@@ -1,4 +1,8 @@
 import {
+  aiResourceConfigFormats,
+  aiResourceKinds,
+  aiResourceStatuses,
+  aiResourceTargetTools,
   careerTracks,
   competitionFormats,
   competitionScopes,
@@ -33,6 +37,10 @@ const optionalUrlField = z
   .union([z.string().url(), z.literal(""), z.null()])
   .optional()
   .transform((value) => (value ? value || undefined : undefined));
+
+const potentialSecretPattern = /(sk-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9_]{16,}|github_pat_[A-Za-z0-9_]{16,}|xox[baprs]-[A-Za-z0-9-]{16,}|AKIA[0-9A-Z]{16})/;
+
+const noPotentialSecret = (value: string) => !potentialSecretPattern.test(value);
 
 export const courseSchema = z.object({
   semester: z.union([z.literal(7), z.literal(8), z.literal(9), z.literal(10)]),
@@ -114,6 +122,21 @@ export const learningPlatformSchema = z.object({
   notes: z.string().default(""),
   isActive: z.boolean().default(true),
   sortOrder: z.number().int().default(0)
+});
+
+export const aiResourceSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  kind: z.enum(aiResourceKinds),
+  targetTools: z.array(z.enum(aiResourceTargetTools)).min(1).default(["cursor"]),
+  status: z.enum(aiResourceStatuses).default("draft"),
+  tags: z.array(z.string().trim().min(1).max(60)).default([]),
+  installPath: z.string().trim().max(260).default(""),
+  content: z.string().default("").refine(noPotentialSecret, {
+    message: "Innholdet ser ut til å inneholde en hemmelig nøkkel. Bruk env-placeholder i stedet."
+  }),
+  frontmatter: z.record(z.unknown()).default({}),
+  configFormat: z.enum(aiResourceConfigFormats).default("markdown"),
+  notes: z.string().default("")
 });
 
 export const bachelorKnowledgeSchema = z.object({

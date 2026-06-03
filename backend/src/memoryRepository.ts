@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid";
 import type {
+  AiResource,
   BachelorFile,
   BachelorFolder,
   BachelorFolderTreeNode,
@@ -34,6 +35,7 @@ import type {
   CompetitionInput,
   CourseInput,
   EducationBookInput,
+  AiResourceInput,
   LearningPlatformInput,
   Repository,
   SelfStudyCourseInput
@@ -56,6 +58,7 @@ export class MemoryRepository implements Repository {
   private selfStudyCourses = new Map<string, SelfStudyCourse & { userId: string }>();
   private educationBooks = new Map<string, EducationBook & { userId: string }>();
   private learningPlatforms = new Map<string, LearningPlatform & { userId: string }>();
+  private aiResources = new Map<string, AiResource & { userId: string }>();
   private bachelorKnowledge = new Map<string, BachelorKnowledge & { userId: string }>();
   private bachelorFolders = new Map<string, BachelorFolder & { userId: string }>();
   private bachelorFiles = new Map<string, BachelorFile & { userId: string; storagePath: string }>();
@@ -354,6 +357,44 @@ export class MemoryRepository implements Repository {
     return this.learningPlatforms.delete(id);
   }
 
+  async listAiResources(userId: string): Promise<AiResource[]> {
+    return [...this.aiResources.values()]
+      .filter((resource) => resource.userId === userId)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.name.localeCompare(b.name))
+      .map((resource) => this.cloneAiResource(resource));
+  }
+
+  async createAiResource(userId: string, input: AiResourceInput): Promise<AiResource> {
+    const now = new Date().toISOString();
+    const resource: AiResource & { userId: string } = {
+      id: nanoid(),
+      userId,
+      ...this.toAiResourceInput(input),
+      createdAt: now,
+      updatedAt: now
+    };
+    this.aiResources.set(resource.id, resource);
+    return this.cloneAiResource(resource);
+  }
+
+  async updateAiResource(userId: string, id: string, input: AiResourceInput): Promise<AiResource | null> {
+    const existing = this.aiResources.get(id);
+    if (!existing || existing.userId !== userId) return null;
+    const updated: AiResource & { userId: string } = {
+      ...existing,
+      ...this.toAiResourceInput(input),
+      updatedAt: new Date().toISOString()
+    };
+    this.aiResources.set(id, updated);
+    return this.cloneAiResource(updated);
+  }
+
+  async deleteAiResource(userId: string, id: string): Promise<boolean> {
+    const existing = this.aiResources.get(id);
+    if (!existing || existing.userId !== userId) return false;
+    return this.aiResources.delete(id);
+  }
+
   async listBachelorKnowledge(userId: string, folderId?: string | null): Promise<BachelorKnowledge[]> {
     return [...this.bachelorKnowledge.values()]
       .filter(
@@ -579,6 +620,31 @@ export class MemoryRepository implements Repository {
       notes: input.notes,
       isActive: input.isActive,
       sortOrder: input.sortOrder
+    };
+  }
+
+  private toAiResourceInput(input: AiResourceInput) {
+    return {
+      name: input.name,
+      kind: input.kind,
+      targetTools: [...input.targetTools],
+      status: input.status,
+      tags: [...input.tags],
+      installPath: input.installPath,
+      content: input.content,
+      frontmatter: structuredClone(input.frontmatter),
+      configFormat: input.configFormat,
+      notes: input.notes
+    };
+  }
+
+  private cloneAiResource(resource: AiResource & { userId?: string }): AiResource {
+    const { userId: _userId, ...publicResource } = resource;
+    return {
+      ...publicResource,
+      targetTools: [...resource.targetTools],
+      tags: [...resource.tags],
+      frontmatter: structuredClone(resource.frontmatter)
     };
   }
 
