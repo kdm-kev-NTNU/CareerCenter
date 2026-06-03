@@ -209,6 +209,23 @@ describe("CareerCenter", () => {
     cy.contains(".folder-tree", "Algoritmer").should("be.visible");
   });
 
+  it("uploads a PDF file to a bachelor folder", () => {
+    const folderName = `E2E PDF ${Date.now()}`;
+
+    cy.visit("/");
+    cy.contains("button", "Utdanning").click();
+    cy.contains("button", "Bachelor-lærdom").click();
+
+    cy.get('input[placeholder="Ny mappe"]').type(folderName);
+    cy.get("form.folder-create").contains("button", "+").click();
+    cy.contains(".folder-label", folderName).click();
+
+    cy.get('input[type="file"]').selectFile("cypress/fixtures/sample.pdf", { force: true });
+
+    cy.contains(".upload-feedback-ok", "sample.pdf").should("contain", "Lastet opp");
+    cy.contains(".file-card strong", "sample.pdf").should("be.visible");
+  });
+
   it("adds a book and platform under education", () => {
     cy.visit("/");
     cy.contains("button", "Utdanning").click();

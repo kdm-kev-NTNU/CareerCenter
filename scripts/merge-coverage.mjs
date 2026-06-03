@@ -84,6 +84,7 @@ function shouldIncludeSourcePath(coveragePath, coverageMode) {
   if (/\/[^/]*RepositoryImpl\.ts$/.test(normalized)) return false;
   if (/\/[^/]*MemoryRepositoryImpl\.ts$/.test(normalized)) return false;
   if (normalized.endsWith("/memoryRepository.ts")) return false;
+  if (normalized.endsWith("/prismaRepository.ts")) return false;
   if (/\/[^/]*(graduateProgram|internship)Catalog\.ts$/.test(normalized)) return false;
   if (normalized.endsWith("/auth/bootstrapUser.ts")) return false;
   if (/\/(seedData|boardGraphSeed|internshipSeedData|graduateProgramSeedData|bachelorFileStorage)\.ts$/.test(normalized)) {
