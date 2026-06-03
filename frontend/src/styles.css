@@ -872,6 +872,20 @@ nav button.active, nav button:hover { background: #1f2937; color: #ffffff; }
 .upload-zone-active { border-color: var(--accent); background: #eef8f3; }
 .upload-zone-busy { opacity: 0.7; }
 .upload-hint { font-size: 0.9rem; color: var(--muted); }
+.upload-feedback {
+  display: grid;
+  gap: 10px;
+}
+.upload-feedback-error p {
+  margin: 0;
+  color: #9b1c1c;
+}
+.upload-feedback-list {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+.upload-feedback-ok { color: var(--accent); }
+.upload-feedback-fail { color: #9b1c1c; }
 .folder-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
