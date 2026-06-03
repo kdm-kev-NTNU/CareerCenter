@@ -19,6 +19,25 @@ export const careerTrackDefaults = careerTracks.map((track, index) => ({
 }));
 export const courseStatuses = ["planned", "considering", "confirmed", "completed"];
 export const learningStatuses = ["planned", "in_progress", "completed"];
+export const aiResourceKinds = [
+    "cursor_rule",
+    "cursor_skill",
+    "codex_instruction",
+    "codex_skill",
+    "mcp_server",
+    "prompt_snippet",
+    "workflow_checklist"
+];
+export const aiResourceTargetTools = ["cursor", "codex"];
+export const aiResourceStatuses = ["draft", "active", "needs_review", "archived"];
+export const aiResourceConfigFormats = ["markdown", "mdc", "json", "toml", "plain"];
+export const aiResourceExportTargets = ["cursor", "codex", "all"];
+export const aiResourceWriteStrategies = [
+    "replace",
+    "managed_markdown_block",
+    "json_mcp_merge",
+    "toml_managed_block"
+];
 export function assertSemester(value) {
     if ([7, 8, 9, 10].includes(value)) {
         return value;
