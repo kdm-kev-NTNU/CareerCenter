@@ -138,6 +138,61 @@ describe("ai-resource-sync CLI core", () => {
     const manifest = JSON.parse(await readFile(path.join(cwd, ".careercenter/ai-sync.json"), "utf8"));
     expect(manifest.ownedMcpServers[".cursor/mcp.json"]).toEqual(["docs"]);
   });
+
+  it("replaces CareerCenter-managed TOML blocks and preserves manual text", async () => {
+    const cwd = await tempDir();
+    await mkdir(path.join(cwd, ".codex"), { recursive: true });
+    await writeFile(
+      path.join(cwd, ".codex/config.toml"),
+      [
+        "model = \"gpt-5\"",
+        "",
+        "# BEGIN CAREERCENTER AI RESOURCES",
+        "old = true",
+        "# END CAREERCENTER AI RESOURCES",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    await syncAiResources({
+      cwd,
+      yes: true,
+      now,
+      bundle: bundle([
+        exportFile(".codex/config.toml", "[mcp_servers.docs]\ncommand = \"npx\"\n", "toml_managed_block")
+      ])
+    });
+
+    const content = await readFile(path.join(cwd, ".codex/config.toml"), "utf8");
+    expect(content).toContain("model = \"gpt-5\"");
+    expect(content).toContain("[mcp_servers.docs]");
+    expect(content).not.toContain("old = true");
+  });
+
+  it("applies replace files when force is enabled despite conflicts", async () => {
+    const cwd = await tempDir();
+    await mkdir(path.join(cwd, ".cursor/rules"), { recursive: true });
+    await writeFile(path.join(cwd, ".cursor/rules/tailwind.mdc"), "# manual\n", "utf8");
+
+    const conflict = await syncAiResources({
+      cwd,
+      yes: true,
+      now,
+      bundle: bundle([exportFile(".cursor/rules/tailwind.mdc", "# managed\n")])
+    });
+    expect(conflict.conflicts).toHaveLength(1);
+
+    await syncAiResources({
+      cwd,
+      yes: true,
+      force: true,
+      now: "2026-06-03T10:10:00.000Z",
+      bundle: bundle([exportFile(".cursor/rules/tailwind.mdc", "# managed\n")])
+    });
+
+    await expect(readFile(path.join(cwd, ".cursor/rules/tailwind.mdc"), "utf8")).resolves.toBe("# managed\n");
+  });
 });
 
 async function tempDir() {

@@ -829,6 +829,84 @@ describe("CareerCenter API", () => {
     await app.close();
   });
 
+  it("rejects invalid AI resource imports and export targets", async () => {
+    const app = await createTestApp();
+
+    const rejectedImport = await app.inject({
+      method: "POST",
+      url: "/api/education/ai-resources/import",
+      payload: {
+        files: [{
+          fileName: "broken.mdc",
+          content: "---\ndescription: Missing fields\n---\n# Broken"
+        }]
+      }
+    });
+    expect(rejectedImport.statusCode).toBe(200);
+    expect(rejectedImport.json().rejected).toHaveLength(1);
+    expect(rejectedImport.json().rejected[0].fileName).toBe("broken.mdc");
+
+    const invalidExport = await app.inject({
+      method: "GET",
+      url: "/api/education/ai-resources/export?target=invalid"
+    });
+    expect(invalidExport.statusCode).toBe(400);
+    expect(invalidExport.json().message).toBe("Ugyldig eksportmål.");
+
+    await app.close();
+  });
+
+  it("excludes archived AI resources from export bundles", async () => {
+    const app = await createTestApp();
+
+    const active = await app.inject({
+      method: "POST",
+      url: "/api/education/ai-resources",
+      payload: {
+        name: "Active prompt",
+        kind: "prompt_snippet",
+        targetTools: ["cursor"],
+        status: "active",
+        tags: [],
+        installPath: ".cursor/snippets/active.md",
+        content: "# Active",
+        frontmatter: {},
+        configFormat: "markdown",
+        notes: ""
+      }
+    });
+    expect(active.statusCode).toBe(200);
+
+    const archived = await app.inject({
+      method: "POST",
+      url: "/api/education/ai-resources",
+      payload: {
+        name: "Archived prompt",
+        kind: "prompt_snippet",
+        targetTools: ["cursor"],
+        status: "archived",
+        tags: [],
+        installPath: ".cursor/snippets/archived.md",
+        content: "# Archived",
+        frontmatter: {},
+        configFormat: "markdown",
+        notes: ""
+      }
+    });
+    expect(archived.statusCode).toBe(200);
+
+    const exportBundle = await app.inject({
+      method: "GET",
+      url: "/api/education/ai-resources/export?target=cursor"
+    });
+    expect(exportBundle.statusCode).toBe(200);
+    const paths = exportBundle.json().files.map((file: { path: string }) => file.path);
+    expect(paths).toContain(".cursor/snippets/active.md");
+    expect(paths).not.toContain(".cursor/snippets/archived.md");
+
+    await app.close();
+  });
+
   it("creates education books and platforms and returns 404 for unknown ids", async () => {
     const app = await createTestApp();
 

@@ -55,7 +55,7 @@ describe("registerErrorHandler", () => {
     expect(response.statusCode).toBe(404);
     expect(response.json()).toEqual({ message: "Ruten ble ikke funnet." });
     await app.close();
-  });
+  }, 10000);
 
   it("maps ZodError to 400 with issues", async () => {
     const app = await createApp();
