@@ -1,6 +1,6 @@
 # Testing and coverage gates
 
-CareerCenter enforces **80% line/statement/function coverage** (78% branches) before merging to `main`.
+CareerCenter enforces **75% line/statement/function/branch coverage** before merging to `main`.
 
 ## Gates
 
