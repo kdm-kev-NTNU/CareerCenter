@@ -77,6 +77,11 @@ export interface AiResource {
   frontmatter: Record<string, unknown>;
   configFormat: AiResourceConfigFormat;
   notes: string;
+  folderPath: string;
+  isStarred: boolean;
+  usageCount: number;
+  lastUsedAt?: string | null;
+  sourcePath?: string;
   createdAt: string;
   updatedAt: string;
 }

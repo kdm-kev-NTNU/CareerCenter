@@ -225,6 +225,11 @@ export interface AiResourceInput {
   frontmatter: Record<string, unknown>;
   configFormat: AiResourceConfigFormat;
   notes: string;
+  folderPath: string;
+  isStarred: boolean;
+  usageCount: number;
+  lastUsedAt?: string | null;
+  sourcePath?: string;
 }
 
 export interface BachelorKnowledgeInput {
@@ -315,6 +320,7 @@ export interface Repository {
   listAiResources(userId: string): Promise<AiResource[]>;
   createAiResource(userId: string, input: AiResourceInput): Promise<AiResource>;
   updateAiResource(userId: string, id: string, input: AiResourceInput): Promise<AiResource | null>;
+  markAiResourceUsed(userId: string, id: string): Promise<AiResource | null>;
   deleteAiResource(userId: string, id: string): Promise<boolean>;
   listBachelorKnowledge(userId: string, folderId?: string | null): Promise<BachelorKnowledge[]>;
   createBachelorKnowledge(userId: string, input: BachelorKnowledgeInput): Promise<BachelorKnowledge>;

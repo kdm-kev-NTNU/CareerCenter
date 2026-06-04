@@ -16,6 +16,7 @@ vi.mock("../api/index.js", () => ({
     deleteAiResource: vi.fn(),
     importAiResources: vi.fn(),
     exportAiResources: vi.fn(),
+    markAiResourceUsed: vi.fn(),
     syncAiResources: vi.fn(),
     scanAiResources: vi.fn()
   }
@@ -36,6 +37,11 @@ const resource = {
   frontmatter: {},
   configFormat: "markdown" as const,
   notes: "",
+  folderPath: "AI Agents/Skills",
+  isStarred: false,
+  usageCount: 0,
+  lastUsedAt: null,
+  sourcePath: "AGENTS.md",
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z"
 };
@@ -52,6 +58,11 @@ const cursorRule = {
   frontmatter: { description: "Tailwind", globs: "**/*.vue", alwaysApply: false },
   configFormat: "mdc" as const,
   notes: "",
+  folderPath: "Development/Code Quality",
+  isStarred: false,
+  usageCount: 0,
+  lastUsedAt: null,
+  sourcePath: ".cursor/rules/tailwind.mdc",
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z"
 };
@@ -129,6 +140,7 @@ describe("useEducationAiResourcesStore", () => {
 
     const store = useEducationAiResourcesStore();
     await store.loadResources();
+    store.selectVirtualGroup("recent");
     expect(store.filteredResources).toHaveLength(2);
 
     store.filterTarget = "codex";
@@ -145,6 +157,31 @@ describe("useEducationAiResourcesStore", () => {
     store.filterStatus = "all";
     store.search = "agents";
     expect(store.filteredResources).toEqual([resource]);
+  });
+
+  it("selects virtual groups, stars, moves, and marks resources as used", async () => {
+    mockedApi.aiResources.mockResolvedValue([resource, cursorRule]);
+    mockedApi.updateAiResource
+      .mockResolvedValueOnce({ ...cursorRule, isStarred: true })
+      .mockResolvedValueOnce({ ...cursorRule, folderPath: "Accessibility/WCAG" });
+    mockedApi.markAiResourceUsed.mockResolvedValue({ ...cursorRule, usageCount: 1, lastUsedAt: "2026-01-02T00:00:00.000Z" });
+
+    const store = useEducationAiResourcesStore();
+    await store.loadResources();
+
+    expect(store.folderSummaries.map((folder) => folder.path)).toEqual(["AI Agents/Skills", "Development/Code Quality"]);
+
+    await store.toggleStar(cursorRule);
+    store.selectVirtualGroup("starred");
+    expect(store.filteredResources).toEqual([expect.objectContaining({ id: "ai-2", isStarred: true })]);
+
+    await store.markResourceUsed(cursorRule);
+    store.selectVirtualGroup("frequent");
+    expect(store.filteredResources[0]).toEqual(expect.objectContaining({ id: "ai-2", usageCount: 1 }));
+
+    await store.moveResource(cursorRule, "Accessibility/WCAG");
+    store.selectFolder("Accessibility/WCAG");
+    expect(store.filteredResources[0]).toEqual(expect.objectContaining({ folderPath: "Accessibility/WCAG" }));
   });
 
   it("sets loading flags and success message on create", async () => {
@@ -283,6 +320,29 @@ describe("useEducationAiResourcesStore", () => {
       files: [{ fileName: ".cursor/rules/tailwind.mdc", content: "# Tailwind" }]
     });
     expect(store.scanResult?.created).toHaveLength(1);
+  });
+
+  it("imports browser-picked agent inventory skills with canonical paths", async () => {
+    mockedApi.importAiResources.mockResolvedValue({
+      created: [cursorRule],
+      updated: [],
+      rejected: []
+    });
+    mockedApi.aiResources.mockResolvedValue([cursorRule]);
+
+    const file = Object.assign(new File(["# Readme updater"], "SKILL.md", { type: "text/plain" }), {
+      webkitRelativePath: ".agent-inventory/skills/user/readme-updater/SKILL.md",
+      text: async () => "# Readme updater"
+    });
+
+    const store = useEducationAiResourcesStore();
+    store.setProjectFolderFromFileList([file] as unknown as FileList);
+    await store.runScan();
+
+    expect(mockedApi.scanAiResources).not.toHaveBeenCalled();
+    expect(mockedApi.importAiResources).toHaveBeenCalledWith({
+      files: [{ fileName: ".agent-inventory/skills/user/readme-updater/SKILL.md", content: "# Readme updater" }]
+    });
   });
 
   it("batches folder imports above 25 files", async () => {

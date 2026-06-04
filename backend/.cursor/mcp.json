@@ -1,0 +1,26 @@
+{
+  "mcpServers": {
+    "elevenlabs": {
+      "command": "uvx",
+      "args": [
+        "elevenlabs-mcp"
+      ],
+      "env": {
+        "ELEVENLABS_API_KEY": "YOUR_ELEVENLABS_API_KEY"
+      }
+    },
+    "rapidchart": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "rapidchart-mcp",
+        "python",
+        "-m",
+        "rapidchart_mcp"
+      ],
+      "env": {
+        "RAPIDCHART_API_TOKEN": "rc_QCIMeCINPqhjSOp77q4haEFfkH-HlG-d358kCkRoMAU"
+      }
+    }
+  }
+}

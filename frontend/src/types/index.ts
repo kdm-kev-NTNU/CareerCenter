@@ -99,6 +99,11 @@ export interface AiResourcePayload {
   frontmatter: Record<string, unknown>;
   configFormat: AiResourceConfigFormat;
   notes: string;
+  folderPath: string;
+  isStarred: boolean;
+  usageCount: number;
+  lastUsedAt?: string | null;
+  sourcePath?: string;
 }
 
 export interface AiResourceImportPayload {

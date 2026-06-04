@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "syncedAt": "2026-06-04T09:48:58.464Z",
+  "files": {
+    ".cursor/mcp.json": {
+      "hash": "173f78cb27da62b09b12c44201d31eb02a5261e5fcad9a6f532662a7c28d9b8f",
+      "resourceIds": [
+        "cmpyzfj3k0001nx7xgji34efd"
+      ],
+      "resourceNames": [
+        "MCP: elevenlabs, rapidchart"
+      ],
+      "writeStrategy": "json_mcp_merge"
+    }
+  },
+  "ownedMcpServers": {
+    ".cursor/mcp.json": [
+      "elevenlabs",
+      "rapidchart"
+    ]
+  }
+}

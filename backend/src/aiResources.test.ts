@@ -3,6 +3,7 @@ import {
   buildAiResourceExportBundle,
   inferAiResourceFromFile
 } from "./aiResources.js";
+import { classifyAiResourceFolder } from "./aiResourceFolders.js";
 
 describe("ai resource import and export helpers", () => {
   it("parses valid Cursor MDC frontmatter", () => {
@@ -50,6 +51,11 @@ describe("ai resource import and export helpers", () => {
       frontmatter: {},
       configFormat: "json" as const,
       notes: "",
+      folderPath: "MCP/Connectors",
+      isStarred: false,
+      usageCount: 0,
+      lastUsedAt: null,
+      sourcePath: ".cursor/mcp.json",
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z"
     };
@@ -74,6 +80,11 @@ describe("ai resource import and export helpers", () => {
       frontmatter: { description: "Tailwind", globs: "**/*.vue", alwaysApply: false },
       configFormat: "mdc" as const,
       notes: "",
+      folderPath: "Development/Code Quality",
+      isStarred: false,
+      usageCount: 0,
+      lastUsedAt: null,
+      sourcePath: ".cursor/rules/tailwind.mdc",
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z"
     };
@@ -151,6 +162,45 @@ describe("ai resource import and export helpers", () => {
     expect(pluginSkill.kind).toBe("cursor_skill");
     expect(pluginSkill.tags).toContain("plugins/posthog");
     expect(pluginSkill.installPath).toBe(".cursor/skills/querying-posthog-data/SKILL.md");
+
+    const mirroredAgentsSkill = inferAiResourceFromFile({
+      fileName: ".agent-inventory/skills/agents/planning/SKILL.md",
+      content: "# Planning\nPlan agent work."
+    });
+    expect(mirroredAgentsSkill.kind).toBe("codex_skill");
+    expect(mirroredAgentsSkill.targetTools).toEqual(["codex"]);
+    expect(mirroredAgentsSkill.installPath).toBe(".codex/skills/planning/SKILL.md");
+    expect(mirroredAgentsSkill.tags).toContain("agents");
+    expect(mirroredAgentsSkill.notes).toContain(".agent-inventory/skills/agents/planning/SKILL.md");
+  });
+
+  it("infers .agents skills as Codex skills without adding a new target", () => {
+    const resource = inferAiResourceFromFile({
+      fileName: ".agents/skills/planning/SKILL.md",
+      content: "# Planning\nUse agent skills."
+    });
+
+    expect(resource.kind).toBe("codex_skill");
+    expect(resource.targetTools).toEqual(["codex"]);
+    expect(resource.installPath).toBe(".codex/skills/planning/SKILL.md");
+    expect(resource.tags).toContain("agents");
+    expect(resource.notes).toContain(".agents/skills/planning/SKILL.md");
+    expect(resource.folderPath).toBe("AI Agents/Skills");
+  });
+
+  it("classifies resources into virtual folders by path and keywords", () => {
+    expect(classifyFolder({
+      name: "WCAG audit",
+      kind: "prompt_snippet",
+      tags: ["a11y"],
+      content: "Check universell utforming and WCAG contrast."
+    })).toBe("Accessibility/WCAG");
+    expect(classifyFolder({ name: "Landing page launch", content: "Oppstart nettsider and product pages." })).toBe("Startup/Websites");
+    expect(classifyFolder({ name: "Railway deploy", sourcePath: ".agents/skills/use-railway/SKILL.md", content: "Deploy with Railway env vars." })).toBe("Deployment/Infrastructure");
+    expect(classifyFolder({ name: "Figma system", content: "FigJam and design system setup." })).toBe("Design/Figma");
+    expect(classifyFolder({ name: "OWASP check", content: "Secrets and Semgrep security audit." })).toBe("Security/Compliance");
+    expect(classifyFolder({ name: "MCP config", kind: "mcp_server", sourcePath: ".cursor/mcp.json" })).toBe("MCP/Connectors");
+    expect(classifyFolder({ name: "General note", content: "No strong signals." })).toBe("Inbox");
   });
 
   it("infers AGENTS.md as codex instructions", () => {
@@ -247,8 +297,26 @@ function baseResource(overrides: Partial<{
     frontmatter: {},
     configFormat: "mdc" as const,
     notes: "",
+    folderPath: "Inbox",
+    isStarred: false,
+    usageCount: 0,
+    lastUsedAt: null,
+    sourcePath: ".cursor/rules/style.mdc",
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
     ...overrides
   };
+}
+
+function classifyFolder(overrides: Partial<Parameters<typeof classifyAiResourceFolder>[0]>) {
+  return classifyAiResourceFolder({
+    name: "Resource",
+    kind: "prompt_snippet",
+    targetTools: ["cursor", "codex"],
+    tags: [],
+    installPath: "",
+    content: "",
+    notes: "",
+    ...overrides
+  });
 }

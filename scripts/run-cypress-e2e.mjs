@@ -66,6 +66,8 @@ process.on("SIGTERM", () => {
 
 const apiPort = await getFreePort();
 const apiUrl = `http://127.0.0.1:${apiPort}`;
+const webPort = await getFreePort();
+const webUrl = `http://127.0.0.1:${webPort}`;
 
 run(["run", "dev", "--workspace", "@careercenter/api"], {
   CAREERCENTER_REPOSITORY: "memory",
@@ -73,13 +75,13 @@ run(["run", "dev", "--workspace", "@careercenter/api"], {
   AUTH_DISABLED: "true",
   PORT: String(apiPort)
 });
-run(["run", "dev", "--workspace", "@careercenter/web"], {
+run(["run", "dev", "--workspace", "@careercenter/web", "--", "--port", String(webPort), "--strictPort"], {
   CYPRESS_COVERAGE: "true",
   VITE_PROXY_TARGET: apiUrl
 });
 
 await waitFor(`${apiUrl}/api/health`);
-await waitFor("http://127.0.0.1:5173");
+await waitFor(webUrl);
 
 const me = await fetch(`${apiUrl}/api/auth/me`);
 if (!me.ok) {
@@ -88,9 +90,9 @@ if (!me.ok) {
   );
 }
 
-const cypressArgs = ["run", "test:e2e", "--workspace", "@careercenter/web"];
+const cypressArgs = ["run", "test:e2e", "--workspace", "@careercenter/web", "--", "--config", `baseUrl=${webUrl}`];
 if (process.env.CYPRESS_SPEC) {
-  cypressArgs.push("--", "--spec", process.env.CYPRESS_SPEC);
+  cypressArgs.push("--spec", process.env.CYPRESS_SPEC);
 }
 
 const cypress = spawn(npmCommand, cypressArgs, {

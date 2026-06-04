@@ -29,6 +29,11 @@ const defaultFrontmatter = {
   alwaysApply: false
 };
 
+export type AiResourceVirtualGroup = "starred" | "frequent" | "recent" | "needs_review";
+export type AiResourceSelection =
+  | { type: "folder"; path: string }
+  | { type: "virtual"; group: AiResourceVirtualGroup };
+
 function emptyResource(): AiResourcePayload {
   return {
     name: "",
@@ -40,7 +45,12 @@ function emptyResource(): AiResourcePayload {
     content: "",
     frontmatter: { ...defaultFrontmatter },
     configFormat: "mdc",
-    notes: ""
+    notes: "",
+    folderPath: "Inbox",
+    isStarred: false,
+    usageCount: 0,
+    lastUsedAt: null,
+    sourcePath: undefined
   };
 }
 
@@ -59,7 +69,12 @@ function resourceToPayload(resource: AiResource): AiResourcePayload {
     content: resource.content,
     frontmatter: cloneFrontmatter(resource.frontmatter),
     configFormat: resource.configFormat,
-    notes: resource.notes
+    notes: resource.notes,
+    folderPath: resource.folderPath,
+    isStarred: resource.isStarred,
+    usageCount: resource.usageCount,
+    lastUsedAt: resource.lastUsedAt ?? null,
+    sourcePath: resource.sourcePath
   };
 }
 
@@ -69,6 +84,7 @@ function normalizePayload(payload: AiResourcePayload): AiResourcePayload {
     name: payload.name.trim(),
     installPath: payload.installPath.trim(),
     tags: payload.tags.map((tag) => tag.trim()).filter(Boolean),
+    folderPath: normalizeFolderPath(payload.folderPath),
     targetTools: [...new Set(payload.targetTools)],
     frontmatter: payload.kind === "cursor_rule" && payload.configFormat === "mdc"
       ? { ...defaultFrontmatter, ...payload.frontmatter }
@@ -105,6 +121,7 @@ export const useEducationAiResourcesStore = defineStore("educationAiResources", 
   const filterTarget = ref<"all" | AiResourceTargetTool>("all");
   const filterKind = ref<"all" | AiResourceKind>("all");
   const filterStatus = ref<"all" | AiResourceStatus>("all");
+  const selectedResourceGroup = ref<AiResourceSelection>({ type: "folder", path: "Inbox" });
   const search = ref("");
 
   const isSaving = ref(false);
@@ -129,7 +146,18 @@ export const useEducationAiResourcesStore = defineStore("educationAiResources", 
 
   const filteredResources = computed(() => {
     const query = search.value.trim().toLowerCase();
-    return resources.value
+    const selected = selectedResourceGroup.value;
+    const scoped = resources.value
+      .filter((resource) => {
+        if (selected.type === "folder") return resource.folderPath === selected.path;
+        if (selected.group === "starred") return resource.isStarred;
+        if (selected.group === "frequent") return resource.usageCount > 0;
+        if (selected.group === "recent") return true;
+        if (selected.group === "needs_review") return resource.status === "needs_review";
+        return true;
+      });
+
+    const filtered = scoped
       .filter((resource) => filterTarget.value === "all" || resource.targetTools.includes(filterTarget.value))
       .filter((resource) => filterKind.value === "all" || resource.kind === filterKind.value)
       .filter((resource) => filterStatus.value === "all" || resource.status === filterStatus.value)
@@ -146,11 +174,42 @@ export const useEducationAiResourcesStore = defineStore("educationAiResources", 
           ...resource.targetTools
         ].join(" ").toLowerCase().includes(query);
       });
+    if (selected.type === "virtual" && selected.group === "frequent") {
+      return filtered.sort(
+        (a, b) =>
+          b.usageCount - a.usageCount ||
+          (b.lastUsedAt ?? "").localeCompare(a.lastUsedAt ?? "") ||
+          a.name.localeCompare(b.name)
+      );
+    }
+    if (selected.type === "virtual" && selected.group === "recent") {
+      return filtered.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.name.localeCompare(b.name));
+    }
+    return filtered;
   });
 
   const tagOptions = computed(() =>
     [...new Set(resources.value.flatMap((resource) => resource.tags))].sort((a, b) => a.localeCompare(b))
   );
+
+  const folderOptions = computed(() =>
+    [...new Set(resources.value.map((resource) => normalizeFolderPath(resource.folderPath)))]
+      .sort((a, b) => a.localeCompare(b))
+  );
+
+  const folderSummaries = computed(() =>
+    folderOptions.value.map((path) => ({
+      path,
+      count: resources.value.filter((resource) => resource.folderPath === path).length
+    }))
+  );
+
+  const virtualGroupSummaries = computed(() => [
+    { key: "starred" as const, label: "Stjernet", count: resources.value.filter((resource) => resource.isStarred).length },
+    { key: "frequent" as const, label: "Ofte brukt", count: resources.value.filter((resource) => resource.usageCount > 0).length },
+    { key: "recent" as const, label: "Nylig endret", count: resources.value.length },
+    { key: "needs_review" as const, label: "Trenger sjekk", count: resources.value.filter((resource) => resource.status === "needs_review").length }
+  ]);
 
   const hasProjectFolder = computed(() =>
     Boolean(syncCwd.value.trim() || projectDirectoryHandle.value || pickedFolderFiles.value.length)
@@ -188,6 +247,7 @@ export const useEducationAiResourcesStore = defineStore("educationAiResources", 
 
   async function loadResources() {
     resources.value = await api.aiResources();
+    ensureSelectedGroupExists();
   }
 
   async function addResource() {
@@ -201,6 +261,7 @@ export const useEducationAiResourcesStore = defineStore("educationAiResources", 
       });
       const created = await api.createAiResource(payload);
       resources.value = [created, ...resources.value];
+      selectedResourceGroup.value = { type: "folder", path: created.folderPath };
       newResource.value = emptyResource();
       tagInput.value = "";
       showSuccess("Ressurs lagt til.");
@@ -261,6 +322,35 @@ export const useEducationAiResourcesStore = defineStore("educationAiResources", 
     } finally {
       deletingId.value = null;
     }
+  }
+
+  function selectFolder(path: string) {
+    selectedResourceGroup.value = { type: "folder", path: normalizeFolderPath(path) };
+  }
+
+  function selectVirtualGroup(group: AiResourceVirtualGroup) {
+    selectedResourceGroup.value = { type: "virtual", group };
+  }
+
+  async function toggleStar(resource: AiResource) {
+    const updated = await api.updateAiResource(resource.id, {
+      ...resourceToPayload(resource),
+      isStarred: !resource.isStarred
+    });
+    replaceResource(updated);
+  }
+
+  async function moveResource(resource: AiResource, folderPath: string) {
+    const updated = await api.updateAiResource(resource.id, {
+      ...resourceToPayload(resource),
+      folderPath: normalizeFolderPath(folderPath)
+    });
+    replaceResource(updated);
+  }
+
+  async function markResourceUsed(resource: AiResource) {
+    const updated = await api.markAiResourceUsed(resource.id);
+    replaceResource(updated);
   }
 
   async function importFromText() {
@@ -346,7 +436,7 @@ export const useEducationAiResourcesStore = defineStore("educationAiResources", 
     } else if (result.rejected.length) {
       scanError.value = `${result.rejected.length} fil(er) kunne ikke importeres.`;
     } else {
-      showSuccess(`Ingen Cursor/Codex-filer funnet i mappen (${result.scanned} skannet).`);
+      showSuccess(`Ingen AI-ressursfiler funnet i mappen (${result.scanned} skannet).`);
     }
   }
 
@@ -384,7 +474,7 @@ export const useEducationAiResourcesStore = defineStore("educationAiResources", 
     scanError.value = "";
     syncError.value = "";
     if (!entries.length) {
-      scanError.value = "Ingen Cursor/Codex-filer funnet i valgt mappe.";
+      scanError.value = "Ingen AI-ressursfiler funnet i valgt mappe.";
     }
   }
 
@@ -562,10 +652,26 @@ export const useEducationAiResourcesStore = defineStore("educationAiResources", 
     payload.tags = payload.tags.filter((item) => item !== tag);
   }
 
+  function replaceResource(resource: AiResource) {
+    const index = resources.value.findIndex((item) => item.id === resource.id);
+    if (index >= 0) resources.value[index] = resource;
+  }
+
+  function ensureSelectedGroupExists() {
+    const selected = selectedResourceGroup.value;
+    if (selected.type === "folder" && resources.value.length && !resources.value.some((resource) => resource.folderPath === selected.path)) {
+      selectedResourceGroup.value = { type: "folder", path: resources.value[0].folderPath };
+    }
+  }
+
   return {
     resources,
     filteredResources,
     tagOptions,
+    folderOptions,
+    folderSummaries,
+    virtualGroupSummaries,
+    selectedResourceGroup,
     newResource,
     tagInput,
     editingId,
@@ -614,6 +720,11 @@ export const useEducationAiResourcesStore = defineStore("educationAiResources", 
     cancelEdit,
     saveEdit,
     removeResource,
+    selectFolder,
+    selectVirtualGroup,
+    toggleStar,
+    moveResource,
+    markResourceUsed,
     importFromText,
     importFiles,
     pickProjectFolder,
@@ -634,6 +745,16 @@ function splitTags(value: string) {
     .split(",")
     .map((tag) => tag.trim())
     .filter(Boolean);
+}
+
+function normalizeFolderPath(value: string) {
+  const normalized = value
+    .replace(/\\/g, "/")
+    .split("/")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join("/");
+  return normalized || "Inbox";
 }
 
 function defaultApiUrl() {

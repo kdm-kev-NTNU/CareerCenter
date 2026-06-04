@@ -1,0 +1,1102 @@
+{
+  "version": 1,
+  "syncedAt": "2026-06-04T09:59:10.099Z",
+  "files": {
+    ".codex/skills/nmiai-grocery-bot/SKILL.md": {
+      "hash": "93f36c7819e44f7281b703372fa4f2228b4bf46256cfbe67ad893eb3051a54a9",
+      "resourceIds": [
+        "cmpzbpf7v007npg7l3dc3fxa6"
+      ],
+      "resourceNames": [
+        "NMiAI Grocery Bot"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".codex/skills/use-railway/SKILL.md": {
+      "hash": "46dea300efbdf8542b89aabadb844dac061c3d932657144c111df4b8fd7bef5b",
+      "resourceIds": [
+        "cmpzbpf84007ppg7lqf22i8ap"
+      ],
+      "resourceNames": [
+        "Use Railway"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/mcp.json": {
+      "hash": "173f78cb27da62b09b12c44201d31eb02a5261e5fcad9a6f532662a7c28d9b8f",
+      "resourceIds": [
+        "cmpyzfj3k0001nx7xgji34efd"
+      ],
+      "resourceNames": [
+        "MCP: elevenlabs, rapidchart"
+      ],
+      "writeStrategy": "json_mcp_merge"
+    },
+    ".cursor/skills/agent-ready-apis/SKILL.md": {
+      "hash": "84d33fc53f753a99d8c0f80930dcb65c3b12b4c5f2a3a21d7bd4e393bf72e7cc",
+      "resourceIds": [
+        "cmpzbpfgo00cxpg7lailndcfx"
+      ],
+      "resourceNames": [
+        "Agent-Ready APIs"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/analyzing-experiment-session-replays/SKILL.md": {
+      "hash": "d54a8025887b73007052bc824a5a5f861048d253acbd29f7e7f4038ecf875790",
+      "resourceIds": [
+        "cmpzbpfby009xpg7lhdkryd0m"
+      ],
+      "resourceNames": [
+        "Analyzing experiment session replays"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/auditing-experiments-flags/SKILL.md": {
+      "hash": "c92d8c4160b28b57b8229044fe14748c734cb35391f1a9d0a94aef3b2bd8e339",
+      "resourceIds": [
+        "cmpzbpfc1009zpg7lnvpj5ytc"
+      ],
+      "resourceNames": [
+        "Auditing experiments and feature flags"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/auditing-warehouse-data-health/SKILL.md": {
+      "hash": "4198da7ecdc3ad9afa6529468e091e9fa9f47d35c45f0affc3d7b94ce5c588bd",
+      "resourceIds": [
+        "cmpzbpfc400a1pg7lps8skewu"
+      ],
+      "resourceNames": [
+        "Auditing data warehouse health"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/authoring-log-alerts/SKILL.md": {
+      "hash": "fc0a1cda9a5f83ae784c13380faeb63c9da53a720f73e71b3bb525be4691c1bd",
+      "resourceIds": [
+        "cmpzbpfc800a3pg7lpg5gsxao"
+      ],
+      "resourceNames": [
+        "Authoring log alerts"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/automate/SKILL.md": {
+      "hash": "db96fe2cb6a25fac8561374b1e2362fbd06df3f352625516c6b78d5731fcbbc2",
+      "resourceIds": [
+        "cmpzbpf89007rpg7l1obkm1he"
+      ],
+      "resourceNames": [
+        "Create Automation (Interactive)"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/babysit/SKILL.md": {
+      "hash": "b46766ed302c34e7b2b52a03b5df706ec6fcaffeed4df2e68b7607939a79d602",
+      "resourceIds": [
+        "cmpzbpf8f007tpg7lukyfcdgh"
+      ],
+      "resourceNames": [
+        "Babysit PR"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/canvas/SKILL.md": {
+      "hash": "379c593cb8e6c5ca524ccc4a503a3b06970fe01f434d6aee887d125bdb9b839d",
+      "resourceIds": [
+        "cmpzbpf8j007vpg7lmzr8ze7w"
+      ],
+      "resourceNames": [
+        "Canvas"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/cleaning-up-stale-feature-flags/SKILL.md": {
+      "hash": "e88ca46034daa6d18da940bff56943deb817f48108e837b38dcf52fbbc306931",
+      "resourceIds": [
+        "cmpzbpfcb00a5pg7lgmua7209"
+      ],
+      "resourceNames": [
+        "Cleaning up stale feature flags"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/cli-for-agents/SKILL.md": {
+      "hash": "1cddd028d24ece48cd538fc1d84e49f5922dc8d04ee88caf12666b0557575e09",
+      "resourceIds": [
+        "cmpzbpf9o008lpg7lh7lurgjy"
+      ],
+      "resourceNames": [
+        "CLI for agents"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/cloudinary-docs/SKILL.md": {
+      "hash": "2fe2fa982189dbb8a27d7605f3b2952340b08be1a1d1b4ee4188051fd2095043",
+      "resourceIds": [
+        "cmpzbpf9s008npg7ll91su1qw"
+      ],
+      "resourceNames": [
+        "Cloudinary Documentation"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/cloudinary-transformations/SKILL.md": {
+      "hash": "930488e5c29f8f249f7897e7b8ba9dc8d4ff909c79196d4b1c2d8605ad33c36e",
+      "resourceIds": [
+        "cmpzbpf9v008ppg7l4zr7b8ac"
+      ],
+      "resourceNames": [
+        "Cloudinary Transformation Rules"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/configuring-experiment-analytics/SKILL.md": {
+      "hash": "d61ed4ebe6aee98ab774c95b84fe21b9f4413494a8b5230952f16e502c8e7b99",
+      "resourceIds": [
+        "cmpzbpfce00a7pg7lvfr4urxv"
+      ],
+      "resourceNames": [
+        "Configuring experiment analytics"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/configuring-experiment-rollout/SKILL.md": {
+      "hash": "f67ab5386589abd14b36c0f6658a2b9f39103030b89a3031a9c41387e790e86a",
+      "resourceIds": [
+        "cmpzbpfch00a9pg7lnqv1fmxv"
+      ],
+      "resourceNames": [
+        "Configuring experiment rollout"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/context7-mcp/SKILL.md": {
+      "hash": "6f07fd4d6cbf96c00c66ef859c2981efb0795315069f55af30c0ae4f28b77690",
+      "resourceIds": [
+        "cmpzbpf9z008rpg7ljz4gbe98"
+      ],
+      "resourceNames": [
+        "Context7 Mcp"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/copying-flags-across-projects/SKILL.md": {
+      "hash": "74ff6d383991813e83544d8d53e3bc7c6db143a9825ab327885504c94d1f691c",
+      "resourceIds": [
+        "cmpzbpfcj00abpg7lkmsg6ujf"
+      ],
+      "resourceNames": [
+        "Copying feature flags across projects"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/create-hook/SKILL.md": {
+      "hash": "28bfa0c6cd13fa0167c72512fca0da2c6fc24b6eea67c5307bf1ef2bedca61a6",
+      "resourceIds": [
+        "cmpzbpf8m007xpg7lkhmwvsuq"
+      ],
+      "resourceNames": [
+        "Creating Cursor Hooks"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/create-rule/SKILL.md": {
+      "hash": "fe8499dfe93edbf8306df70498a7ea3572e0c8b340607137cbc836051520263c",
+      "resourceIds": [
+        "cmpzbpf8p007zpg7lyu6g2nsb"
+      ],
+      "resourceNames": [
+        "Creating Cursor Rules"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/create-skill/SKILL.md": {
+      "hash": "f3df382ea9cf2119ee8f121143b2ec0cacbd8bbc6dc3a15fd981ea547cef42f8",
+      "resourceIds": [
+        "cmpzbpf8t0081pg7luiu1aabp"
+      ],
+      "resourceNames": [
+        "Creating Skills in Cursor"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/create-subagent/SKILL.md": {
+      "hash": "ab46a80f90cb3810c3182a55b975b13bcf72e00e7fa907cf49fb3a30a02a3922",
+      "resourceIds": [
+        "cmpzbpf8y0083pg7lki4pcjj9"
+      ],
+      "resourceNames": [
+        "Creating Custom Subagents"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/creating-experiments/SKILL.md": {
+      "hash": "9583e11548656b3c26094a4b4626612adfdb35ee2d4bf183dbd2f04033388620",
+      "resourceIds": [
+        "cmpzbpfcm00adpg7l612zxo2k"
+      ],
+      "resourceNames": [
+        "Creating experiments"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/debugging-local-replay/SKILL.md": {
+      "hash": "41dc4aa66ef975b8c7ba9ff86ac3ac844ea2d602bad16fae80fdd9ffb2e3c071",
+      "resourceIds": [
+        "cmpzbpfcp00afpg7lqtdpv9lz"
+      ],
+      "resourceNames": [
+        "Debugging local session replay"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/diagnosing-experiment-results/SKILL.md": {
+      "hash": "b789cdea0faffed6126933c7fe8a453e45a58c8937b77c2c622d691d743cd8a8",
+      "resourceIds": [
+        "cmpzbpfcs00ahpg7lkn5pxx8u"
+      ],
+      "resourceNames": [
+        "Diagnosing experiment results"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/diagnosing-failed-warehouse-syncs/SKILL.md": {
+      "hash": "25de15370c06514385bd18faffaa3ad74921a15424b5eb255aaf6049a58c9546",
+      "resourceIds": [
+        "cmpzbpfcw00ajpg7lmfeohpvz"
+      ],
+      "resourceNames": [
+        "Diagnosing failed data warehouse syncs"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/diagnosing-missing-recordings/SKILL.md": {
+      "hash": "babfdfea3fd32ee061c6a15590ff5215b41822d381e6b4192322826656fe231b",
+      "resourceIds": [
+        "cmpzbpfcz00alpg7lcaf7efxs"
+      ],
+      "resourceNames": [
+        "Diagnosing missing session recordings"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/diagnosing-sdk-health/SKILL.md": {
+      "hash": "5cb71c3f20091f9edfabd6155ada180b3105ea20a37300018d83fc3b599a10a2",
+      "resourceIds": [
+        "cmpzbpfd200anpg7l6srdnqcf"
+      ],
+      "resourceNames": [
+        "Diagnosing SDK health"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/diagnosing-stacktrace-symbolication/SKILL.md": {
+      "hash": "3872ba5b00fdfeeba4491180bfc1906a4b7a2ca9a9a17799becd6e858394297f",
+      "resourceIds": [
+        "cmpzbpfd500appg7lnctzegnt"
+      ],
+      "resourceNames": [
+        "Diagnosing stack-trace symbolication"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/docs-canvas/SKILL.md": {
+      "hash": "6b38908f9ab810c72f1d85b7f104520c91ee04f3b4fb84a4352c83be15a60b1d",
+      "resourceIds": [
+        "cmpzbpfa1008tpg7lxfglcj1y"
+      ],
+      "resourceNames": [
+        "Docs Canvas"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/downloading-batch-export-files/SKILL.md": {
+      "hash": "30c5613dd5fbf45285f4435d679691a50c70dd6e32461c74666d9b8e65190a46",
+      "resourceIds": [
+        "cmpzbpfd800arpg7ljbco2pcc"
+      ],
+      "resourceNames": [
+        "Downloading batch export files"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/exploring-apm-traces/SKILL.md": {
+      "hash": "288bd30d549b9fc0c37be0e9eb5622e96d96d185d53305c60617dc8b70ab9420",
+      "resourceIds": [
+        "cmpzbpfdb00atpg7ll7s9bl9j"
+      ],
+      "resourceNames": [
+        "Exploring APM traces (OpenTelemetry spans)"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/exploring-autocapture-events/SKILL.md": {
+      "hash": "1cd39249525e91f92d0e7d5c98046f677e63e3b6f8325d024b148384552d907a",
+      "resourceIds": [
+        "cmpzbpfde00avpg7l1u93qgku"
+      ],
+      "resourceNames": [
+        "Exploring autocapture events"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/exploring-live-traffic/SKILL.md": {
+      "hash": "eb0bdf24fdf75155aab5caef4bc5f400842f3253eed7927a3fc8770ca83f4034",
+      "resourceIds": [
+        "cmpzbpfdi00axpg7lpwxr55t4"
+      ],
+      "resourceNames": [
+        "Exploring Web analytics live traffic"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/exploring-llm-clusters/SKILL.md": {
+      "hash": "9e52ac4a87c7afceb60edbf50e03852748397c84db1b25a92ef34164a9ddb491",
+      "resourceIds": [
+        "cmpzbpfdl00azpg7lr6hhzi93"
+      ],
+      "resourceNames": [
+        "Exploring LLM clusters"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/exploring-llm-costs/SKILL.md": {
+      "hash": "4f24ded21c77f9b3808679896e2077c834342ffc222f519e41a9b29f0674fde6",
+      "resourceIds": [
+        "cmpzbpfdn00b1pg7lqpfjjhtf"
+      ],
+      "resourceNames": [
+        "Exploring LLM costs"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/exploring-llm-evaluations/SKILL.md": {
+      "hash": "b2f8cb6e1aa0104e3173f8d99a4e2221bbf51c5ee6d0d02bdcbc436f8ce44c33",
+      "resourceIds": [
+        "cmpzbpfdq00b3pg7lyom91wwf"
+      ],
+      "resourceNames": [
+        "Exploring LLM evaluations"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/exploring-llm-traces/SKILL.md": {
+      "hash": "0c902e8f5eb68a5f665dc6de28805e59fd49e9bdea82069947a91e3e8703c394",
+      "resourceIds": [
+        "cmpzbpfdt00b5pg7lmyvi1dv2"
+      ],
+      "resourceNames": [
+        "Exploring LLM traces with MCP tools"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/feature-usage-feed/SKILL.md": {
+      "hash": "ec78bdef6450d52afb34a7174ee49f24b9d9361afcf59d106f06bc4ab8ae5e6e",
+      "resourceIds": [
+        "cmpzbpfdw00b7pg7lp6evkmkb"
+      ],
+      "resourceNames": [
+        "Building a feature usage feed via LLM evals"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/figma-code-connect/SKILL.md": {
+      "hash": "d69cfc0e2080351f0182a8f3c2349349fb6696f63cede8972e12ca3b71bafe10",
+      "resourceIds": [
+        "cmpzbpfa4008vpg7l1famr2dl"
+      ],
+      "resourceNames": [
+        "Code Connect"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/figma-create-new-file/SKILL.md": {
+      "hash": "82e0a018692d3d009b5d2c83ecce9203a4ce7dfbdb98b7b13a4f7e5b11832bc2",
+      "resourceIds": [
+        "cmpzbpfa8008xpg7lc8hc3nlo"
+      ],
+      "resourceNames": [
+        "create_new_file — Create a New Figma File"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/figma-generate-design/SKILL.md": {
+      "hash": "04713c467ae5efce7ff916d83a736d98f523ff4bc779d701e97c050aabd93bae",
+      "resourceIds": [
+        "cmpzbpfab008zpg7lipuxwe00"
+      ],
+      "resourceNames": [
+        "Build / Update Screens and Views from Design System"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/figma-generate-diagram/SKILL.md": {
+      "hash": "7297638dbf2130d1b37bfd85df65d290a4dd0b11a11b54abafcf7d07565922b5",
+      "resourceIds": [
+        "cmpzbpfaf0091pg7lpkwe19ec"
+      ],
+      "resourceNames": [
+        "generate-diagram"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/figma-generate-library/SKILL.md": {
+      "hash": "e35e6d2f6624ea6fc062b4960ea74120b4d172edd8be4acab02c76e526e509fb",
+      "resourceIds": [
+        "cmpzbpfaj0093pg7lmherp1ww"
+      ],
+      "resourceNames": [
+        "Design System Builder — Figma MCP Skill"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/figma-use-figjam/SKILL.md": {
+      "hash": "4edee26ddf0856f59308c9f08519ae3bae537af2e677eeb3090e0d47422dee14",
+      "resourceIds": [
+        "cmpzbpfas0097pg7lulo07adg"
+      ],
+      "resourceNames": [
+        "use_figma — Figma Plugin API Skill for FigJam"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/figma-use-slides/SKILL.md": {
+      "hash": "b29d989acf8426ae718c210dce7c11c758ffe12b72c63e57bb5d30da45dcfba3",
+      "resourceIds": [
+        "cmpzbpfav0099pg7lpk58z6jq"
+      ],
+      "resourceNames": [
+        "use_figma — Figma Plugin API Skill for Slides"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/figma-use/SKILL.md": {
+      "hash": "511a7b00228b6dc6e53e3ace27bfb9876b318807f1ebd12ad2b4e3b1ef61bfc1",
+      "resourceIds": [
+        "cmpzbpfao0095pg7lu97ewak4"
+      ],
+      "resourceNames": [
+        "use_figma — Figma Plugin API Skill"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/finding-deleted-feature-flags/SKILL.md": {
+      "hash": "b76d6f2627cced17a71f1a4bc57419d4274b19d372ae51fbe27325e6ee6e0de3",
+      "resourceIds": [
+        "cmpzbpfe000b9pg7ldx9n1skf"
+      ],
+      "resourceNames": [
+        "Finding recently deleted feature flags"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/finding-experiments/SKILL.md": {
+      "hash": "9ae81d5df483b49be4cd9dbccce8d39603d2e765cb0b79ec91ddea91b2216b7f",
+      "resourceIds": [
+        "cmpzbpfe200bbpg7l0w6bwkq5"
+      ],
+      "resourceNames": [
+        "Finding experiments"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/finding-replay-for-issue/SKILL.md": {
+      "hash": "d350946c826cdc2d28c6f6ae8f05a5cfc666de25ed4af858b392c0cf4d410c79",
+      "resourceIds": [
+        "cmpzbpfe400bdpg7lzrnnkr6u"
+      ],
+      "resourceNames": [
+        "Finding the best replay for an error tracking issue"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/firecrawl/SKILL.md": {
+      "hash": "a699d1e65f711651fe3c1958dbca7b3a1b7bbcc1ce08d8426dcae6d9c1f43f90",
+      "resourceIds": [
+        "cmpzbpfay009bpg7le6urm8y3"
+      ],
+      "resourceNames": [
+        "Firecrawl CLI"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/formatting-insight-axes/SKILL.md": {
+      "hash": "87ae1351885a6b460fb9da719a01aa5ec574fbcc716dbd92af32c157adb8065f",
+      "resourceIds": [
+        "cmpzbpfe600bfpg7lijbl0v72"
+      ],
+      "resourceNames": [
+        "Formatting insight axes"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/good-ci-cd/SKILL.md": {
+      "hash": "75094c52ed87aff928c3bea319191a59b9a064b73d2448aa671a36d7b04453d2",
+      "resourceIds": [
+        "cmpzbpfh000d9pg7lfmqddre1"
+      ],
+      "resourceNames": [
+        "Good CI/CD (platform-agnostic)"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/grouping-noisy-errors/SKILL.md": {
+      "hash": "a7315eb328ed41b220cbfee86170139e7742fcbca238d7d9998f1f3273cffb9b",
+      "resourceIds": [
+        "cmpzbpfe900bhpg7lvk2awbkc"
+      ],
+      "resourceNames": [
+        "Grouping noisy errors"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/hf-cli/SKILL.md": {
+      "hash": "ee61e0ed316a8d8b5348b87a3fd16f59187aac319a623c45098efc48eb8b9c41",
+      "resourceIds": [
+        "cmpzbpfb1009dpg7lx3ffiszc"
+      ],
+      "resourceNames": [
+        "Hf Cli"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/hugging-face-dataset-viewer/SKILL.md": {
+      "hash": "56b8ae1110445778c2aaf0ccaa3ea4579e9c357b5d20b4b33ce6f1d88d9cdd04",
+      "resourceIds": [
+        "cmpzbpfb4009fpg7l2k4d8dyb"
+      ],
+      "resourceNames": [
+        "Hugging Face Dataset Viewer"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/hugging-face-datasets/SKILL.md": {
+      "hash": "ca8fb141e351ff7bd0ae81992d5219a23649cc7497ee012ac785f636cf233c0b",
+      "resourceIds": [
+        "cmpzbpfb6009hpg7lqhb4m327"
+      ],
+      "resourceNames": [
+        "Overview"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/hugging-face-evaluation/SKILL.md": {
+      "hash": "a3acc51eb6df217fc6eb781f2fd58bc401d43864ae3a4b80bfd4fb62775a99d1",
+      "resourceIds": [
+        "cmpzbpfb9009jpg7lqyltuhay"
+      ],
+      "resourceNames": [
+        "Overview"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/hugging-face-jobs/SKILL.md": {
+      "hash": "a4e697cc1d5ffa293c537473f96efc570e24d698434829c9eb430a1cf099e469",
+      "resourceIds": [
+        "cmpzbpfbd009lpg7l64hwclyp"
+      ],
+      "resourceNames": [
+        "Running Workloads on Hugging Face Jobs"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/hugging-face-model-trainer/SKILL.md": {
+      "hash": "4a0d1a94f8755c9671f8addb44735d374163ecff839ffe685b8a52adcaca026e",
+      "resourceIds": [
+        "cmpzbpfbg009npg7lizvf7mxh"
+      ],
+      "resourceNames": [
+        "TRL Training on Hugging Face Jobs"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/hugging-face-paper-publisher/SKILL.md": {
+      "hash": "a9e12c89297d4085e045aa682c65f27adb456986c5cc3770cb481ce62cd6bcaa",
+      "resourceIds": [
+        "cmpzbpfbk009ppg7l6fx0j6ee"
+      ],
+      "resourceNames": [
+        "Overview"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/hugging-face-tool-builder/SKILL.md": {
+      "hash": "ad8ea7af44a94503c52859696c1828046688ceb71fda4361725fcd64e7aeaa82",
+      "resourceIds": [
+        "cmpzbpfbp009rpg7lbn06mmf8"
+      ],
+      "resourceNames": [
+        "Hugging Face API Tool Builder"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/hugging-face-trackio/SKILL.md": {
+      "hash": "0d0654cc659bca435bb4b278ff7f1d6c2978caebed1adb5b01dcf5a69286ca2b",
+      "resourceIds": [
+        "cmpzbpfbs009tpg7ljweiac8q"
+      ],
+      "resourceNames": [
+        "Trackio - Experiment Tracking for ML Training"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/huggingface-gradio/SKILL.md": {
+      "hash": "4efdbe6670297c26456043af8568733a36c12e5bb6df15b38967f19555075a99",
+      "resourceIds": [
+        "cmpzbpfbv009vpg7lob7gyof0"
+      ],
+      "resourceNames": [
+        "Gradio"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/inbox-exploration/SKILL.md": {
+      "hash": "dc0f2fc1b66d4d68303d66fb307a8921b9f54f582d7146ccd148afa138bee270",
+      "resourceIds": [
+        "cmpzbpfec00bjpg7l7rwsb01f"
+      ],
+      "resourceNames": [
+        "Exploring the Inbox"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/instrument-error-tracking/SKILL.md": {
+      "hash": "4db94c222c1fd94ba4e22757dcc299af3d326196584110be61d4f366c4a00f14",
+      "resourceIds": [
+        "cmpzbpfef00blpg7lyqxw50nr"
+      ],
+      "resourceNames": [
+        "Add PostHog error tracking"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/instrument-feature-flags/SKILL.md": {
+      "hash": "7d906c2eca72f410feabb867314a07809c962277d7c77836d68e3e88617148a2",
+      "resourceIds": [
+        "cmpzbpfei00bnpg7lxuhgo4og"
+      ],
+      "resourceNames": [
+        "Add PostHog feature flags"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/instrument-integration/SKILL.md": {
+      "hash": "112d1e6bafb4b5191bf432d7196c06be0a01d52f1a1da7990b70e732458a0f79",
+      "resourceIds": [
+        "cmpzbpfek00bppg7lfzxdtdus"
+      ],
+      "resourceNames": [
+        "Add PostHog SDK integration"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/instrument-llm-analytics/SKILL.md": {
+      "hash": "810b33b94ab6014fc1b13ce03957cce2a4e26079a2cda9a4b7459956da8988e7",
+      "resourceIds": [
+        "cmpzbpfen00brpg7lme5pipi1"
+      ],
+      "resourceNames": [
+        "Add PostHog LLM analytics"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/instrument-logs/SKILL.md": {
+      "hash": "d5cfd02163f98ad60a1c491c298f4b823728a94f9ec3e5d8a2ee34057c09187d",
+      "resourceIds": [
+        "cmpzbpfep00btpg7lqrqxvr5x"
+      ],
+      "resourceNames": [
+        "Add PostHog log capture"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/instrument-product-analytics/SKILL.md": {
+      "hash": "51d5595c23e34ba252ade7fa9d70f6e9198298157bdb500fda435504656de326",
+      "resourceIds": [
+        "cmpzbpfes00bvpg7loh4yesa5"
+      ],
+      "resourceNames": [
+        "Add PostHog product analytics events"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/investigate-metric/SKILL.md": {
+      "hash": "9350775ac9c2b7b4760173a0d7ffd5f17fc182333eb1b71dd6559deb8f85eb26",
+      "resourceIds": [
+        "cmpzbpfev00bxpg7lnxtjcku6"
+      ],
+      "resourceNames": [
+        "Investigating a metric change"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/investigating-error-issue/SKILL.md": {
+      "hash": "006e44ddcfedf254728971e6131a0dea2940cc311ad832643ff7bd5593a0221f",
+      "resourceIds": [
+        "cmpzbpfey00bzpg7l02beg7b9"
+      ],
+      "resourceNames": [
+        "Investigating an error tracking issue"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/investigating-replay/SKILL.md": {
+      "hash": "b4833c2ee44769022cdd98da0444eb08f1b6af608636ce22a5354416e863de3f",
+      "resourceIds": [
+        "cmpzbpff300c1pg7lzw1wy12d"
+      ],
+      "resourceNames": [
+        "Investigating a session recording"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/loop/SKILL.md": {
+      "hash": "e04f220748ab4aa7cfc8d905185b6f009ab92c04936bd6dd06aadb013443cc27",
+      "resourceIds": [
+        "cmpzbpf910085pg7l7rlwdego"
+      ],
+      "resourceNames": [
+        "Loop"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/managing-experiment-lifecycle/SKILL.md": {
+      "hash": "9884cbf12ce1a6aa7585529727baa7c4eb0e4c81c11ebd082fad1b0ffd863453",
+      "resourceIds": [
+        "cmpzbpff800c3pg7ldncn26vn"
+      ],
+      "resourceNames": [
+        "Managing experiment lifecycle"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/managing-path-cleaning-rules/SKILL.md": {
+      "hash": "928b716cea2c97654bc42108a76966e37c357eab3b30ad910eb04f97650fea75",
+      "resourceIds": [
+        "cmpzbpffd00c5pg7lubes52r2"
+      ],
+      "resourceNames": [
+        "Managing path cleaning rules"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/managing-subscriptions/SKILL.md": {
+      "hash": "561422dd992e1ef0dc02e1d42d8aaae8bd4be04c76f6529155ecfa8d30cf92df",
+      "resourceIds": [
+        "cmpzbpffg00c7pg7lzsn6ybr6"
+      ],
+      "resourceNames": [
+        "Managing subscriptions"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/migrate-to-skills/SKILL.md": {
+      "hash": "78c0483cc96ea3dc833f344ed928d425aff0c64cfcb02759fe5efe4a913a5b6b",
+      "resourceIds": [
+        "cmpzbpf930087pg7ldbzs7w8l"
+      ],
+      "resourceNames": [
+        "Migrate Rules and Slash Commands to Skills"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/norwegian-public-wcag/SKILL.md": {
+      "hash": "3a18f2db10c28dbc34e76e6e0503eb54083c8675b38eec1a0b4642f3f35a556f",
+      "resourceIds": [
+        "cmpzbpfh200dbpg7lo7dgzblm"
+      ],
+      "resourceNames": [
+        "Norsk offentlig sektor: WCAG og universell utforming"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/owasp-security-compliance/SKILL.md": {
+      "hash": "34a2681619f1675282d850b82f28ad53e20aacdc30c89ed384e3a05e89dfd08b",
+      "resourceIds": [
+        "cmpzbpfh500ddpg7lfjeed00x"
+      ],
+      "resourceNames": [
+        "OWASP-aligned security"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/planning-user-interviews/SKILL.md": {
+      "hash": "29f3180a559f3e54c813ca700cd4fdc447dfae1d3c5b07d0545be0680c66b7ce",
+      "resourceIds": [
+        "cmpzbpffk00c9pg7lvr0g549e"
+      ],
+      "resourceNames": [
+        "Planning user interviews"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/postman-knowledge/SKILL.md": {
+      "hash": "ea8cab207ffced71ac0e668593381da22cdeba046a106531df9cd28276281f1c",
+      "resourceIds": [
+        "cmpzbpfgq00czpg7lkaxdhu5i"
+      ],
+      "resourceNames": [
+        "Postman Knowledge Base"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/postman-routing/SKILL.md": {
+      "hash": "2b8f2ae2dc242b4b49417f7bc40723fd55898702bf78a16f9dd5c743b374deec",
+      "resourceIds": [
+        "cmpzbpfgs00d1pg7lz59uj08v"
+      ],
+      "resourceNames": [
+        "Postman Command Router"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/pr-review-canvas/SKILL.md": {
+      "hash": "f494f30a2d423953b4976d41353702fa32d347edf27519dbf936db5717865f03",
+      "resourceIds": [
+        "cmpzbpfgu00d3pg7lz87wioox"
+      ],
+      "resourceNames": [
+        "PR Review Canvas"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/querying-posthog-data/SKILL.md": {
+      "hash": "0deafccc521c3af0073cce05087c41b8f0caeb6dacef82fea10cd444ee032a75",
+      "resourceIds": [
+        "cmpzbpffo00cbpg7ldb7zinne"
+      ],
+      "resourceNames": [
+        "Querying data in PostHog"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/readme-updater/SKILL.md": {
+      "hash": "020dc4d42119d6190bcfeb614a132e1a33893db882590a645535b632022f9942",
+      "resourceIds": [
+        "cmpzbpfh700dfpg7l2f15yn2b"
+      ],
+      "resourceNames": [
+        "README Updater"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/sdk/SKILL.md": {
+      "hash": "0db41158a6b4fd16983ee178649204e98c2f57d182cdec30941a22d866e27435",
+      "resourceIds": [
+        "cmpzbpf960089pg7lm46o69ki"
+      ],
+      "resourceNames": [
+        "Cursor SDK"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/secure-dependency-health-check/SKILL.md": {
+      "hash": "8b8f4fbb37656b45df4e1f4acb06c1f1d65a608a08e08baeebcd624df838644a",
+      "resourceIds": [
+        "cmpzbpfgx00d7pg7ltcat7e5u"
+      ],
+      "resourceNames": [
+        "Secure Dependency Health Check"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/setting-up-a-data-warehouse-source/SKILL.md": {
+      "hash": "d0088b4d7f83131d93c6ef1d247026126719bac1b4076191bdc69575e8fa8256",
+      "resourceIds": [
+        "cmpzbpffs00cdpg7lmyw9mfd4"
+      ],
+      "resourceNames": [
+        "Setting up a data warehouse source"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/setup-semgrep-plugin/SKILL.md": {
+      "hash": "b73865949ed633c9c3eeeb444e133651ca1ad918f280322d52d1a9bb6381fda9",
+      "resourceIds": [
+        "cmpzbpfgw00d5pg7lrzyi3h9m"
+      ],
+      "resourceNames": [
+        "Setup Semgrep Plugin"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/shell/SKILL.md": {
+      "hash": "b354ce28c70af1d5c05bb6bf070a1823fadd470530993ab271a1cfcbe57ad4fe",
+      "resourceIds": [
+        "cmpzbpf9a008bpg7l2yih8nmf"
+      ],
+      "resourceNames": [
+        "Run Shell Commands"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/signals-scout-general/SKILL.md": {
+      "hash": "cbb36e8bf83b85f7bbfcbb11f46935e7dd20634cb1d26f972fedf2a2b339f6f8",
+      "resourceIds": [
+        "cmpzbpffz00chpg7l41n6gix0"
+      ],
+      "resourceNames": [
+        "Signals scout"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/signals/SKILL.md": {
+      "hash": "a338bf67dbb251ce3e3bf0188f61be215b00e1bf7dbb888858247b5f0a2a191e",
+      "resourceIds": [
+        "cmpzbpffw00cfpg7ltn8rgje6"
+      ],
+      "resourceNames": [
+        "Querying Signals"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/skills-store/SKILL.md": {
+      "hash": "6e548a19c7470b3bb9f85b4f5c920e0453ede21cb6fd53a2c124e4a8ac782233",
+      "resourceIds": [
+        "cmpzbpfg300cjpg7lh27mzplp"
+      ],
+      "resourceNames": [
+        "PostHog Skills Store"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/split-to-prs/SKILL.md": {
+      "hash": "61e3b94b54457e0f8a850cccf64936a0f5a686f6ad22016d17d30958d2f2b328",
+      "resourceIds": [
+        "cmpzbpf9d008dpg7lzcvi99yv"
+      ],
+      "resourceNames": [
+        "Split to PRs"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/statusline/SKILL.md": {
+      "hash": "9ce07cefc16faf737ad58fb8f09ac6d34ff457382daf90ff6a06d402f4688d73",
+      "resourceIds": [
+        "cmpzbpf9g008fpg7lnmtndgvc"
+      ],
+      "resourceNames": [
+        "CLI Status Line"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/suggesting-data-imports/SKILL.md": {
+      "hash": "850ec7ad7c2e6fb9f6240a5393cbd4f0b688606324e4a00dedc64b3404490f19",
+      "resourceIds": [
+        "cmpzbpfg600clpg7lx1r0fzco"
+      ],
+      "resourceNames": [
+        "Suggesting data imports"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/suppressing-noisy-errors/SKILL.md": {
+      "hash": "4b9d0c79700f053fb61fef0aa96bf49946635020d80e0de23b3df29af6856a78",
+      "resourceIds": [
+        "cmpzbpfg900cnpg7lzizi2vk9"
+      ],
+      "resourceNames": [
+        "Suppressing noisy errors"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/test-coverage-strategy/SKILL.md": {
+      "hash": "43fc3acf7d8f48decdeb6692f19e2fe0c0fb92e5d18f60de5f659185d29eea34",
+      "resourceIds": [
+        "cmpzbpfha00dhpg7lqvw0rls4"
+      ],
+      "resourceNames": [
+        "Test Coverage Strategy"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/triaging-error-issues/SKILL.md": {
+      "hash": "20e6298613453fa1bbc98c6dbae98370881f60701ac10bbbda51aa582a0cd21e",
+      "resourceIds": [
+        "cmpzbpfgc00cppg7l3bpj702b"
+      ],
+      "resourceNames": [
+        "Triaging error tracking issues"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/triaging-visual-review-runs/SKILL.md": {
+      "hash": "f1b3b7237685d93d8da954a219651d06531307bcab3ccfa0971a7e97ad47d5f3",
+      "resourceIds": [
+        "cmpzbpfgf00crpg7lweypaqj5"
+      ],
+      "resourceNames": [
+        "Triaging visual review runs"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/tuning-incremental-sync-config/SKILL.md": {
+      "hash": "d2c1748a455805e09ab7c5fb3fa87113d41a46dac3001812b5193c9c56cea817",
+      "resourceIds": [
+        "cmpzbpfgi00ctpg7ldftwv0p2"
+      ],
+      "resourceNames": [
+        "Tuning incremental sync config"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/update-cli-config/SKILL.md": {
+      "hash": "0bb1b24caac38f414030180e3dc58a5e79813b1dca4c7c56a78ae9cddf687333",
+      "resourceIds": [
+        "cmpzbpf9j008hpg7ld1erxzam"
+      ],
+      "resourceNames": [
+        "Cursor CLI Configuration"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/update-cursor-settings/SKILL.md": {
+      "hash": "8b5ee1a74dc964f5c240a18e0b7402051e0d1f688e7db3037048207213a0e78d",
+      "resourceIds": [
+        "cmpzbpf9m008jpg7l1hdu5qkf"
+      ],
+      "resourceNames": [
+        "Updating Cursor Settings"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/use-railway/SKILL.md": {
+      "hash": "46dea300efbdf8542b89aabadb844dac061c3d932657144c111df4b8fd7bef5b",
+      "resourceIds": [
+        "cmpzbpfhd00djpg7l84fsnhdz"
+      ],
+      "resourceNames": [
+        "Use Railway"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/user-story-task-planning/SKILL.md": {
+      "hash": "0c6f9dc12c3037a5a8785986962c262eedb132c3073451503758714c367dc897",
+      "resourceIds": [
+        "cmpzbpfhg00dlpg7lqgavalad"
+      ],
+      "resourceNames": [
+        "User stories and task planning"
+      ],
+      "writeStrategy": "replace"
+    },
+    ".cursor/skills/working-with-skills/SKILL.md": {
+      "hash": "4dddd7378a35f28d1cf810c46a123648232eb11bdfda1cd4cfc7cc73b4e9b86b",
+      "resourceIds": [
+        "cmpzbpfgl00cvpg7l7gkkt826"
+      ],
+      "resourceNames": [
+        "Working with PostHog skills"
+      ],
+      "writeStrategy": "replace"
+    }
+  },
+  "ownedMcpServers": {
+    ".cursor/mcp.json": [
+      "elevenlabs",
+      "rapidchart"
+    ]
+  }
+}
