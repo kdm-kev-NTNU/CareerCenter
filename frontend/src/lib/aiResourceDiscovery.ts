@@ -1,5 +1,9 @@
 export const IMPORT_BATCH_SIZE = 25;
 
+type IterableDirectoryHandle = FileSystemDirectoryHandle & {
+  values(): AsyncIterable<FileSystemHandle>;
+};
+
 const SINGLE_FILE_PATHS = new Set([
   ".cursorrules",
   "agents.md",
@@ -74,18 +78,18 @@ export async function collectFilesFromDirectoryHandle(
   const found: Array<{ fileName: string; content: string }> = [];
 
   async function walk(dir: FileSystemDirectoryHandle, base: string) {
-    for await (const entry of dir.values()) {
+    for await (const entry of (dir as IterableDirectoryHandle).values()) {
       const rel = base ? `${base}/${entry.name}` : entry.name;
       if (entry.kind === "file") {
         if (isDiscoverableAiResourcePath(rel)) {
-          const file = await entry.getFile();
+          const file = await (entry as FileSystemFileHandle).getFile();
           found.push({
             fileName: normalizeDiscoveryPath(rel),
             content: await file.text()
           });
         }
       } else if (entry.kind === "directory") {
-        await walk(entry, rel);
+        await walk(entry as FileSystemDirectoryHandle, rel);
       }
     }
   }
