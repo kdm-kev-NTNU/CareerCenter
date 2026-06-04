@@ -10,6 +10,7 @@ FROM deps AS build
 COPY tsconfig.base.json ./
 COPY packages/shared/ packages/shared/
 COPY backend/ backend/
+COPY scripts/ scripts/
 RUN npm run db:generate --workspace @careercenter/api
 RUN npm run build --workspace @careercenter/shared
 RUN npm run build --workspace @careercenter/api
@@ -27,5 +28,6 @@ COPY --from=build /app/node_modules/@prisma node_modules/@prisma
 COPY --from=build /app/backend/dist backend/dist
 COPY --from=build /app/backend/prisma backend/prisma
 COPY --from=build /app/packages/shared/dist packages/shared/dist
+COPY --from=build /app/scripts scripts/
 EXPOSE 3000
 CMD ["npm", "run", "start:prod", "--workspace", "@careercenter/api"]
