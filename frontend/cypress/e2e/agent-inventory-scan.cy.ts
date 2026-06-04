@@ -5,15 +5,16 @@ describe("Agent inventory scan", () => {
   let expectedSkillCount = 0;
 
   before(function () {
-    cy.task("agentInventoryStatus", { repoRoot }).then((status: { ready: boolean; skillCount: number }) => {
-      if (!status.ready) {
+    cy.task("agentInventoryStatus", { repoRoot }).then((status) => {
+      const inventory = status as { ready: boolean; skillCount: number };
+      if (!inventory.ready) {
         if (Cypress.env("CI")) {
           this.skip();
           return;
         }
         throw new Error("Kjør: powershell -File ./scripts/sync-agent-inventory.ps1");
       }
-      expectedSkillCount = status.skillCount;
+      expectedSkillCount = inventory.skillCount;
     });
   });
 
