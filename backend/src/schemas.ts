@@ -1,5 +1,6 @@
 import {
   aiResourceConfigFormats,
+  aiResourceExportTargets,
   aiResourceKinds,
   aiResourceStatuses,
   aiResourceTargetTools,
@@ -146,6 +147,16 @@ export const aiResourceImportSchema = z.object({
       message: "Innholdet ser ut til å inneholde en hemmelig nøkkel. Bruk env-placeholder i stedet."
     })
   })).min(1).max(25)
+});
+
+export const aiResourceSyncRequestSchema = z.object({
+  target: z.enum(aiResourceExportTargets).default("all"),
+  cwd: z.string().trim().min(1).max(500),
+  force: z.boolean().optional().default(false)
+});
+
+export const aiResourceScanRequestSchema = z.object({
+  cwd: z.string().trim().min(1).max(500)
 });
 
 export const bachelorKnowledgeSchema = z.object({

@@ -3,6 +3,8 @@ import type {
   AiResourceExportBundle,
   AiResourceExportTarget,
   AiResourceImportResult,
+  AiResourceScanResult,
+  AiResourceSyncResult,
   BachelorFile,
   BachelorFolder,
   BachelorFolderTreeNode,
@@ -57,6 +59,16 @@ export const educationApi = {
     request<AiResourceImportResult>("/api/education/ai-resources/import", { method: "POST", body: JSON.stringify(payload) }),
   exportAiResources: (target: AiResourceExportTarget = "all") =>
     request<AiResourceExportBundle>(`/api/education/ai-resources/export?target=${encodeURIComponent(target)}`),
+  syncAiResources: (payload: { target: AiResourceExportTarget; cwd: string; force?: boolean }) =>
+    request<AiResourceSyncResult>("/api/education/ai-resources/sync", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  scanAiResources: (payload: { cwd: string }) =>
+    request<AiResourceScanResult>("/api/education/ai-resources/scan", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
 
   bachelorKnowledge: (folderId?: string | null) => {
     if (folderId === undefined) return request<BachelorKnowledge[]>("/api/education/bachelor");

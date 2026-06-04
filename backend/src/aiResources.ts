@@ -1,3 +1,5 @@
+import { readdir, readFile, stat } from "node:fs/promises";
+import pathModule from "node:path";
 import type {
   AiResource,
   AiResourceExportBundle,
@@ -509,4 +511,71 @@ function ensureTrailingNewline(content: string) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+type DiscoveredFile = { fileName: string; content: string };
+
+export async function discoverAiResourceFiles(cwd: string): Promise<DiscoveredFile[]> {
+  const found: DiscoveredFile[] = [];
+
+  const singleFiles: Array<{ relative: string; optional: boolean }> = [
+    { relative: ".cursorrules", optional: true },
+    { relative: "AGENTS.md", optional: true },
+    { relative: ".cursor/mcp.json", optional: true },
+    { relative: ".codex/config.toml", optional: true }
+  ];
+
+  for (const { relative } of singleFiles) {
+    const abs = pathModule.resolve(cwd, relative);
+    const content = await readTextSafe(abs);
+    if (content !== null) found.push({ fileName: relative, content });
+  }
+
+  const globDirs: Array<{ dir: string; pattern: RegExp; recurse: boolean }> = [
+    { dir: ".cursor/rules", pattern: /\.mdc$/i, recurse: false },
+    { dir: ".cursor/skills", pattern: /^SKILL\.md$/i, recurse: true },
+    { dir: ".codex/skills", pattern: /^SKILL\.md$/i, recurse: true },
+    { dir: ".agents/skills", pattern: /^SKILL\.md$/i, recurse: true }
+  ];
+
+  for (const { dir, pattern, recurse } of globDirs) {
+    const abs = pathModule.resolve(cwd, dir);
+    await collectFiles(abs, dir, pattern, recurse, found);
+  }
+
+  return found;
+}
+
+async function readTextSafe(filePath: string): Promise<string | null> {
+  try {
+    const s = await stat(filePath);
+    if (!s.isFile()) return null;
+    return await readFile(filePath, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+async function collectFiles(
+  absDir: string,
+  relativeBase: string,
+  pattern: RegExp,
+  recurse: boolean,
+  out: DiscoveredFile[]
+) {
+  let entries;
+  try {
+    entries = await readdir(absDir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    const rel = `${relativeBase}/${entry.name}`;
+    if (entry.isFile() && pattern.test(entry.name)) {
+      const content = await readTextSafe(pathModule.join(absDir, entry.name));
+      if (content !== null) out.push({ fileName: rel, content });
+    } else if (entry.isDirectory() && recurse) {
+      await collectFiles(pathModule.join(absDir, entry.name), rel, pattern, recurse, out);
+    }
+  }
 }

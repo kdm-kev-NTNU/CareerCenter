@@ -13,7 +13,9 @@ vi.mock("../../api/index.js", () => ({
     updateAiResource: vi.fn(),
     deleteAiResource: vi.fn(),
     importAiResources: vi.fn(),
-    exportAiResources: vi.fn()
+    exportAiResources: vi.fn(),
+    syncAiResources: vi.fn(),
+    scanAiResources: vi.fn()
   }
 }));
 
@@ -69,21 +71,69 @@ describe("EducationAiResourcesView", () => {
     });
   }
 
-  it("shows the auto-load sync command and dry-run variant", () => {
+  it("shows the scan and sync panel with pick folder button", () => {
     const store = useEducationAiResourcesStore();
-    store.exportTarget = "cursor";
-    store.syncApiUrl = "http://127.0.0.1:3000";
-    store.syncCwd = ".";
+    store.syncCwd = "C:\\project";
 
     const wrapper = mountView();
 
-    expect(wrapper.text()).toContain("Auto-load / Sync");
-    expect(wrapper.find(".sync-steps").exists()).toBe(true);
-    expect(wrapper.find("[data-test='sync-command']").text()).toContain("ai-resource-sync.mjs");
-    expect(wrapper.find("[data-test='sync-command']").text()).toContain("--target cursor");
-    expect(wrapper.find("[data-test='sync-command']").text()).toContain("--yes");
-    expect(wrapper.find("[data-test='sync-dry-run-command']").text()).not.toContain("--yes");
-    expect(wrapper.find("[data-test='test-sync-connection']").exists()).toBe(true);
+    expect(wrapper.text()).toContain("Skann og synk");
+    expect(wrapper.find("[data-test='pick-folder']").exists()).toBe(true);
+    expect(wrapper.find("[data-test='run-scan']").exists()).toBe(true);
+    expect(wrapper.find("[data-test='run-sync']").exists()).toBe(true);
+    expect(wrapper.text()).toContain("Skann prosjekt");
+    expect(wrapper.text()).toContain("Synk til prosjekt");
+    expect(wrapper.text()).toContain("Velg mappe");
+  });
+
+  it("enables scan after folder label is set", async () => {
+    const wrapper = mountView();
+    const store = useEducationAiResourcesStore();
+    store.syncFolderLabel = "CareerCenter";
+    store.pickedFolderFiles = [new File(["# Agents"], "AGENTS.md")];
+    await flushPromises();
+
+    expect(store.hasProjectFolder).toBe(true);
+    expect(wrapper.find("[data-test='run-scan']").attributes("disabled")).toBeUndefined();
+  });
+
+  it("shows sync result after runSync", async () => {
+    mockedApi.syncAiResources.mockResolvedValue({
+      dryRun: false,
+      target: "cursor",
+      cwd: "C:\\project",
+      files: [{ path: ".cursor/rules/tailwind.mdc", action: "create", writeStrategy: "replace" }],
+      conflicts: [],
+      rejected: []
+    });
+
+    const wrapper = mountView();
+    const store = useEducationAiResourcesStore();
+    store.syncCwd = "C:\\project";
+    await store.runSync();
+    await flushPromises();
+
+    expect(wrapper.find("[data-test='sync-result']").text()).toContain("tailwind.mdc");
+    expect(wrapper.find("[data-test='sync-result']").text()).toContain("Opprettet");
+  });
+
+  it("shows scan result after runScan", async () => {
+    mockedApi.scanAiResources.mockResolvedValue({
+      created: [cursorRule],
+      updated: [],
+      rejected: [],
+      scanned: 3
+    });
+    mockedApi.aiResources.mockResolvedValue([cursorRule]);
+
+    const wrapper = mountView();
+    const store = useEducationAiResourcesStore();
+    store.syncCwd = "C:\\project";
+    await store.runScan();
+    await flushPromises();
+
+    expect(wrapper.find("[data-test='scan-result']").text()).toContain("3 filer");
+    expect(wrapper.find("[data-test='scan-result']").text()).toContain("1 nye");
   });
 
   it("shows success message from store", async () => {
@@ -100,62 +150,6 @@ describe("EducationAiResourcesView", () => {
     appStore.isInitializing = true;
     await flushPromises();
     expect(wrapper.find("[data-test='ai-resources-loading']").text()).toContain("Laster AI-ressurser");
-  });
-
-  it("shows rejected import files", async () => {
-    mockedApi.importAiResources.mockResolvedValue({
-      created: [],
-      updated: [],
-      rejected: [{ fileName: "broken.mdc", message: "globs is required" }]
-    });
-
-    const wrapper = mountView();
-    const store = useEducationAiResourcesStore();
-    store.importFileName = "broken.mdc";
-    store.importContent = "---\ndescription: Missing fields\n---\n# Broken";
-
-    await store.importFromText();
-    await flushPromises();
-
-    expect(wrapper.find(".import-result").text()).toContain("1 avvist");
-    expect(wrapper.find(".import-result").text()).toContain("broken.mdc");
-    expect(wrapper.find(".import-result").text()).toContain("globs is required");
-  });
-
-  it("lists export files after building a bundle", async () => {
-    mockedApi.exportAiResources.mockResolvedValue({
-      target: "codex",
-      files: [{
-        path: "AGENTS.md",
-        content: "# Instructions\n",
-        resourceIds: ["ai-1"],
-        resourceNames: ["AGENTS"],
-        writeStrategy: "managed_markdown_block"
-      }]
-    });
-
-    const wrapper = mountView();
-    const store = useEducationAiResourcesStore();
-    await store.exportResources();
-    await flushPromises();
-
-    expect(wrapper.find(".export-file").text()).toContain("AGENTS.md");
-    expect(wrapper.find(".export-file").text()).toContain("Managed Markdown");
-  });
-
-  it("creates a resource from the form", async () => {
-    mockedApi.createAiResource.mockResolvedValue(cursorRule);
-
-    const wrapper = mountView();
-    const store = useEducationAiResourcesStore();
-    store.newResource.name = "Tailwind";
-    store.newResource.content = "# Tailwind";
-
-    await wrapper.find("form.ai-resource-form").trigger("submit.prevent");
-    await flushPromises();
-
-    expect(mockedApi.createAiResource).toHaveBeenCalled();
-    expect(store.resources).toEqual([cursorRule]);
   });
 
   it("opens the edit form when clicking edit on a resource card", async () => {

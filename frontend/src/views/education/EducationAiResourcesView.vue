@@ -12,10 +12,11 @@ import type {
   AiResourceExportTarget,
   AiResourceKind,
   AiResourceStatus,
+  AiResourceSyncAction,
   AiResourceTargetTool,
   AiResourceWriteStrategy
 } from "@careercenter/shared";
-import { computed, ref } from "vue";
+import { ref } from "vue";
 import { useAppStore } from "../../stores/app.js";
 import { useEducationAiResourcesStore } from "../../stores/educationAiResources.js";
 import type { AiResourcePayload } from "../../types/index.js";
@@ -23,8 +24,7 @@ import type { AiResourcePayload } from "../../types/index.js";
 const appStore = useAppStore();
 const store = useEducationAiResourcesStore();
 const copiedId = ref("");
-const copiedCommand = ref(false);
-const copiedDryRun = ref(false);
+const folderInput = ref<HTMLInputElement | null>(null);
 
 const kindLabels: Record<AiResourceKind, string> = {
   cursor_rule: "Cursor rule",
@@ -57,9 +57,16 @@ const formatLabels: Record<AiResourceConfigFormat, string> = {
 };
 
 const exportLabels: Record<AiResourceExportTarget, string> = {
-  cursor: "Cursor bundle",
-  codex: "Codex bundle",
+  cursor: "Cursor",
+  codex: "Codex",
   all: "Begge"
+};
+
+const syncActionLabels: Record<AiResourceSyncAction, string> = {
+  create: "Opprettet",
+  update: "Oppdatert",
+  noop: "Uendret",
+  conflict: "Konflikt"
 };
 
 const writeStrategyLabels: Record<AiResourceWriteStrategy, string> = {
@@ -68,12 +75,6 @@ const writeStrategyLabels: Record<AiResourceWriteStrategy, string> = {
   json_mcp_merge: "MCP JSON merge",
   toml_managed_block: "Managed TOML"
 };
-
-const connectionStatusClass = computed(() => {
-  if (store.syncConnectionStatus === "ok") return "connection-ok";
-  if (store.syncConnectionStatus === "error") return "connection-error";
-  return "";
-});
 
 function setFrontmatter(payload: AiResourcePayload, key: "description" | "globs", value: string) {
   payload.frontmatter = { ...payload.frontmatter, [key]: value };
@@ -98,6 +99,19 @@ function fileInputChanged(event: Event) {
   input.value = "";
 }
 
+async function pickProjectFolder() {
+  const picked = await store.pickProjectFolder();
+  if (!picked) folderInput.value?.click();
+}
+
+function folderInputChanged(event: Event) {
+  const input = event.target as HTMLInputElement;
+  if (input.files?.length) {
+    store.setProjectFolderFromFileList(input.files);
+  }
+  input.value = "";
+}
+
 async function copyResource(resource: AiResource) {
   await navigator.clipboard?.writeText(resource.content);
   copiedId.value = resource.id;
@@ -105,32 +119,11 @@ async function copyResource(resource: AiResource) {
     if (copiedId.value === resource.id) copiedId.value = "";
   }, 1400);
 }
-
-async function copyText(text: string, which: "apply" | "dry-run") {
-  await navigator.clipboard?.writeText(text);
-  if (which === "apply") {
-    copiedCommand.value = true;
-    window.setTimeout(() => {
-      copiedCommand.value = false;
-    }, 1400);
-  } else {
-    copiedDryRun.value = true;
-    window.setTimeout(() => {
-      copiedDryRun.value = false;
-    }, 1400);
-  }
-}
 </script>
 
 <template>
   <section class="stack ai-resources">
-    <p
-      v-if="appStore.isInitializing"
-      class="listing-loading"
-      role="status"
-      aria-live="polite"
-      data-test="ai-resources-loading"
-    >
+    <p v-if="appStore.isInitializing" class="listing-loading" role="status" aria-live="polite" data-test="ai-resources-loading">
       Laster AI-ressurser…
     </p>
 
@@ -138,6 +131,91 @@ async function copyText(text: string, which: "apply" | "dry-run") {
       {{ store.successMessage }}
     </p>
 
+    <!-- ===== SYNC PANEL ===== -->
+    <article class="panel ai-sync-panel">
+      <h2>Skann og synk</h2>
+      <p class="muted-hint">Pek til en prosjektmappe. <strong>Skann</strong> leser Cursor/Codex-filer derfra inn i CareerCenter. <strong>Synk</strong> skriver dem tilbake etter redigering. Velg mappe importerer fra nettleseren; full sti trengs kun for server-sync uten Chrome/Edge.</p>
+
+      <div class="sync-simple-grid">
+        <label class="sync-folder-field">
+          Prosjektmappe
+          <div class="sync-folder-row">
+            <input v-model="store.syncCwd" placeholder="C:\Users\kevin\Documents\GitHub\MittProsjekt" data-test="sync-cwd" />
+            <button type="button" class="secondary" data-test="pick-folder" @click="pickProjectFolder()">
+              Velg mappe
+            </button>
+          </div>
+          <input
+            ref="folderInput"
+            type="file"
+            webkitdirectory
+            multiple
+            hidden
+            data-test="folder-input"
+            @change="folderInputChanged"
+          />
+          <small v-if="store.syncFolderLabel" class="field-hint" data-test="sync-folder-label">
+            Valgt: {{ store.syncFolderLabel }}
+          </small>
+        </label>
+        <label>
+          Target
+          <select v-model="store.exportTarget">
+            <option v-for="target in aiResourceExportTargets" :key="target" :value="target">{{ exportLabels[target] }}</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="sync-actions-row">
+        <button
+          type="button"
+          class="secondary"
+          :class="{ 'is-loading': store.isScanning }"
+          :disabled="store.isScanning || store.isSyncing || !store.hasProjectFolder"
+          data-test="run-scan"
+          @click="store.runScan()"
+        >
+          {{ store.isScanning ? "Skanner…" : "Skann prosjekt" }}
+        </button>
+        <button
+          type="button"
+          class="primary"
+          :class="{ 'is-loading': store.isSyncing }"
+          :disabled="store.isSyncing || store.isScanning || !store.hasProjectFolder"
+          data-test="run-sync"
+          @click="store.runSync()"
+        >
+          {{ store.isSyncing ? "Synkroniserer…" : "Synk til prosjekt" }}
+        </button>
+        <label class="checkbox-field sync-force-field">
+          <input v-model="store.syncForce" type="checkbox" :disabled="store.isSyncing" />
+          Force (overskriv konflikter)
+        </label>
+      </div>
+
+      <p v-if="store.scanError" class="error-text" data-test="scan-error">{{ store.scanError }}</p>
+      <p v-if="store.syncError" class="error-text" data-test="sync-error">{{ store.syncError }}</p>
+
+      <div v-if="store.scanResult" class="scan-result" data-test="scan-result">
+        <small>Skannet {{ store.scanResult.scanned }} filer — {{ store.scanResult.created.length }} nye · {{ store.scanResult.updated.length }} oppdatert · {{ store.scanResult.rejected.length }} avvist</small>
+        <ul v-if="store.scanResult.rejected.length" class="scan-rejected">
+          <li v-for="item in store.scanResult.rejected" :key="item.fileName">{{ item.fileName }}: {{ item.message }}</li>
+        </ul>
+      </div>
+
+      <div v-if="store.syncResult" class="sync-result-list" data-test="sync-result">
+        <small>{{ store.syncResult.files.length }} filer → <code>{{ store.syncResult.cwd }}</code></small>
+        <ul>
+          <li v-for="file in store.syncResult.files" :key="file.path" class="sync-result-item" :class="`sync-action-${file.action}`">
+            <span class="sync-action-badge">{{ syncActionLabels[file.action] }}</span>
+            <code>{{ file.path }}</code>
+            <small v-if="file.message">{{ file.message }}</small>
+          </li>
+        </ul>
+      </div>
+    </article>
+
+    <!-- ===== TOOLBAR ===== -->
     <article class="panel ai-resource-toolbar">
       <label>Søk<input v-model="store.search" placeholder="Tailwind, AGENTS, mcp..." /></label>
       <label>Verktøy
@@ -160,247 +238,7 @@ async function copyText(text: string, which: "apply" | "dry-run") {
       </label>
     </article>
 
-    <article class="panel ai-sync-panel">
-      <div class="panel-header-row">
-        <div>
-          <h2>Auto-load / Sync</h2>
-          <p class="muted-hint">
-            CareerCenter-databasen er master. Du lagrer ressurser her, og CLI-et henter en eksport og skriver filer i prosjektet du peker på.
-          </p>
-        </div>
-      </div>
-
-      <ol class="sync-steps" aria-label="Slik synkroniserer du">
-        <li>
-          <strong>1. Konfigurer</strong>
-          <span>Velg target, API-URL og prosjektmappe under.</span>
-        </li>
-        <li>
-          <strong>2. Test og forhåndsvis</strong>
-          <span>Test at API-et svarer. Kjør dry-run i terminal (uten <code>--yes</code>) for å se hva som endres.</span>
-        </li>
-        <li>
-          <strong>3. Skriv til disk</strong>
-          <span>Kjør med <code>--yes</code> for å skrive filer, ta backup og oppdatere <code>.careercenter/ai-sync.json</code>.</span>
-        </li>
-      </ol>
-
-      <div class="ai-sync-grid">
-        <label>
-          Target
-          <select v-model="store.exportTarget">
-            <option v-for="target in aiResourceExportTargets" :key="target" :value="target">{{ exportLabels[target] }}</option>
-          </select>
-          <span class="field-hint">Hvilke verktøy som får filer i eksporten (Cursor, Codex eller begge).</span>
-        </label>
-        <label>
-          CLI script
-          <input v-model="store.syncScriptPath" placeholder="scripts/ai-resource-sync.mjs" />
-          <span class="field-hint">Sti til sync-scriptet fra repo-roten der du kjører kommandoen.</span>
-        </label>
-        <label>
-          API URL
-          <input v-model="store.syncApiUrl" placeholder="http://127.0.0.1:3000" />
-          <span class="field-hint">Adressen til CareerCenter-backend (samme som du bruker i nettleseren).</span>
-        </label>
-        <label>
-          Prosjektmappe
-          <input v-model="store.syncCwd" placeholder="." />
-          <span class="field-hint">Mappen CLI-et skriver i (<code>--cwd</code>). Bruk <code>.</code> for nåværende mappe.</span>
-        </label>
-      </div>
-
-      <div class="sync-connection-row">
-        <button
-          type="button"
-          class="secondary"
-          :class="{ 'is-loading': store.syncConnectionStatus === 'checking' }"
-          :disabled="store.syncConnectionStatus === 'checking'"
-          data-test="test-sync-connection"
-          @click="store.testSyncConnection()"
-        >
-          {{ store.syncConnectionStatus === "checking" ? "Tester…" : "Test tilkobling" }}
-        </button>
-        <p
-          v-if="store.syncConnectionMessage"
-          class="sync-connection-message"
-          :class="connectionStatusClass"
-          role="status"
-          data-test="sync-connection-message"
-        >
-          {{ store.syncConnectionMessage }}
-        </p>
-      </div>
-
-      <div class="sync-command-block">
-        <div class="sync-command-header">
-          <div>
-            <strong>Skriv til disk</strong>
-            <span class="field-hint">Med <code>--yes</code> — overskriver kun filer CareerCenter allerede eier (med backup).</span>
-          </div>
-          <button
-            type="button"
-            class="secondary"
-            data-test="copy-sync-command"
-            @click="copyText(store.syncCommand, 'apply')"
-          >
-            {{ copiedCommand ? "Kopiert" : "Kopier" }}
-          </button>
-        </div>
-        <pre class="sync-command" data-test="sync-command">{{ store.syncCommand }}</pre>
-      </div>
-
-      <div class="sync-command-block sync-command-block-muted">
-        <div class="sync-command-header">
-          <div>
-            <strong>Dry-run (forhåndsvis)</strong>
-            <span class="field-hint">Uten <code>--yes</code> — viser CREATE/UPDATE/CONFLICT uten å skrive filer.</span>
-          </div>
-          <button type="button" class="ghost" data-test="copy-dry-run-command" @click="copyText(store.syncDryRunCommand, 'dry-run')">
-            {{ copiedDryRun ? "Kopiert" : "Kopier dry-run" }}
-          </button>
-        </div>
-        <pre class="sync-command sync-command-dry" data-test="sync-dry-run-command">{{ store.syncDryRunCommand }}</pre>
-      </div>
-
-      <details class="sync-flags-help">
-        <summary>Hva betyr flaggene?</summary>
-        <ul>
-          <li><code>--api-url</code> — hvor CLI-et henter eksporten fra</li>
-          <li><code>--target</code> — <code>cursor</code>, <code>codex</code> eller <code>all</code></li>
-          <li><code>--cwd</code> — prosjektmappen filer skrives i</li>
-          <li><code>--yes</code> — skriv endringer (ellers kun dry-run)</li>
-          <li><code>--force</code> — overskriv konflikter (valgfritt)</li>
-        </ul>
-      </details>
-    </article>
-
-    <div class="grid two ai-resource-workbench">
-      <form class="panel form-grid ai-resource-form" @submit.prevent="store.addResource()">
-        <h2 class="wide-field">Ny AI-ressurs</h2>
-        <label>Navn<input v-model="store.newResource.name" placeholder="Tailwind component rules" required :disabled="store.isSaving" /></label>
-        <label>Type
-          <select v-model="store.newResource.kind" :disabled="store.isSaving">
-            <option v-for="kind in aiResourceKinds" :key="kind" :value="kind">{{ kindLabels[kind] }}</option>
-          </select>
-        </label>
-        <label>Status
-          <select v-model="store.newResource.status" :disabled="store.isSaving">
-            <option v-for="status in aiResourceStatuses" :key="status" :value="status">{{ statusLabels[status] }}</option>
-          </select>
-        </label>
-        <label>Format
-          <select v-model="store.newResource.configFormat" :disabled="store.isSaving">
-            <option v-for="format in aiResourceConfigFormats" :key="format" :value="format">{{ formatLabels[format] }}</option>
-          </select>
-        </label>
-        <fieldset class="target-field wide-field">
-          <legend>Verktøy</legend>
-          <label v-for="target in aiResourceTargetTools" :key="target" class="checkbox-inline">
-            <input v-model="store.newResource.targetTools" type="checkbox" :value="target" :disabled="store.isSaving" />
-            {{ targetLabels[target] }}
-          </label>
-        </fieldset>
-        <label>Install path<input v-model="store.newResource.installPath" placeholder=".cursor/rules/tailwind.mdc" :disabled="store.isSaving" /></label>
-        <label>Tags<input v-model="store.tagInput" placeholder="cursor, rules, tailwind" :disabled="store.isSaving" /></label>
-        <div v-if="store.newResource.kind === 'cursor_rule' && store.newResource.configFormat === 'mdc'" class="frontmatter-grid wide-field">
-          <label>Description
-            <input
-              :value="frontmatterValue(store.newResource, 'description')"
-              :disabled="store.isSaving"
-              @input="setFrontmatter(store.newResource, 'description', ($event.target as HTMLInputElement).value)"
-            />
-          </label>
-          <label>Globs
-            <input
-              :value="frontmatterValue(store.newResource, 'globs')"
-              :disabled="store.isSaving"
-              @input="setFrontmatter(store.newResource, 'globs', ($event.target as HTMLInputElement).value)"
-            />
-          </label>
-          <label class="checkbox-field">
-            <input
-              type="checkbox"
-              :checked="frontmatterBoolean(store.newResource, 'alwaysApply')"
-              :disabled="store.isSaving"
-              @change="setAlwaysApply(store.newResource, ($event.target as HTMLInputElement).checked)"
-            />
-            Always apply
-          </label>
-        </div>
-        <label class="wide-field">Innhold<textarea v-model="store.newResource.content" placeholder="# Regler eller konfigurasjon" required :disabled="store.isSaving" /></label>
-        <label class="wide-field">Notater<textarea v-model="store.newResource.notes" placeholder="Hvor den brukes, sync-notater, begrensninger" :disabled="store.isSaving" /></label>
-        <p v-if="store.saveError" class="error-text wide-field">{{ store.saveError }}</p>
-        <button class="primary wide-field" type="submit" :class="{ 'is-loading': store.isSaving }" :disabled="store.isSaving">
-          {{ store.isSaving ? "Legger til…" : "Legg til ressurs" }}
-        </button>
-      </form>
-
-      <div class="stack">
-        <article class="panel ai-import-panel">
-          <h2>Import</h2>
-          <p class="muted-hint">Lim inn eller last opp filer fra prosjektet — de lagres i CareerCenter (motsatt retning av sync).</p>
-          <label>Filnavn<input v-model="store.importFileName" placeholder="AGENTS.md" :disabled="store.isImporting" /></label>
-          <label>Innhold<textarea v-model="store.importContent" placeholder="Lim inn filinnhold" :disabled="store.isImporting" /></label>
-          <div class="actions">
-            <button
-              class="primary"
-              type="button"
-              :class="{ 'is-loading': store.isImporting }"
-              :disabled="!store.importContent.trim() || store.isImporting"
-              @click="store.importFromText()"
-            >
-              {{ store.isImporting ? "Importerer…" : "Importer tekst" }}
-            </button>
-            <label class="secondary file-picker" :class="{ 'is-loading': store.isImporting }">
-              {{ store.isImporting ? "Importerer…" : "Velg filer" }}
-              <input type="file" multiple hidden :disabled="store.isImporting" @change="fileInputChanged" />
-            </label>
-          </div>
-          <p v-if="store.importError" class="error-text">{{ store.importError }}</p>
-          <div v-if="store.importResult" class="import-result">
-            <small>{{ store.importResult.created.length }} opprettet · {{ store.importResult.updated.length }} oppdatert · {{ store.importResult.rejected.length }} avvist</small>
-            <ul v-if="store.importResult.rejected.length">
-              <li v-for="item in store.importResult.rejected" :key="item.fileName">{{ item.fileName }}: {{ item.message }}</li>
-            </ul>
-          </div>
-        </article>
-
-        <article class="panel ai-export-panel">
-          <h2>Eksport</h2>
-          <p class="muted-hint">Forhåndsvis hva CLI-et henter fra databasen (samme som sync-eksporten).</p>
-          <div class="export-row">
-            <label>Bundle
-              <select v-model="store.exportTarget" :disabled="store.isExporting">
-                <option v-for="target in aiResourceExportTargets" :key="target" :value="target">{{ exportLabels[target] }}</option>
-              </select>
-            </label>
-            <button
-              class="primary"
-              type="button"
-              :class="{ 'is-loading': store.isExporting }"
-              :disabled="store.isExporting"
-              @click="store.exportResources()"
-            >
-              {{ store.isExporting ? "Bygger…" : "Bygg eksport" }}
-            </button>
-          </div>
-          <p v-if="store.exportError" class="error-text">{{ store.exportError }}</p>
-          <div v-if="store.exportBundle" class="export-files">
-            <div v-for="file in store.exportBundle.files" :key="file.path" class="export-file">
-              <div class="export-file-heading">
-                <strong>{{ file.path }}</strong>
-                <span class="status-badge">{{ writeStrategyLabels[file.writeStrategy] }}</span>
-              </div>
-              <small>{{ file.resourceNames.join(", ") }}</small>
-              <pre>{{ file.content }}</pre>
-            </div>
-            <p v-if="!store.exportBundle.files.length">Ingen filer i eksporten.</p>
-          </div>
-        </article>
-      </div>
-    </div>
-
+    <!-- ===== RESOURCE LIST ===== -->
     <article class="panel">
       <div class="panel-header-row">
         <h2>AI-ressurser</h2>
@@ -421,23 +259,9 @@ async function copyText(text: string, which: "apply" | "dry-run") {
           <p v-if="resource.notes">{{ resource.notes }}</p>
         </div>
         <div class="actions column">
-          <button
-            type="button"
-            class="ghost mini-link"
-            data-test="edit-resource"
-            :disabled="store.isSaving || store.deletingId === resource.id"
-            @click="store.startEdit(resource)"
-          >
-            Rediger
-          </button>
+          <button type="button" class="ghost mini-link" data-test="edit-resource" :disabled="store.isSaving || store.deletingId === resource.id" @click="store.startEdit(resource)">Rediger</button>
           <button type="button" class="ghost mini-link" @click="copyResource(resource)">{{ copiedId === resource.id ? "Kopiert" : "Kopier" }}</button>
-          <button
-            type="button"
-            class="ghost mini-link danger"
-            :class="{ 'is-loading': store.deletingId === resource.id }"
-            :disabled="store.deletingId === resource.id || store.isSaving"
-            @click="store.removeResource(resource.id)"
-          >
+          <button type="button" class="ghost mini-link danger" :class="{ 'is-loading': store.deletingId === resource.id }" :disabled="store.deletingId === resource.id || store.isSaving" @click="store.removeResource(resource.id)">
             {{ store.deletingId === resource.id ? "Sletter…" : "Slett" }}
           </button>
         </div>
@@ -470,26 +294,13 @@ async function copyText(text: string, which: "apply" | "dry-run") {
           <label>Tags<input v-model="store.editingTagInput" placeholder="legg til tags" :disabled="store.isSaving" /></label>
           <div v-if="store.editingResource.kind === 'cursor_rule' && store.editingResource.configFormat === 'mdc'" class="frontmatter-grid wide-field">
             <label>Description
-              <input
-                :value="frontmatterValue(store.editingResource, 'description')"
-                :disabled="store.isSaving"
-                @input="setFrontmatter(store.editingResource, 'description', ($event.target as HTMLInputElement).value)"
-              />
+              <input :value="frontmatterValue(store.editingResource, 'description')" :disabled="store.isSaving" @input="setFrontmatter(store.editingResource, 'description', ($event.target as HTMLInputElement).value)" />
             </label>
             <label>Globs
-              <input
-                :value="frontmatterValue(store.editingResource, 'globs')"
-                :disabled="store.isSaving"
-                @input="setFrontmatter(store.editingResource, 'globs', ($event.target as HTMLInputElement).value)"
-              />
+              <input :value="frontmatterValue(store.editingResource, 'globs')" :disabled="store.isSaving" @input="setFrontmatter(store.editingResource, 'globs', ($event.target as HTMLInputElement).value)" />
             </label>
             <label class="checkbox-field">
-              <input
-                type="checkbox"
-                :checked="frontmatterBoolean(store.editingResource, 'alwaysApply')"
-                :disabled="store.isSaving"
-                @change="setAlwaysApply(store.editingResource, ($event.target as HTMLInputElement).checked)"
-              />
+              <input type="checkbox" :checked="frontmatterBoolean(store.editingResource, 'alwaysApply')" :disabled="store.isSaving" @change="setAlwaysApply(store.editingResource, ($event.target as HTMLInputElement).checked)" />
               Always apply
             </label>
           </div>
@@ -497,14 +308,72 @@ async function copyText(text: string, which: "apply" | "dry-run") {
           <label class="wide-field">Notater<textarea v-model="store.editingResource.notes" :disabled="store.isSaving" /></label>
           <p v-if="store.editError" class="error-text wide-field">{{ store.editError }}</p>
           <div class="actions">
-            <button class="primary" type="submit" :class="{ 'is-loading': store.isSaving }" :disabled="store.isSaving">
-              {{ store.isSaving ? "Lagrer…" : "Lagre" }}
-            </button>
+            <button class="primary" type="submit" :class="{ 'is-loading': store.isSaving }" :disabled="store.isSaving">{{ store.isSaving ? "Lagrer…" : "Lagre" }}</button>
             <button class="ghost" type="button" :disabled="store.isSaving" @click="store.cancelEdit()">Avbryt</button>
           </div>
         </form>
       </div>
-      <p v-if="!store.filteredResources.length && !appStore.isInitializing">Ingen AI-ressurser funnet.</p>
+      <p v-if="!store.filteredResources.length && !appStore.isInitializing">Ingen AI-ressurser funnet. Bruk <strong>Skann prosjekt</strong> for å importere Cursor/Codex-filer.</p>
     </article>
+
+    <!-- ===== ADD MANUALLY (collapsed) ===== -->
+    <details class="panel">
+      <summary><strong>Legg til manuelt</strong></summary>
+      <div class="grid two ai-resource-workbench">
+        <form class="form-grid ai-resource-form" @submit.prevent="store.addResource()">
+          <label>Navn<input v-model="store.newResource.name" placeholder="Tailwind component rules" required :disabled="store.isSaving" /></label>
+          <label>Type
+            <select v-model="store.newResource.kind" :disabled="store.isSaving">
+              <option v-for="kind in aiResourceKinds" :key="kind" :value="kind">{{ kindLabels[kind] }}</option>
+            </select>
+          </label>
+          <label>Status
+            <select v-model="store.newResource.status" :disabled="store.isSaving">
+              <option v-for="status in aiResourceStatuses" :key="status" :value="status">{{ statusLabels[status] }}</option>
+            </select>
+          </label>
+          <label>Format
+            <select v-model="store.newResource.configFormat" :disabled="store.isSaving">
+              <option v-for="format in aiResourceConfigFormats" :key="format" :value="format">{{ formatLabels[format] }}</option>
+            </select>
+          </label>
+          <fieldset class="target-field wide-field">
+            <legend>Verktøy</legend>
+            <label v-for="target in aiResourceTargetTools" :key="target" class="checkbox-inline">
+              <input v-model="store.newResource.targetTools" type="checkbox" :value="target" :disabled="store.isSaving" />
+              {{ targetLabels[target] }}
+            </label>
+          </fieldset>
+          <label>Install path<input v-model="store.newResource.installPath" placeholder=".cursor/rules/tailwind.mdc" :disabled="store.isSaving" /></label>
+          <label>Tags<input v-model="store.tagInput" placeholder="cursor, rules, tailwind" :disabled="store.isSaving" /></label>
+          <label class="wide-field">Innhold<textarea v-model="store.newResource.content" placeholder="# Regler eller konfigurasjon" required :disabled="store.isSaving" /></label>
+          <p v-if="store.saveError" class="error-text wide-field">{{ store.saveError }}</p>
+          <button class="primary wide-field" type="submit" :class="{ 'is-loading': store.isSaving }" :disabled="store.isSaving">
+            {{ store.isSaving ? "Legger til…" : "Legg til ressurs" }}
+          </button>
+        </form>
+
+        <div class="stack">
+          <div>
+            <h3>Import fra fil</h3>
+            <label>Filnavn<input v-model="store.importFileName" placeholder="AGENTS.md" :disabled="store.isImporting" /></label>
+            <label>Innhold<textarea v-model="store.importContent" placeholder="Lim inn filinnhold" :disabled="store.isImporting" /></label>
+            <div class="actions">
+              <button class="primary" type="button" :class="{ 'is-loading': store.isImporting }" :disabled="!store.importContent.trim() || store.isImporting" @click="store.importFromText()">
+                {{ store.isImporting ? "Importerer…" : "Importer tekst" }}
+              </button>
+              <label class="secondary file-picker" :class="{ 'is-loading': store.isImporting }">
+                {{ store.isImporting ? "Importerer…" : "Velg filer" }}
+                <input type="file" multiple hidden :disabled="store.isImporting" @change="fileInputChanged" />
+              </label>
+            </div>
+            <p v-if="store.importError" class="error-text">{{ store.importError }}</p>
+            <div v-if="store.importResult" class="import-result">
+              <small>{{ store.importResult.created.length }} opprettet · {{ store.importResult.updated.length }} oppdatert · {{ store.importResult.rejected.length }} avvist</small>
+            </div>
+          </div>
+        </div>
+      </div>
+    </details>
   </section>
 </template>

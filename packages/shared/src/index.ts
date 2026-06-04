@@ -110,6 +110,32 @@ export interface AiResourceExportBundle {
   files: AiResourceExportFile[];
 }
 
+export const aiResourceSyncActions = ["create", "update", "noop", "conflict"] as const;
+export type AiResourceSyncAction = (typeof aiResourceSyncActions)[number];
+
+export interface AiResourceSyncFileResult {
+  path: string;
+  action: AiResourceSyncAction;
+  writeStrategy: AiResourceWriteStrategy;
+  message?: string;
+}
+
+export interface AiResourceSyncResult {
+  dryRun: boolean;
+  target: AiResourceExportTarget;
+  cwd: string;
+  files: AiResourceSyncFileResult[];
+  conflicts: Array<{ path: string; message: string }>;
+  rejected: Array<{ path: string; message: string }>;
+}
+
+export interface AiResourceScanResult {
+  created: AiResource[];
+  updated: AiResource[];
+  rejected: Array<{ fileName: string; message: string }>;
+  scanned: number;
+}
+
 export interface SelfStudyCourse {
   id: string;
   title: string;

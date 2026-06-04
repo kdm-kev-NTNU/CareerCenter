@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { api } from "../api/index.js";
+import { writeBundleToDirectory } from "../lib/aiResourceFolderSync.js";
 import { useEducationAiResourcesStore } from "./educationAiResources.js";
+
+vi.mock("../lib/aiResourceFolderSync.js", () => ({
+  writeBundleToDirectory: vi.fn()
+}));
 
 vi.mock("../api/index.js", () => ({
   api: {
@@ -10,11 +15,14 @@ vi.mock("../api/index.js", () => ({
     updateAiResource: vi.fn(),
     deleteAiResource: vi.fn(),
     importAiResources: vi.fn(),
-    exportAiResources: vi.fn()
+    exportAiResources: vi.fn(),
+    syncAiResources: vi.fn(),
+    scanAiResources: vi.fn()
   }
 }));
 
 const mockedApi = vi.mocked(api);
+const mockedWriteBundle = vi.mocked(writeBundleToDirectory);
 
 const resource = {
   id: "ai-1",
@@ -175,6 +183,137 @@ describe("useEducationAiResourcesStore", () => {
     expect(store.syncCommand).toContain("--yes");
     expect(store.syncDryRunCommand).not.toContain("--yes");
     expect(store.syncDryRunCommand).toContain("--target all");
+  });
+
+  it("scans project directory and imports resources", async () => {
+    mockedApi.scanAiResources.mockResolvedValue({
+      created: [cursorRule],
+      updated: [],
+      rejected: [],
+      scanned: 5
+    });
+    mockedApi.aiResources.mockResolvedValue([cursorRule]);
+
+    const store = useEducationAiResourcesStore();
+    store.syncCwd = "C:\\project";
+    await store.runScan();
+
+    expect(mockedApi.scanAiResources).toHaveBeenCalledWith({ cwd: "C:\\project" });
+    expect(store.scanResult?.created).toHaveLength(1);
+    expect(store.scanResult?.scanned).toBe(5);
+    expect(store.isScanning).toBe(false);
+    expect(store.successMessage).toContain("Skanning ferdig");
+    expect(store.resources).toHaveLength(1);
+  });
+
+  it("runs server-side sync and stores result", async () => {
+    mockedApi.syncAiResources.mockResolvedValue({
+      dryRun: false,
+      target: "cursor",
+      cwd: "/tmp/project",
+      files: [{ path: ".cursor/rules/tailwind.mdc", action: "create", writeStrategy: "replace" }],
+      conflicts: [],
+      rejected: []
+    });
+
+    const store = useEducationAiResourcesStore();
+    store.exportTarget = "cursor";
+    store.syncCwd = "C:\\project";
+    await store.runSync();
+
+    expect(mockedApi.syncAiResources).toHaveBeenCalledWith({
+      target: "cursor",
+      cwd: "C:\\project",
+      force: false
+    });
+    expect(store.syncResult?.files[0].action).toBe("create");
+    expect(store.isSyncing).toBe(false);
+    expect(store.successMessage).toContain("Sync ferdig");
+  });
+
+  it("syncs to a picked directory handle in the browser", async () => {
+    mockedApi.exportAiResources.mockResolvedValue({
+      target: "cursor",
+      files: [{
+        path: ".cursor/rules/tailwind.mdc",
+        content: "# Tailwind\n",
+        resourceIds: ["ai-2"],
+        resourceNames: ["Tailwind"],
+        writeStrategy: "replace"
+      }]
+    });
+    mockedWriteBundle.mockResolvedValue({
+      dryRun: false,
+      target: "cursor",
+      cwd: "CareerCenter",
+      files: [{ path: ".cursor/rules/tailwind.mdc", action: "create", writeStrategy: "replace" }],
+      conflicts: [],
+      rejected: []
+    });
+
+    const store = useEducationAiResourcesStore();
+    store.exportTarget = "cursor";
+    store.projectDirectoryHandle = { name: "CareerCenter" } as FileSystemDirectoryHandle;
+    await store.runSync();
+
+    expect(mockedApi.syncAiResources).not.toHaveBeenCalled();
+    expect(mockedWriteBundle).toHaveBeenCalled();
+    expect(store.syncResult?.files[0].action).toBe("create");
+  });
+
+  it("scans picked folder files via import batches", async () => {
+    mockedApi.importAiResources.mockResolvedValue({
+      created: [cursorRule],
+      updated: [],
+      rejected: []
+    });
+    mockedApi.aiResources.mockResolvedValue([cursorRule]);
+
+    const file = Object.assign(new File(["# Tailwind"], "tailwind.mdc", { type: "text/plain" }), {
+      webkitRelativePath: "CareerCenter/.cursor/rules/tailwind.mdc",
+      text: async () => "# Tailwind"
+    });
+
+    const store = useEducationAiResourcesStore();
+    store.setProjectFolderFromFileList([file] as unknown as FileList);
+    await store.runScan();
+
+    expect(mockedApi.scanAiResources).not.toHaveBeenCalled();
+    expect(mockedApi.importAiResources).toHaveBeenCalledWith({
+      files: [{ fileName: ".cursor/rules/tailwind.mdc", content: "# Tailwind" }]
+    });
+    expect(store.scanResult?.created).toHaveLength(1);
+  });
+
+  it("batches folder imports above 25 files", async () => {
+    mockedApi.importAiResources.mockResolvedValue({ created: [], updated: [], rejected: [] });
+
+    const files = Array.from({ length: 26 }, (_, index) =>
+      Object.assign(new File([`# Rule ${index}`], `rule-${index}.mdc`, { type: "text/plain" }), {
+        webkitRelativePath: `CareerCenter/.cursor/rules/rule-${index}.mdc`,
+        text: async () => `# Rule ${index}`
+      })
+    );
+
+    const store = useEducationAiResourcesStore();
+    store.setProjectFolderFromFileList(files as unknown as FileList);
+    await store.runScan();
+
+    expect(mockedApi.importAiResources).toHaveBeenCalledTimes(2);
+  });
+
+  it("picks project folder with showDirectoryPicker", async () => {
+    const handle = { name: "CareerCenter" } as FileSystemDirectoryHandle;
+    vi.stubGlobal("showDirectoryPicker", vi.fn().mockResolvedValue(handle));
+
+    const store = useEducationAiResourcesStore();
+    const picked = await store.pickProjectFolder();
+
+    expect(picked).toBe(true);
+    expect(store.syncFolderLabel).toBe("CareerCenter");
+    expect(store.hasProjectFolder).toBe(true);
+
+    vi.unstubAllGlobals();
   });
 
   it("tests sync API connection via health endpoint", async () => {

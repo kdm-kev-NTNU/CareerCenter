@@ -5,11 +5,20 @@ import type {
   AiResourceExportBundle,
   AiResourceExportTarget,
   AiResourceImportResult,
+  AiResourceScanResult,
+  AiResourceSyncResult,
   AiResourceKind,
   AiResourceStatus,
   AiResourceTargetTool
 } from "@careercenter/shared";
 import { api } from "../api/index.js";
+import {
+  chunkImportFiles,
+  collectFilesFromDirectoryHandle,
+  filesFromDirectoryInput,
+  readDiscoveredFiles
+} from "../lib/aiResourceDiscovery.js";
+import { writeBundleToDirectory } from "../lib/aiResourceFolderSync.js";
 import type { AiResourcePayload } from "../types/index.js";
 
 const SUCCESS_MESSAGE_MS = 2400;
@@ -90,6 +99,9 @@ export const useEducationAiResourcesStore = defineStore("educationAiResources", 
   const syncScriptPath = ref("scripts/ai-resource-sync.mjs");
   const syncApiUrl = ref(defaultApiUrl());
   const syncCwd = ref(".");
+  const syncFolderLabel = ref("");
+  const projectDirectoryHandle = ref<FileSystemDirectoryHandle | null>(null);
+  const pickedFolderFiles = ref<File[]>([]);
   const filterTarget = ref<"all" | AiResourceTargetTool>("all");
   const filterKind = ref<"all" | AiResourceKind>("all");
   const filterStatus = ref<"all" | AiResourceStatus>("all");
@@ -105,6 +117,13 @@ export const useEducationAiResourcesStore = defineStore("educationAiResources", 
   const successMessage = ref("");
   const syncConnectionStatus = ref<SyncConnectionStatus>("idle");
   const syncConnectionMessage = ref("");
+  const syncForce = ref(false);
+  const isSyncing = ref(false);
+  const syncError = ref("");
+  const syncResult = ref<AiResourceSyncResult | null>(null);
+  const isScanning = ref(false);
+  const scanError = ref("");
+  const scanResult = ref<AiResourceScanResult | null>(null);
 
   let successTimeout: ReturnType<typeof setTimeout> | undefined;
 
@@ -131,6 +150,10 @@ export const useEducationAiResourcesStore = defineStore("educationAiResources", 
 
   const tagOptions = computed(() =>
     [...new Set(resources.value.flatMap((resource) => resource.tags))].sort((a, b) => a.localeCompare(b))
+  );
+
+  const hasProjectFolder = computed(() =>
+    Boolean(syncCwd.value.trim() || projectDirectoryHandle.value || pickedFolderFiles.value.length)
   );
 
   const syncCommand = computed(() => [
@@ -273,7 +296,12 @@ export const useEducationAiResourcesStore = defineStore("educationAiResources", 
     clearSuccess();
     try {
       const payload = await Promise.all(
-        [...files].map(async (file) => ({ fileName: file.name, content: await file.text() }))
+        [...files].map(async (file) => ({
+          fileName: file.webkitRelativePath
+            ? file.webkitRelativePath.replace(/\\/g, "/").split("/").slice(1).join("/") || file.name
+            : file.name,
+          content: await file.text()
+        }))
       );
       importResult.value = await api.importAiResources({ files: payload });
       await loadResources();
@@ -282,6 +310,103 @@ export const useEducationAiResourcesStore = defineStore("educationAiResources", 
       importError.value = errorMessage(caught, "Kunne ikke importere filer.");
     } finally {
       isImporting.value = false;
+    }
+  }
+
+  async function importDiscoveredFiles(files: Array<{ fileName: string; content: string }>) {
+    const aggregated: AiResourceScanResult = {
+      created: [],
+      updated: [],
+      rejected: [],
+      scanned: files.length
+    };
+
+    if (!files.length) {
+      return aggregated;
+    }
+
+    for (const batch of chunkImportFiles(files)) {
+      const result = await api.importAiResources({ files: batch });
+      aggregated.created.push(...result.created);
+      aggregated.updated.push(...result.updated);
+      aggregated.rejected.push(...result.rejected);
+    }
+
+    return aggregated;
+  }
+
+  function applyScanFeedback(result: AiResourceScanResult) {
+    scanResult.value = result;
+    const parts = [
+      result.created.length ? `${result.created.length} nye` : "",
+      result.updated.length ? `${result.updated.length} oppdatert` : ""
+    ].filter(Boolean);
+    if (parts.length) {
+      showSuccess(`Skanning ferdig: ${parts.join(", ")} (${result.scanned} filer skannet).`);
+    } else if (result.rejected.length) {
+      scanError.value = `${result.rejected.length} fil(er) kunne ikke importeres.`;
+    } else {
+      showSuccess(`Ingen Cursor/Codex-filer funnet i mappen (${result.scanned} skannet).`);
+    }
+  }
+
+  async function pickProjectFolder(): Promise<boolean> {
+    const showDirectoryPicker = (window as Window & {
+      showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle>;
+    }).showDirectoryPicker;
+    if (typeof showDirectoryPicker !== "function") {
+      return false;
+    }
+    try {
+      const handle = await showDirectoryPicker.call(window);
+      projectDirectoryHandle.value = handle;
+      pickedFolderFiles.value = [];
+      syncFolderLabel.value = handle.name;
+      scanError.value = "";
+      syncError.value = "";
+      return true;
+    } catch (caught) {
+      if (caught instanceof DOMException && caught.name === "AbortError") {
+        return false;
+      }
+      scanError.value = errorMessage(caught, "Kunne ikke velge mappe.");
+      return false;
+    }
+  }
+
+  function setProjectFolderFromFileList(fileList: FileList) {
+    projectDirectoryHandle.value = null;
+    pickedFolderFiles.value = [...fileList];
+    const entries = filesFromDirectoryInput(fileList);
+    syncFolderLabel.value = fileList[0]?.webkitRelativePath
+      ? fileList[0].webkitRelativePath.replace(/\\/g, "/").split("/")[0] ?? ""
+      : "Valgt mappe";
+    scanError.value = "";
+    syncError.value = "";
+    if (!entries.length) {
+      scanError.value = "Ingen Cursor/Codex-filer funnet i valgt mappe.";
+    }
+  }
+
+  async function scanFromFileList(fileList: FileList) {
+    const entries = filesFromDirectoryInput(fileList);
+    const files = await readDiscoveredFiles(entries);
+    return importDiscoveredFiles(files);
+  }
+
+  async function importFromPickedFiles(fileList: FileList) {
+    scanError.value = "";
+    scanResult.value = null;
+    isScanning.value = true;
+    clearSuccess();
+    try {
+      const result = await scanFromFileList(fileList);
+      await loadResources();
+      applyScanFeedback(result);
+    } catch (caught) {
+      scanError.value = errorMessage(caught, "Kunne ikke importere fra valgt mappe.");
+    } finally {
+      isScanning.value = false;
     }
   }
 
@@ -298,6 +423,101 @@ export const useEducationAiResourcesStore = defineStore("educationAiResources", 
       exportError.value = errorMessage(caught, "Kunne ikke eksportere ressurser.");
     } finally {
       isExporting.value = false;
+    }
+  }
+
+  async function runScan() {
+    scanError.value = "";
+    scanResult.value = null;
+    isScanning.value = true;
+    clearSuccess();
+    try {
+      if (projectDirectoryHandle.value) {
+        const files = await collectFilesFromDirectoryHandle(projectDirectoryHandle.value);
+        const result = await importDiscoveredFiles(files);
+        await loadResources();
+        applyScanFeedback(result);
+        return;
+      }
+
+      if (pickedFolderFiles.value.length) {
+        const result = await scanFromFileList(pickedFolderFiles.value as unknown as FileList);
+        await loadResources();
+        applyScanFeedback(result);
+        return;
+      }
+
+      const cwd = syncCwd.value.trim();
+      if (!cwd) {
+        scanError.value = "Velg mappe eller skriv inn full sti.";
+        return;
+      }
+
+      const result = await api.scanAiResources({ cwd });
+      scanResult.value = result;
+      await loadResources();
+      applyScanFeedback(result);
+    } catch (caught) {
+      scanError.value = errorMessage(caught, "Kunne ikke skanne prosjektmappen.");
+    } finally {
+      isScanning.value = false;
+    }
+  }
+
+  function applySyncFeedback(result: AiResourceSyncResult) {
+    syncResult.value = result;
+    const applied = result.files.filter((file) => file.action === "create" || file.action === "update").length;
+    const noop = result.files.filter((file) => file.action === "noop").length;
+    if (result.conflicts.length || result.rejected.length) {
+      syncError.value = [
+        result.conflicts.length ? `${result.conflicts.length} konflikt(er)` : "",
+        result.rejected.length ? `${result.rejected.length} avvist` : ""
+      ].filter(Boolean).join(" · ");
+    }
+    if (applied || noop) {
+      const parts = [
+        applied ? `${applied} skrevet` : "",
+        noop ? `${noop} uendret` : ""
+      ].filter(Boolean);
+      showSuccess(`Sync ferdig: ${parts.join(", ")}.`);
+    } else if (!result.conflicts.length && !result.rejected.length) {
+      showSuccess("Sync ferdig (ingen filer i eksporten).");
+    }
+  }
+
+  async function runSync() {
+    syncError.value = "";
+    syncResult.value = null;
+    isSyncing.value = true;
+    clearSuccess();
+    try {
+      if (projectDirectoryHandle.value) {
+        const bundle = await api.exportAiResources(exportTarget.value);
+        const result = await writeBundleToDirectory(
+          projectDirectoryHandle.value,
+          bundle,
+          { force: syncForce.value }
+        );
+        applySyncFeedback(result);
+        return;
+      }
+
+      const cwd = syncCwd.value.trim();
+      if (!cwd) {
+        syncError.value = "Velg mappe (Chrome/Edge) eller skriv inn full sti for server-sync.";
+        return;
+      }
+
+      const result = await api.syncAiResources({
+        target: exportTarget.value,
+        cwd,
+        force: syncForce.value
+      });
+      applySyncFeedback(result);
+    } catch (caught) {
+      syncError.value = errorMessage(caught, "Kunne ikke synkronisere.");
+    } finally {
+      isSyncing.value = false;
     }
   }
 
@@ -361,6 +581,10 @@ export const useEducationAiResourcesStore = defineStore("educationAiResources", 
     syncScriptPath,
     syncApiUrl,
     syncCwd,
+    syncFolderLabel,
+    projectDirectoryHandle,
+    pickedFolderFiles,
+    hasProjectFolder,
     syncCommand,
     syncDryRunCommand,
     filterTarget,
@@ -377,6 +601,13 @@ export const useEducationAiResourcesStore = defineStore("educationAiResources", 
     successMessage,
     syncConnectionStatus,
     syncConnectionMessage,
+    syncForce,
+    isSyncing,
+    syncError,
+    syncResult,
+    isScanning,
+    scanError,
+    scanResult,
     loadResources,
     addResource,
     startEdit,
@@ -385,7 +616,12 @@ export const useEducationAiResourcesStore = defineStore("educationAiResources", 
     removeResource,
     importFromText,
     importFiles,
+    pickProjectFolder,
+    setProjectFolderFromFileList,
+    importFromPickedFiles,
     exportResources,
+    runScan,
+    runSync,
     testSyncConnection,
     addTarget,
     removeTarget,

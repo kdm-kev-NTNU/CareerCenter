@@ -8,8 +8,12 @@ describe("AI resources", () => {
   });
 
   it("returns to AI resources after login from redirect", () => {
-    cy.request("POST", "/api/auth/logout");
-    cy.clearCookies();
+    // E2E runs with AUTH_DISABLED on the API, so /api/auth/me always succeeds unless stubbed.
+    cy.intercept("GET", "/api/auth/me", {
+      statusCode: 401,
+      body: { message: "Ikke autentisert." }
+    });
+
     cy.visit("/education/ai");
 
     cy.location("pathname").should("eq", "/login");

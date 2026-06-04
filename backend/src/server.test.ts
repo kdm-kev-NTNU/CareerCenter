@@ -1,3 +1,6 @@
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { MemoryRepository } from "./memoryRepository.js";
 import { buildServer } from "./server.js";
@@ -825,6 +828,65 @@ describe("CareerCenter API", () => {
 
     const deleted = await app.inject({ method: "DELETE", url: `/api/education/ai-resources/${manual.json().id}` });
     expect(deleted.statusCode).toBe(204);
+
+    await app.close();
+  });
+
+  it("applies AI resource sync to an existing project directory", async () => {
+    const app = await createTestApp();
+    const cwd = await mkdtemp(path.join(os.tmpdir(), "careercenter-ai-sync-api-"));
+
+    try {
+      const imported = await app.inject({
+        method: "POST",
+        url: "/api/education/ai-resources/import",
+        payload: {
+          files: [{
+            fileName: "tailwind.mdc",
+            content: [
+              "---",
+              'description: "Tailwind component rules"',
+              'globs: "**/*.vue"',
+              "alwaysApply: false",
+              "---",
+              "# Tailwind",
+              "Use existing utility patterns."
+            ].join("\n")
+          }]
+        }
+      });
+      expect(imported.statusCode).toBe(200);
+
+      const synced = await app.inject({
+        method: "POST",
+        url: "/api/education/ai-resources/sync",
+        payload: { target: "cursor", cwd }
+      });
+      expect(synced.statusCode).toBe(200);
+      expect(synced.json().dryRun).toBe(false);
+      expect(synced.json().files.some((file: { path: string; action: string }) =>
+        file.path === ".cursor/rules/tailwind.mdc" && file.action === "create"
+      )).toBe(true);
+
+      const ruleContent = await readFile(path.join(cwd, ".cursor/rules/tailwind.mdc"), "utf8");
+      expect(ruleContent).toContain("# Tailwind");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+      await app.close();
+    }
+  });
+
+  it("rejects AI resource sync when project directory is missing", async () => {
+    const app = await createTestApp();
+    const missing = path.join(os.tmpdir(), `careercenter-missing-${Date.now()}`);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/education/ai-resources/sync",
+      payload: { target: "all", cwd: missing }
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().message).toContain("finnes ikke");
 
     await app.close();
   });
