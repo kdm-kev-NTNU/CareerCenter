@@ -28,6 +28,6 @@ COPY --from=build /app/node_modules/@prisma node_modules/@prisma
 COPY --from=build /app/backend/dist backend/dist
 COPY --from=build /app/backend/prisma backend/prisma
 COPY --from=build /app/packages/shared/dist packages/shared/dist
-COPY --from=build /app/scripts scripts/
+COPY --from=build /app/scripts backend/dist/scripts/
 EXPOSE 3000
 CMD ["npm", "run", "start:prod", "--workspace", "@careercenter/api"]
