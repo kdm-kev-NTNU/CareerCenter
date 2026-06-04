@@ -6,6 +6,10 @@ describe("AI resources", () => {
     cy.contains("summary", "Legg til manuelt").click();
   }
 
+  function showRecentlyChangedResources() {
+    cy.contains(".ai-folder-button", "Nylig endret").click();
+  }
+
   beforeEach(() => {
     userName = `AIResourceE2E${Date.now()}`;
     cy.request("POST", "/api/auth/register", { name: userName, pin });
@@ -50,6 +54,7 @@ describe("AI resources", () => {
     });
 
     cy.contains(".import-result", "1 opprettet").should("be.visible");
+    showRecentlyChangedResources();
     cy.contains(".ai-resource-card", "Codex project instructions").should("be.visible");
 
     cy.request("POST", "/api/education/ai-resources/import", {
@@ -70,6 +75,7 @@ describe("AI resources", () => {
     });
 
     cy.reload();
+    showRecentlyChangedResources();
     cy.contains(".ai-resource-card", "Codex project instructions").should("be.visible");
     cy.contains(".ai-resource-card", "MCP: docs").should("be.visible");
   });
