@@ -22,6 +22,8 @@ describe("aiResourceDiscovery", () => {
     expect(isDiscoverableAiResourcePath(".cursor/skills/review/SKILL.md")).toBe(true);
     expect(isDiscoverableAiResourcePath(".codex/skills/deploy/SKILL.md")).toBe(true);
     expect(isDiscoverableAiResourcePath(".agents/skills/test/SKILL.md")).toBe(true);
+    expect(isDiscoverableAiResourcePath(".agent-inventory/skills/user/readme-updater/SKILL.md")).toBe(true);
+    expect(isDiscoverableAiResourcePath(".agent-inventory/mcp/workspace/server/tools/foo.json")).toBe(false);
   });
 
   it("rejects unrelated paths", () => {

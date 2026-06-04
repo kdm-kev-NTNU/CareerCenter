@@ -126,7 +126,7 @@ async function copyResource(resource: AiResource) {
     <!-- ===== SYNC PANEL ===== -->
     <article class="panel ai-sync-panel">
       <h2>Skann og synk</h2>
-      <p class="muted-hint">Pek til en prosjektmappe. <strong>Skann</strong> leser Cursor/Codex-filer derfra inn i CareerCenter. <strong>Synk</strong> skriver dem tilbake etter redigering. Velg mappe importerer fra nettleseren; full sti trengs kun for server-sync uten Chrome/Edge.</p>
+      <p class="muted-hint">Pek til en prosjektmappe. <strong>Skann</strong> leser Cursor/Codex-filer derfra inn i CareerCenter, inkludert skills fra <code>.agent-inventory/skills/</code> etter <code>powershell -File ./scripts/sync-agent-inventory.ps1</code>. <strong>Synk</strong> skriver dem tilbake etter redigering. Velg mappe importerer fra nettleseren; full sti trengs kun for server-sync uten Chrome/Edge.</p>
 
       <div class="sync-simple-grid">
         <label class="sync-folder-field">

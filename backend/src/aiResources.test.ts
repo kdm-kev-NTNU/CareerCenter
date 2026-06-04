@@ -123,6 +123,36 @@ describe("ai resource import and export helpers", () => {
     expect(codexSkill.targetTools).toEqual(["codex"]);
   });
 
+  it("infers agent-inventory skills with canonical install paths", () => {
+    const cursorSkill = inferAiResourceFromFile({
+      fileName: ".agent-inventory/skills/user/readme-updater/SKILL.md",
+      content: "# Readme updater\nKeep docs fresh."
+    });
+    expect(cursorSkill.kind).toBe("cursor_skill");
+    expect(cursorSkill.targetTools).toEqual(["cursor"]);
+    expect(cursorSkill.installPath).toBe(".cursor/skills/readme-updater/SKILL.md");
+    expect(cursorSkill.tags).toContain("inventory");
+    expect(cursorSkill.tags).toContain("user");
+    expect(cursorSkill.notes).toContain(".agent-inventory/skills/user/readme-updater/SKILL.md");
+
+    const codexSkill = inferAiResourceFromFile({
+      fileName: ".agent-inventory/skills/codex/use-railway/SKILL.md",
+      content: "# Railway\nDeploy on Railway."
+    });
+    expect(codexSkill.kind).toBe("codex_skill");
+    expect(codexSkill.targetTools).toEqual(["codex"]);
+    expect(codexSkill.installPath).toBe(".codex/skills/use-railway/SKILL.md");
+    expect(codexSkill.tags).toContain("codex");
+
+    const pluginSkill = inferAiResourceFromFile({
+      fileName: ".agent-inventory/skills/plugins/posthog/querying-posthog-data/SKILL.md",
+      content: "# PostHog queries\nUse HogQL."
+    });
+    expect(pluginSkill.kind).toBe("cursor_skill");
+    expect(pluginSkill.tags).toContain("plugins/posthog");
+    expect(pluginSkill.installPath).toBe(".cursor/skills/querying-posthog-data/SKILL.md");
+  });
+
   it("infers AGENTS.md as codex instructions", () => {
     const resource = inferAiResourceFromFile({
       fileName: "AGENTS.md",
