@@ -1,6 +1,20 @@
+import { stat } from "node:fs/promises";
+import path from "node:path";
 import type { FastifyInstance } from "fastify";
+import { aiResourceExportTargets, type AiResource, type AiResourceExportTarget } from "@careercenter/shared";
+import { syncAiResources } from "../../../scripts/ai-resource-sync.mjs";
+import {
+  buildAiResourceExportBundle,
+  discoverAiResourceFiles,
+  inferAiResourceFromFile,
+  AiResourceImportError
+} from "../aiResources.js";
 import type { Repository } from "../repository.js";
 import {
+  aiResourceImportSchema,
+  aiResourceScanRequestSchema,
+  aiResourceSchema,
+  aiResourceSyncRequestSchema,
   bachelorKnowledgeSchema,
   educationBookSchema,
   learningPlatformSchema,
@@ -77,6 +91,171 @@ export async function educationRoutes(app: FastifyInstance, repository: Reposito
     return deleted ? reply.code(204).send() : reply.code(404).send({ message: "Plattform ikke funnet." });
   });
 
+  app.get("/api/education/ai-resources", async (request) => {
+    const query = request.query as {
+      target?: string;
+      kind?: string;
+      status?: string;
+      tag?: string;
+      q?: string;
+    };
+    const resources = await repository.listAiResources(request.user.id);
+    return filterAiResources(resources, query);
+  });
+
+  app.post("/api/education/ai-resources", async (request) =>
+    repository.createAiResource(request.user.id, aiResourceSchema.parse(request.body))
+  );
+
+  app.post("/api/education/ai-resources/import", async (request) => {
+    const payload = aiResourceImportSchema.parse(request.body);
+    const existingResources = await repository.listAiResources(request.user.id);
+    const existingByPath = new Map(
+      existingResources
+        .filter((resource) => resource.installPath)
+        .map((resource) => [resource.installPath.toLowerCase(), resource])
+    );
+    const result: {
+      created: AiResource[];
+      updated: AiResource[];
+      rejected: Array<{ fileName: string; message: string }>;
+    } = { created: [], updated: [], rejected: [] };
+
+    for (const file of payload.files) {
+      try {
+        const input = inferAiResourceFromFile(file);
+        const existing = input.installPath ? existingByPath.get(input.installPath.toLowerCase()) : undefined;
+        if (existing) {
+          const updated = await repository.updateAiResource(request.user.id, existing.id, input);
+          if (updated) {
+            result.updated.push(updated);
+            existingByPath.set(updated.installPath.toLowerCase(), updated);
+          }
+        } else {
+          const created = await repository.createAiResource(request.user.id, input);
+          result.created.push(created);
+          if (created.installPath) {
+            existingByPath.set(created.installPath.toLowerCase(), created);
+          }
+        }
+      } catch (error) {
+        result.rejected.push({
+          fileName: file.fileName,
+          message: error instanceof AiResourceImportError || error instanceof Error
+            ? error.message
+            : "Kunne ikke importere filen."
+        });
+      }
+    }
+
+    return result;
+  });
+
+  app.get("/api/education/ai-resources/export", async (request, reply) => {
+    const query = request.query as { target?: string };
+    const target = (query.target ?? "all") as AiResourceExportTarget;
+    if (!aiResourceExportTargets.includes(target)) {
+      return reply.code(400).send({ message: "Ugyldig eksportmål." });
+    }
+    const resources = (await repository.listAiResources(request.user.id)).filter((resource) => resource.status !== "archived");
+    return buildAiResourceExportBundle(resources, target);
+  });
+
+  app.post("/api/education/ai-resources/sync", async (request, reply) => {
+    const body = aiResourceSyncRequestSchema.parse(request.body);
+    const cwd = await resolveAndValidateCwd(body.cwd, reply);
+    if (!cwd) return;
+
+    const resources = (await repository.listAiResources(request.user.id)).filter((resource) => resource.status !== "archived");
+    const bundle = buildAiResourceExportBundle(resources, body.target);
+    const result = await syncAiResources({
+      bundle,
+      cwd,
+      target: body.target,
+      yes: true,
+      force: body.force
+    });
+
+    return {
+      dryRun: result.dryRun,
+      target: result.target,
+      cwd: result.cwd,
+      files: result.files,
+      conflicts: result.conflicts,
+      rejected: result.rejected
+    };
+  });
+
+  app.post("/api/education/ai-resources/scan", async (request, reply) => {
+    const body = aiResourceScanRequestSchema.parse(request.body);
+    const cwd = await resolveAndValidateCwd(body.cwd, reply);
+    if (!cwd) return;
+
+    const discovered = await discoverAiResourceFiles(cwd);
+    if (discovered.length === 0) {
+      return { created: [], updated: [], rejected: [], scanned: 0 };
+    }
+
+    const existingResources = await repository.listAiResources(request.user.id);
+    const existingByPath = new Map(
+      existingResources
+        .filter((resource) => resource.installPath)
+        .map((resource) => [resource.installPath.toLowerCase(), resource])
+    );
+    const result: {
+      created: AiResource[];
+      updated: AiResource[];
+      rejected: Array<{ fileName: string; message: string }>;
+      scanned: number;
+    } = { created: [], updated: [], rejected: [], scanned: discovered.length };
+
+    for (const file of discovered) {
+      try {
+        const input = inferAiResourceFromFile(file);
+        const existing = input.installPath ? existingByPath.get(input.installPath.toLowerCase()) : undefined;
+        if (existing) {
+          const updated = await repository.updateAiResource(request.user.id, existing.id, input);
+          if (updated) {
+            result.updated.push(updated);
+            existingByPath.set(updated.installPath.toLowerCase(), updated);
+          }
+        } else {
+          const created = await repository.createAiResource(request.user.id, input);
+          result.created.push(created);
+          if (created.installPath) {
+            existingByPath.set(created.installPath.toLowerCase(), created);
+          }
+        }
+      } catch (error) {
+        result.rejected.push({
+          fileName: file.fileName,
+          message: error instanceof AiResourceImportError || error instanceof Error
+            ? error.message
+            : "Kunne ikke importere filen."
+        });
+      }
+    }
+
+    return result;
+  });
+
+  app.put("/api/education/ai-resources/:id", async (request, reply) => {
+    const result = await repository.updateAiResource(
+      request.user.id,
+      (request.params as { id: string }).id,
+      aiResourceSchema.parse(request.body)
+    );
+    return result ?? reply.code(404).send({ message: "AI-ressurs ikke funnet." });
+  });
+
+  app.delete("/api/education/ai-resources/:id", async (request, reply) => {
+    const deleted = await repository.deleteAiResource(
+      request.user.id,
+      (request.params as { id: string }).id
+    );
+    return deleted ? reply.code(204).send() : reply.code(404).send({ message: "AI-ressurs ikke funnet." });
+  });
+
   app.get("/api/education/bachelor", async (request) => {
     const query = request.query as { folderId?: string };
     const folderId = query.folderId === undefined ? undefined : query.folderId === "" ? null : query.folderId;
@@ -103,4 +282,48 @@ export async function educationRoutes(app: FastifyInstance, repository: Reposito
     );
     return deleted ? reply.code(204).send() : reply.code(404).send({ message: "Oppføring ikke funnet." });
   });
+}
+
+async function resolveAndValidateCwd(raw: string, reply: { code: (n: number) => { send: (body: unknown) => unknown } }): Promise<string | null> {
+  const resolved = path.resolve(raw);
+  if (!path.isAbsolute(raw) && raw !== resolved) {
+    // Relative paths resolve against the backend process cwd which is misleading
+  }
+  try {
+    const cwdStat = await stat(resolved);
+    if (!cwdStat.isDirectory()) {
+      reply.code(400).send({ message: `Stien er ikke en mappe: ${resolved}` });
+      return null;
+    }
+  } catch {
+    reply.code(400).send({ message: `Prosjektmappe finnes ikke: ${resolved}` });
+    return null;
+  }
+  return resolved;
+}
+
+function filterAiResources(
+  resources: AiResource[],
+  query: { target?: string; kind?: string; status?: string; tag?: string; q?: string }
+) {
+  const search = query.q?.trim().toLowerCase();
+  const tag = query.tag?.trim().toLowerCase();
+  return resources
+    .filter((resource) => !query.target || resource.targetTools.includes(query.target as AiResource["targetTools"][number]))
+    .filter((resource) => !query.kind || resource.kind === query.kind)
+    .filter((resource) => !query.status || resource.status === query.status)
+    .filter((resource) => !tag || resource.tags.some((item) => item.toLowerCase() === tag))
+    .filter(
+      (resource) =>
+        !search ||
+        [
+          resource.name,
+          resource.kind,
+          resource.installPath,
+          resource.notes,
+          resource.content,
+          ...resource.tags,
+          ...resource.targetTools
+        ].join(" ").toLowerCase().includes(search)
+    );
 }

@@ -1,5 +1,6 @@
 import { Prisma, PrismaClient } from "@prisma/client";
 import type {
+  AiResource,
   BachelorFile,
   BachelorFolder,
   BachelorFolderTreeNode,
@@ -33,6 +34,7 @@ import type {
   CompetitionInput,
   CourseInput,
   EducationBookInput,
+  AiResourceInput,
   LearningPlatformInput,
   Repository,
   SelfStudyCourseInput
@@ -136,6 +138,23 @@ type LearningPlatformRow = {
   notes: string;
   isActive: boolean;
   sortOrder: number;
+};
+
+type AiResourceRow = {
+  id: string;
+  userId: string;
+  name: string;
+  kind: string;
+  targetTools: string[];
+  status: string;
+  tags: string[];
+  installPath: string;
+  content: string;
+  frontmatter: unknown;
+  configFormat: string;
+  notes: string;
+  createdAt: Date;
+  updatedAt: Date;
 };
 
 type BachelorKnowledgeRow = {
@@ -448,6 +467,45 @@ export class PrismaRepository implements Repository {
 
   async deleteLearningPlatform(userId: string, id: string): Promise<boolean> {
     const result = await this.prisma.learningPlatform.deleteMany({ where: { id, userId } });
+    return result.count > 0;
+  }
+
+  async listAiResources(userId: string): Promise<AiResource[]> {
+    const rows = (await this.prisma.aiResource.findMany({
+      where: { userId },
+      orderBy: [{ updatedAt: "desc" }, { name: "asc" }]
+    })) as AiResourceRow[];
+    return rows.map((row) => this.mapAiResource(row));
+  }
+
+  async createAiResource(userId: string, input: AiResourceInput): Promise<AiResource> {
+    return this.mapAiResource(
+      (await this.prisma.aiResource.create({
+        data: {
+          userId,
+          ...input,
+          frontmatter: input.frontmatter as Prisma.InputJsonValue
+        }
+      })) as AiResourceRow
+    );
+  }
+
+  async updateAiResource(userId: string, id: string, input: AiResourceInput): Promise<AiResource | null> {
+    const existing = await this.prisma.aiResource.findFirst({ where: { id, userId } });
+    if (!existing) return null;
+    return this.mapAiResource(
+      (await this.prisma.aiResource.update({
+        where: { id },
+        data: {
+          ...input,
+          frontmatter: input.frontmatter as Prisma.InputJsonValue
+        }
+      })) as AiResourceRow
+    );
+  }
+
+  async deleteAiResource(userId: string, id: string): Promise<boolean> {
+    const result = await this.prisma.aiResource.deleteMany({ where: { id, userId } });
     return result.count > 0;
   }
 
@@ -843,6 +901,24 @@ export class PrismaRepository implements Repository {
     };
   }
 
+  private mapAiResource(row: AiResourceRow): AiResource {
+    return {
+      id: row.id,
+      name: row.name,
+      kind: row.kind as AiResource["kind"],
+      targetTools: row.targetTools as AiResource["targetTools"],
+      status: row.status as AiResource["status"],
+      tags: row.tags,
+      installPath: row.installPath,
+      content: row.content,
+      frontmatter: isRecord(row.frontmatter) ? row.frontmatter : {},
+      configFormat: row.configFormat as AiResource["configFormat"],
+      notes: row.notes,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString()
+    };
+  }
+
   private mapBachelorKnowledge(row: BachelorKnowledgeRow): BachelorKnowledge {
     return {
       id: row.id,
@@ -924,4 +1000,8 @@ export class PrismaRepository implements Repository {
   updateGraduateProgram = (userId: string, id: string, input: Parameters<typeof this.graduateProgramRepo.updateGraduateProgram>[2]) =>
     this.graduateProgramRepo.updateGraduateProgram(userId, id, input);
   deleteGraduateProgram = (userId: string, id: string) => this.graduateProgramRepo.deleteGraduateProgram(userId, id);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

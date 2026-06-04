@@ -1,4 +1,9 @@
 import type {
+  AiResource,
+  AiResourceConfigFormat,
+  AiResourceKind,
+  AiResourceStatus,
+  AiResourceTargetTool,
   BachelorFile,
   BachelorFolder,
   BachelorFolderTreeNode,
@@ -209,6 +214,19 @@ export interface LearningPlatformInput {
   sortOrder: number;
 }
 
+export interface AiResourceInput {
+  name: string;
+  kind: AiResourceKind;
+  targetTools: AiResourceTargetTool[];
+  status: AiResourceStatus;
+  tags: string[];
+  installPath: string;
+  content: string;
+  frontmatter: Record<string, unknown>;
+  configFormat: AiResourceConfigFormat;
+  notes: string;
+}
+
 export interface BachelorKnowledgeInput {
   folderId?: string | null;
   courseName: string;
@@ -294,6 +312,10 @@ export interface Repository {
   createLearningPlatform(userId: string, input: LearningPlatformInput): Promise<LearningPlatform>;
   updateLearningPlatform(userId: string, id: string, input: LearningPlatformInput): Promise<LearningPlatform | null>;
   deleteLearningPlatform(userId: string, id: string): Promise<boolean>;
+  listAiResources(userId: string): Promise<AiResource[]>;
+  createAiResource(userId: string, input: AiResourceInput): Promise<AiResource>;
+  updateAiResource(userId: string, id: string, input: AiResourceInput): Promise<AiResource | null>;
+  deleteAiResource(userId: string, id: string): Promise<boolean>;
   listBachelorKnowledge(userId: string, folderId?: string | null): Promise<BachelorKnowledge[]>;
   createBachelorKnowledge(userId: string, input: BachelorKnowledgeInput): Promise<BachelorKnowledge>;
   updateBachelorKnowledge(userId: string, id: string, input: BachelorKnowledgeInput): Promise<BachelorKnowledge | null>;

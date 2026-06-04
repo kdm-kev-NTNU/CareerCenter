@@ -1,4 +1,10 @@
 import type {
+  AiResource,
+  AiResourceExportBundle,
+  AiResourceExportTarget,
+  AiResourceImportResult,
+  AiResourceScanResult,
+  AiResourceSyncResult,
   BachelorFile,
   BachelorFolder,
   BachelorFolderTreeNode,
@@ -9,6 +15,8 @@ import type {
 } from "@careercenter/shared";
 import { request, uploadRequest } from "./client.js";
 import type {
+  AiResourceImportPayload,
+  AiResourcePayload,
   BachelorFileUpdatePayload,
   BachelorFolderPayload,
   BachelorKnowledgePayload,
@@ -40,6 +48,27 @@ export const educationApi = {
   updateLearningPlatform: (id: string, payload: LearningPlatformPayload) =>
     request<LearningPlatform>(`/api/education/platforms/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   deleteLearningPlatform: (id: string) => request<void>(`/api/education/platforms/${id}`, { method: "DELETE" }),
+
+  aiResources: (query = "") => request<AiResource[]>(`/api/education/ai-resources${query}`),
+  createAiResource: (payload: AiResourcePayload) =>
+    request<AiResource>("/api/education/ai-resources", { method: "POST", body: JSON.stringify(payload) }),
+  updateAiResource: (id: string, payload: AiResourcePayload) =>
+    request<AiResource>(`/api/education/ai-resources/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
+  deleteAiResource: (id: string) => request<void>(`/api/education/ai-resources/${id}`, { method: "DELETE" }),
+  importAiResources: (payload: AiResourceImportPayload) =>
+    request<AiResourceImportResult>("/api/education/ai-resources/import", { method: "POST", body: JSON.stringify(payload) }),
+  exportAiResources: (target: AiResourceExportTarget = "all") =>
+    request<AiResourceExportBundle>(`/api/education/ai-resources/export?target=${encodeURIComponent(target)}`),
+  syncAiResources: (payload: { target: AiResourceExportTarget; cwd: string; force?: boolean }) =>
+    request<AiResourceSyncResult>("/api/education/ai-resources/sync", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  scanAiResources: (payload: { cwd: string }) =>
+    request<AiResourceScanResult>("/api/education/ai-resources/scan", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
 
   bachelorKnowledge: (folderId?: string | null) => {
     if (folderId === undefined) return request<BachelorKnowledge[]>("/api/education/bachelor");

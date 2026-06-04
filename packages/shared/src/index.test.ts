@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { assertSemester, competitionScopes } from "./index";
+import {
+  aiResourceKinds,
+  aiResourceTargetTools,
+  aiResourceWriteStrategies,
+  assertSemester,
+  competitionScopes
+} from "./index";
 
 describe("shared helpers", () => {
   it("rejects unsupported semesters", () => {
@@ -12,5 +18,12 @@ describe("shared helpers", () => {
 
   it("defines competition geographic scopes", () => {
     expect(competitionScopes).toEqual(["NORWAY", "NORDICS", "EUROPE", "GLOBAL"]);
+  });
+
+  it("defines AI resource kinds and targets", () => {
+    expect(aiResourceKinds).toContain("codex_instruction");
+    expect(aiResourceKinds).toContain("cursor_rule");
+    expect(aiResourceTargetTools).toEqual(["cursor", "codex"]);
+    expect(aiResourceWriteStrategies).toContain("json_mcp_merge");
   });
 });

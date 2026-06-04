@@ -6,6 +6,7 @@ import { useCompaniesStore } from "./companies.js";
 import { useCoursesStore } from "./courses.js";
 import { useCompetitionsStore } from "./competitions.js";
 import { useEducationBachelorStore } from "./educationBachelor.js";
+import { useEducationAiResourcesStore } from "./educationAiResources.js";
 import { useEducationBooksStore } from "./educationBooks.js";
 import { useEducationPlatformsStore } from "./educationPlatforms.js";
 import { useEducationSelfStudyStore } from "./educationSelfStudy.js";
@@ -44,6 +45,7 @@ export const useAppStore = defineStore("app", () => {
     const educationBooksStore = useEducationBooksStore();
     const educationPlatformsStore = useEducationPlatformsStore();
     const educationBachelorStore = useEducationBachelorStore();
+    const educationAiResourcesStore = useEducationAiResourcesStore();
     const boardStore = useBoardStore();
 
     try {
@@ -71,6 +73,7 @@ export const useAppStore = defineStore("app", () => {
         educationBooksStore.loadBooks(),
         educationPlatformsStore.loadPlatforms(),
         educationBachelorStore.loadAll(),
+        educationAiResourcesStore.loadResources(),
         boardStore.loadBoards()
       ]);
       initialized.value = true;

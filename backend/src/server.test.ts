@@ -1,3 +1,6 @@
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { MemoryRepository } from "./memoryRepository.js";
 import { buildServer } from "./server.js";
@@ -726,6 +729,242 @@ describe("CareerCenter API", () => {
     expect(invalidCompany.statusCode).toBe(400);
     expect(invalidCompany.json().message).toBe("Ugyldig forespørsel.");
     expect(invalidCompany.json().issues).toBeDefined();
+
+    await app.close();
+  });
+
+  it("imports, filters, exports, updates, and deletes AI resources", async () => {
+    const app = await createTestApp();
+
+    const manual = await app.inject({
+      method: "POST",
+      url: "/api/education/ai-resources",
+      payload: {
+        name: "Review checklist",
+        kind: "workflow_checklist",
+        targetTools: ["cursor", "codex"],
+        status: "draft",
+        tags: ["review"],
+        installPath: "",
+        content: "- Run tests",
+        frontmatter: {},
+        configFormat: "markdown",
+        notes: ""
+      }
+    });
+    expect(manual.statusCode, manual.body).toBe(200);
+
+    const imported = await app.inject({
+      method: "POST",
+      url: "/api/education/ai-resources/import",
+      payload: {
+        files: [
+          {
+            fileName: "tailwind.mdc",
+            content: [
+              "---",
+              'description: "Tailwind component rules"',
+              'globs: "**/*.vue"',
+              "alwaysApply: false",
+              "---",
+              "# Tailwind",
+              "Use existing utility patterns."
+            ].join("\n")
+          },
+          { fileName: "AGENTS.md", content: "# Codex instructions\nRun typecheck before final handoff." },
+          {
+            fileName: "mcp.json",
+            content: JSON.stringify({ mcpServers: { docs: { command: "npx", args: ["docs-mcp"], env: { API_KEY: "${API_KEY}" } } } })
+          }
+        ]
+      }
+    });
+    expect(imported.statusCode).toBe(200);
+    expect(imported.json().created).toHaveLength(3);
+    expect(imported.json().rejected).toHaveLength(0);
+
+    const reimported = await app.inject({
+      method: "POST",
+      url: "/api/education/ai-resources/import",
+      payload: { files: [{ fileName: "AGENTS.md", content: "# Codex instructions\nUpdated." }] }
+    });
+    expect(reimported.statusCode).toBe(200);
+    expect(reimported.json().updated).toHaveLength(1);
+
+    const codexList = await app.inject({ method: "GET", url: "/api/education/ai-resources?target=codex" });
+    expect(codexList.statusCode).toBe(200);
+    expect(codexList.json().some((resource: { kind: string }) => resource.kind === "codex_instruction")).toBe(true);
+
+    const cursorExport = await app.inject({ method: "GET", url: "/api/education/ai-resources/export?target=cursor" });
+    expect(cursorExport.statusCode).toBe(200);
+    expect(cursorExport.json().files.map((file: { path: string }) => file.path)).toContain(".cursor/rules/tailwind.mdc");
+    expect(cursorExport.json().files.map((file: { path: string }) => file.path)).toContain(".cursor/mcp.json");
+    expect(cursorExport.json().files.find((file: { path: string }) => file.path === ".cursor/mcp.json").writeStrategy).toBe("json_mcp_merge");
+
+    const codexExport = await app.inject({ method: "GET", url: "/api/education/ai-resources/export?target=codex" });
+    expect(codexExport.statusCode).toBe(200);
+    expect(codexExport.json().files.map((file: { path: string }) => file.path)).toContain("AGENTS.md");
+    expect(codexExport.json().files.map((file: { path: string }) => file.path)).toContain(".codex/config.toml");
+    expect(codexExport.json().files.find((file: { path: string }) => file.path === "AGENTS.md").writeStrategy).toBe("managed_markdown_block");
+    expect(codexExport.json().files.find((file: { path: string }) => file.path === ".codex/config.toml").writeStrategy).toBe("toml_managed_block");
+
+    const missingUpdate = await app.inject({
+      method: "PUT",
+      url: "/api/education/ai-resources/missing",
+      payload: {
+        name: "Ghost",
+        kind: "prompt_snippet",
+        targetTools: ["codex"],
+        status: "draft",
+        tags: [],
+        installPath: "",
+        content: "Ghost",
+        frontmatter: {},
+        configFormat: "plain",
+        notes: ""
+      }
+    });
+    expect(missingUpdate.statusCode).toBe(404);
+
+    const deleted = await app.inject({ method: "DELETE", url: `/api/education/ai-resources/${manual.json().id}` });
+    expect(deleted.statusCode).toBe(204);
+
+    await app.close();
+  });
+
+  it("applies AI resource sync to an existing project directory", async () => {
+    const app = await createTestApp();
+    const cwd = await mkdtemp(path.join(os.tmpdir(), "careercenter-ai-sync-api-"));
+
+    try {
+      const imported = await app.inject({
+        method: "POST",
+        url: "/api/education/ai-resources/import",
+        payload: {
+          files: [{
+            fileName: "tailwind.mdc",
+            content: [
+              "---",
+              'description: "Tailwind component rules"',
+              'globs: "**/*.vue"',
+              "alwaysApply: false",
+              "---",
+              "# Tailwind",
+              "Use existing utility patterns."
+            ].join("\n")
+          }]
+        }
+      });
+      expect(imported.statusCode).toBe(200);
+
+      const synced = await app.inject({
+        method: "POST",
+        url: "/api/education/ai-resources/sync",
+        payload: { target: "cursor", cwd }
+      });
+      expect(synced.statusCode).toBe(200);
+      expect(synced.json().dryRun).toBe(false);
+      expect(synced.json().files.some((file: { path: string; action: string }) =>
+        file.path === ".cursor/rules/tailwind.mdc" && file.action === "create"
+      )).toBe(true);
+
+      const ruleContent = await readFile(path.join(cwd, ".cursor/rules/tailwind.mdc"), "utf8");
+      expect(ruleContent).toContain("# Tailwind");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+      await app.close();
+    }
+  });
+
+  it("rejects AI resource sync when project directory is missing", async () => {
+    const app = await createTestApp();
+    const missing = path.join(os.tmpdir(), `careercenter-missing-${Date.now()}`);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/education/ai-resources/sync",
+      payload: { target: "all", cwd: missing }
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().message).toContain("finnes ikke");
+
+    await app.close();
+  });
+
+  it("rejects invalid AI resource imports and export targets", async () => {
+    const app = await createTestApp();
+
+    const rejectedImport = await app.inject({
+      method: "POST",
+      url: "/api/education/ai-resources/import",
+      payload: {
+        files: [{
+          fileName: "broken.mdc",
+          content: "---\ndescription: Missing fields\n---\n# Broken"
+        }]
+      }
+    });
+    expect(rejectedImport.statusCode).toBe(200);
+    expect(rejectedImport.json().rejected).toHaveLength(1);
+    expect(rejectedImport.json().rejected[0].fileName).toBe("broken.mdc");
+
+    const invalidExport = await app.inject({
+      method: "GET",
+      url: "/api/education/ai-resources/export?target=invalid"
+    });
+    expect(invalidExport.statusCode).toBe(400);
+    expect(invalidExport.json().message).toBe("Ugyldig eksportmål.");
+
+    await app.close();
+  });
+
+  it("excludes archived AI resources from export bundles", async () => {
+    const app = await createTestApp();
+
+    const active = await app.inject({
+      method: "POST",
+      url: "/api/education/ai-resources",
+      payload: {
+        name: "Active prompt",
+        kind: "prompt_snippet",
+        targetTools: ["cursor"],
+        status: "active",
+        tags: [],
+        installPath: ".cursor/snippets/active.md",
+        content: "# Active",
+        frontmatter: {},
+        configFormat: "markdown",
+        notes: ""
+      }
+    });
+    expect(active.statusCode).toBe(200);
+
+    const archived = await app.inject({
+      method: "POST",
+      url: "/api/education/ai-resources",
+      payload: {
+        name: "Archived prompt",
+        kind: "prompt_snippet",
+        targetTools: ["cursor"],
+        status: "archived",
+        tags: [],
+        installPath: ".cursor/snippets/archived.md",
+        content: "# Archived",
+        frontmatter: {},
+        configFormat: "markdown",
+        notes: ""
+      }
+    });
+    expect(archived.statusCode).toBe(200);
+
+    const exportBundle = await app.inject({
+      method: "GET",
+      url: "/api/education/ai-resources/export?target=cursor"
+    });
+    expect(exportBundle.statusCode).toBe(200);
+    const paths = exportBundle.json().files.map((file: { path: string }) => file.path);
+    expect(paths).toContain(".cursor/snippets/active.md");
+    expect(paths).not.toContain(".cursor/snippets/archived.md");
 
     await app.close();
   });

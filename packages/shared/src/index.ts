@@ -34,6 +34,108 @@ export type CourseStatus = (typeof courseStatuses)[number];
 export const learningStatuses = ["planned", "in_progress", "completed"] as const;
 export type LearningStatus = (typeof learningStatuses)[number];
 
+export const aiResourceKinds = [
+  "cursor_rule",
+  "cursor_skill",
+  "codex_instruction",
+  "codex_skill",
+  "mcp_server",
+  "prompt_snippet",
+  "workflow_checklist"
+] as const;
+export type AiResourceKind = (typeof aiResourceKinds)[number];
+
+export const aiResourceTargetTools = ["cursor", "codex"] as const;
+export type AiResourceTargetTool = (typeof aiResourceTargetTools)[number];
+
+export const aiResourceStatuses = ["draft", "active", "needs_review", "archived"] as const;
+export type AiResourceStatus = (typeof aiResourceStatuses)[number];
+
+export const aiResourceConfigFormats = ["markdown", "mdc", "json", "toml", "plain"] as const;
+export type AiResourceConfigFormat = (typeof aiResourceConfigFormats)[number];
+
+export const aiResourceExportTargets = ["cursor", "codex", "all"] as const;
+export type AiResourceExportTarget = (typeof aiResourceExportTargets)[number];
+
+export const aiResourceWriteStrategies = [
+  "replace",
+  "managed_markdown_block",
+  "json_mcp_merge",
+  "toml_managed_block"
+] as const;
+export type AiResourceWriteStrategy = (typeof aiResourceWriteStrategies)[number];
+
+export interface AiResource {
+  id: string;
+  name: string;
+  kind: AiResourceKind;
+  targetTools: AiResourceTargetTool[];
+  status: AiResourceStatus;
+  tags: string[];
+  installPath: string;
+  content: string;
+  frontmatter: Record<string, unknown>;
+  configFormat: AiResourceConfigFormat;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AiResourceImportFile {
+  fileName: string;
+  content: string;
+}
+
+export interface AiResourceImportRejectedFile {
+  fileName: string;
+  message: string;
+}
+
+export interface AiResourceImportResult {
+  created: AiResource[];
+  updated: AiResource[];
+  rejected: AiResourceImportRejectedFile[];
+}
+
+export interface AiResourceExportFile {
+  path: string;
+  content: string;
+  resourceIds: string[];
+  resourceNames: string[];
+  writeStrategy: AiResourceWriteStrategy;
+}
+
+export interface AiResourceExportBundle {
+  target: AiResourceExportTarget;
+  files: AiResourceExportFile[];
+}
+
+export const aiResourceSyncActions = ["create", "update", "noop", "conflict"] as const;
+export type AiResourceSyncAction = (typeof aiResourceSyncActions)[number];
+
+export interface AiResourceSyncFileResult {
+  path: string;
+  action: AiResourceSyncAction;
+  writeStrategy: AiResourceWriteStrategy;
+  message?: string;
+}
+
+export interface AiResourceSyncResult {
+  dryRun: boolean;
+  target: AiResourceExportTarget;
+  cwd: string;
+  files: AiResourceSyncFileResult[];
+  conflicts: Array<{ path: string; message: string }>;
+  rejected: Array<{ path: string; message: string }>;
+}
+
+export interface AiResourceScanResult {
+  created: AiResource[];
+  updated: AiResource[];
+  rejected: Array<{ fileName: string; message: string }>;
+  scanned: number;
+}
+
 export interface SelfStudyCourse {
   id: string;
   title: string;

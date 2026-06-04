@@ -1,7 +1,20 @@
 import { spawn, spawnSync } from "node:child_process";
+import { createServer } from "node:net";
 
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const children = [];
+
+async function getFreePort() {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.on("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+      server.close(() => resolve(port));
+    });
+  });
+}
 
 function run(args, env = {}) {
   const child = spawn(npmCommand, args, {
@@ -51,20 +64,24 @@ process.on("SIGTERM", () => {
   process.exit(143);
 });
 
+const apiPort = await getFreePort();
+const apiUrl = `http://127.0.0.1:${apiPort}`;
+
 run(["run", "dev", "--workspace", "@careercenter/api"], {
   CAREERCENTER_REPOSITORY: "memory",
   JWT_SECRET: "e2e_fixture_only_not_a_real_jwt_secret",
   AUTH_DISABLED: "true",
-  PORT: "3000"
+  PORT: String(apiPort)
 });
 run(["run", "dev", "--workspace", "@careercenter/web"], {
-  CYPRESS_COVERAGE: "true"
+  CYPRESS_COVERAGE: "true",
+  VITE_PROXY_TARGET: apiUrl
 });
 
-await waitFor("http://127.0.0.1:3000/api/health");
+await waitFor(`${apiUrl}/api/health`);
 await waitFor("http://127.0.0.1:5173");
 
-const me = await fetch("http://127.0.0.1:3000/api/auth/me");
+const me = await fetch(`${apiUrl}/api/auth/me`);
 if (!me.ok) {
   throw new Error(
     `E2E auth bootstrap failed (${me.status}). Ensure AUTH_DISABLED=true and /api/auth/me works without a session cookie.`

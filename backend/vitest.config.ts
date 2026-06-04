@@ -4,6 +4,7 @@ export default defineConfig({
   test: {
     environment: "node",
     globals: true,
+    include: ["src/**/*.test.ts"],
     env: {
       JWT_SECRET: "test-jwt-secret-for-ci-only-32chars-long"
     },
