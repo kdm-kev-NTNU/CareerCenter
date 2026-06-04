@@ -3,9 +3,19 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 export const UPLOAD_TIMEOUT_MS = 120_000;
 export const MAX_BACHELOR_FILE_BYTES = 50 * 1024 * 1024;
 
+function timeoutErrorMessage(): string {
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    if (host !== "localhost" && host !== "127.0.0.1") {
+      return "Serveren svarte ikke i tide. API-proxyen kan være midlertidig utilgjengelig – prøv igjen om litt.";
+    }
+  }
+  return "Serveren svarte ikke i tide. Sjekk at API-et kjører (port 3000) og at du åpner appen via dev-serveren (f.eks. http://localhost:5174 med Docker).";
+}
+
 function toRequestErrorMessage(error: unknown): string {
   if (error instanceof DOMException && error.name === "TimeoutError") {
-    return "Serveren svarte ikke i tide. Sjekk at API-et kjører (port 3000) og at du åpner appen via dev-serveren (f.eks. http://localhost:5174 med Docker).";
+    return timeoutErrorMessage();
   }
   if (error instanceof TypeError) {
     return "Kunne ikke koble til API-et. Er backend startet?";
