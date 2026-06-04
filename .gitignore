@@ -12,3 +12,6 @@ test-results/
 .railway/
 *.tsbuildinfo
 uploads/
+
+# Local mirror of global Cursor skills + MCP (see scripts/sync-agent-inventory.ps1)
+.agent-inventory/
