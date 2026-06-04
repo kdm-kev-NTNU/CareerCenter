@@ -38,6 +38,38 @@ describe("discoverAiResourceFiles", () => {
     ]);
   });
 
+  it("discovers skills when cwd is .agent-inventory or its skills folder", async () => {
+    const cwd = await makeProject({
+      ".agent-inventory/skills/user/foo/SKILL.md": "# Foo\nSkill body.",
+      ".agent-inventory/skills/codex/bar/SKILL.md": "# Bar\nCodex skill."
+    });
+
+    const fromInventoryRoot = await discoverAiResourceFiles(path.join(cwd, ".agent-inventory"));
+    const fromSkillsRoot = await discoverAiResourceFiles(path.join(cwd, ".agent-inventory", "skills"));
+
+    expect(fromInventoryRoot.map((file) => file.fileName).sort()).toEqual([
+      ".agent-inventory/skills/codex/bar/SKILL.md",
+      ".agent-inventory/skills/user/foo/SKILL.md"
+    ]);
+    expect(fromSkillsRoot.map((file) => file.fileName).sort()).toEqual([
+      ".agent-inventory/skills/codex/bar/SKILL.md",
+      ".agent-inventory/skills/user/foo/SKILL.md"
+    ]);
+  });
+
+  it("discovers skills when cwd is .agents or its skills folder", async () => {
+    const cwd = await makeProject({
+      ".agents/skills/review/SKILL.md": "# Review\nAgent skill.",
+      ".agents/skills/review/reference.md": "# Reference\n"
+    });
+
+    const fromAgentsRoot = await discoverAiResourceFiles(path.join(cwd, ".agents"));
+    const fromSkillsRoot = await discoverAiResourceFiles(path.join(cwd, ".agents", "skills"));
+
+    expect(fromAgentsRoot.map((file) => file.fileName)).toEqual([".agents/skills/review/SKILL.md"]);
+    expect(fromSkillsRoot.map((file) => file.fileName)).toEqual([".agents/skills/review/SKILL.md"]);
+  });
+
   it("still discovers standard .cursor and .codex skill paths", async () => {
     const cwd = await makeProject({
       ".cursor/skills/review/SKILL.md": "# Review\n",

@@ -7,6 +7,7 @@ import type {
   AiResourceExportTarget,
   AiResourceWriteStrategy
 } from "@careercenter/shared";
+import { classifyAiResourceFolder } from "./aiResourceFolders.js";
 import type { AiResourceInput } from "./repository.js";
 
 export class AiResourceImportError extends Error {
@@ -22,6 +23,10 @@ type ImportFile = {
 };
 
 type McpServerConfig = Record<string, unknown>;
+type AiResourceInputWithoutMetadata = Omit<
+  AiResourceInput,
+  "folderPath" | "isStarred" | "usageCount" | "lastUsedAt" | "sourcePath"
+>;
 
 const DEFAULT_MDC_FRONTMATTER = {
   description: "Imported Cursor rule",
@@ -38,7 +43,7 @@ export function inferAiResourceFromFile(file: ImportFile): AiResourceInput {
   if (lower.endsWith(".mdc")) {
     const parsed = parseMdc(content);
     const description = typeof parsed.frontmatter.description === "string" ? parsed.frontmatter.description : "";
-    return {
+    return addAiResourceDefaults({
       name: description || titleFromPath(fileName),
       kind: "cursor_rule",
       targetTools: ["cursor"],
@@ -49,11 +54,11 @@ export function inferAiResourceFromFile(file: ImportFile): AiResourceInput {
       frontmatter: parsed.frontmatter,
       configFormat: "mdc",
       notes: ""
-    };
+    }, fileName);
   }
 
   if (base.toLowerCase() === ".cursorrules") {
-    return {
+    return addAiResourceDefaults({
       name: "Legacy Cursor rules",
       kind: "cursor_rule",
       targetTools: ["cursor"],
@@ -64,17 +69,17 @@ export function inferAiResourceFromFile(file: ImportFile): AiResourceInput {
       frontmatter: DEFAULT_MDC_FRONTMATTER,
       configFormat: "plain",
       notes: "Importert fra legacy .cursorrules-format."
-    };
+    }, fileName);
   }
 
   if (base.toLowerCase() === "skill.md") {
-    const fromInventory = inferAgentInventorySkill(fileName, content);
-    if (fromInventory) return fromInventory;
+    const fromSkillSource = inferSkillSource(fileName, content);
+    if (fromSkillSource) return fromSkillSource;
 
     const isCursorSkill = lower.includes(".cursor/skills/");
     const kind = isCursorSkill ? "cursor_skill" : "codex_skill";
     const slug = slugify(extractMarkdownTitle(content) || parentFolderName(fileName) || "skill");
-    return {
+    return addAiResourceDefaults({
       name: extractMarkdownTitle(content) || titleFromPath(parentFolderName(fileName) || base),
       kind,
       targetTools: [isCursorSkill ? "cursor" : "codex"],
@@ -89,11 +94,11 @@ export function inferAiResourceFromFile(file: ImportFile): AiResourceInput {
       frontmatter: {},
       configFormat: "markdown",
       notes: ""
-    };
+    }, fileName);
   }
 
   if (base.toLowerCase() === "agents.md") {
-    return {
+    return addAiResourceDefaults({
       name: "Codex project instructions",
       kind: "codex_instruction",
       targetTools: ["codex"],
@@ -104,13 +109,13 @@ export function inferAiResourceFromFile(file: ImportFile): AiResourceInput {
       frontmatter: {},
       configFormat: "markdown",
       notes: ""
-    };
+    }, fileName);
   }
 
   if (lower.endsWith(".json") || looksLikeMcpJson(content)) {
     const parsed = parseMcpJson(content);
     const targetTools = inferMcpTargets(lower);
-    return {
+    return addAiResourceDefaults({
       name: mcpResourceName(parsed),
       kind: "mcp_server",
       targetTools,
@@ -125,11 +130,11 @@ export function inferAiResourceFromFile(file: ImportFile): AiResourceInput {
       frontmatter: {},
       configFormat: "json",
       notes: ""
-    };
+    }, fileName);
   }
 
   if (lower.endsWith(".toml") || looksLikeCodexToml(content)) {
-    return {
+    return addAiResourceDefaults({
       name: "Codex config snippet",
       kind: "mcp_server",
       targetTools: ["codex"],
@@ -140,10 +145,10 @@ export function inferAiResourceFromFile(file: ImportFile): AiResourceInput {
       frontmatter: {},
       configFormat: "toml",
       notes: ""
-    };
+    }, fileName);
   }
 
-  return {
+  return addAiResourceDefaults({
     name: extractMarkdownTitle(content) || titleFromPath(fileName),
     kind: "prompt_snippet",
     targetTools: ["cursor", "codex"],
@@ -154,7 +159,7 @@ export function inferAiResourceFromFile(file: ImportFile): AiResourceInput {
     frontmatter: {},
     configFormat: lower.endsWith(".md") ? "markdown" : "plain",
     notes: ""
-  };
+  }, fileName);
 }
 
 export function buildAiResourceExportBundle(
@@ -486,37 +491,70 @@ function parentFolderName(path: string) {
   return parts.length > 1 ? parts[parts.length - 2] : "";
 }
 
-function extractAgentInventoryCategory(fileName: string): string {
+function extractAgentInventoryCategory(fileName: string): string | null {
   const normalized = normalizePath(fileName);
   const prefix = ".agent-inventory/skills/";
   const lower = normalized.toLowerCase();
-  if (!lower.includes(prefix)) return "unknown";
+  if (!lower.includes(prefix)) return null;
   const start = lower.indexOf(prefix) + prefix.length;
   const rest = normalized.slice(start);
   const parts = rest.split("/").filter(Boolean);
-  if (parts.length < 2) return "unknown";
-  return parts.slice(0, -2).join("/") || "unknown";
+  if (parts.length < 2) return null;
+  return parts.slice(0, -2).join("/") || null;
 }
 
-function inferAgentInventorySkill(fileName: string, content: string): AiResourceInput | null {
+function inferSkillSource(fileName: string, content: string): AiResourceInput | null {
   const lower = fileName.toLowerCase();
-  if (!lower.includes(".agent-inventory/skills/")) return null;
+  const inventoryCategory = extractAgentInventoryCategory(fileName);
+  if (inventoryCategory) {
+    return buildSourcedSkill(fileName, content, inventoryCategory, inventoryCategory === "codex" || inventoryCategory === "agents", true);
+  }
 
-  const category = extractAgentInventoryCategory(fileName);
+  if (lower.includes(".agents/skills/")) {
+    return buildSourcedSkill(fileName, content, "agents", true, false);
+  }
+
+  return null;
+}
+
+function buildSourcedSkill(
+  fileName: string,
+  content: string,
+  category: string,
+  isCodex: boolean,
+  isInventory: boolean
+): AiResourceInput {
   const slug = slugify(parentFolderName(fileName) || extractMarkdownTitle(content) || "skill");
-  const isCodex = category === "codex";
+  const tags = [isCodex ? "codex" : "cursor", "skill"];
+  if (isInventory) tags.push("inventory");
+  tags.push(category);
+  const uniqueTags = [...new Set(tags)];
 
-  return {
+  return addAiResourceDefaults({
     name: extractMarkdownTitle(content) || titleFromPath(parentFolderName(fileName) || "skill"),
     kind: isCodex ? "codex_skill" : "cursor_skill",
     targetTools: [isCodex ? "codex" : "cursor"],
     status: "active",
-    tags: [isCodex ? "codex" : "cursor", "skill", "inventory", category],
+    tags: uniqueTags,
     installPath: isCodex ? `.codex/skills/${slug}/SKILL.md` : `.cursor/skills/${slug}/SKILL.md`,
     content,
     frontmatter: {},
     configFormat: "markdown",
     notes: `Importert fra ${fileName}`
+  }, fileName);
+}
+
+function addAiResourceDefaults(input: AiResourceInputWithoutMetadata, sourcePath: string): AiResourceInput {
+  const withSource = {
+    ...input,
+    sourcePath
+  };
+  return {
+    ...withSource,
+    folderPath: classifyAiResourceFolder(withSource),
+    isStarred: false,
+    usageCount: 0,
+    lastUsedAt: null
   };
 }
 
@@ -554,6 +592,7 @@ type DiscoveredFile = { fileName: string; content: string };
 
 export async function discoverAiResourceFiles(cwd: string): Promise<DiscoveredFile[]> {
   const found: DiscoveredFile[] = [];
+  const resolvedCwd = pathModule.resolve(cwd);
 
   const singleFiles: Array<{ relative: string; optional: boolean }> = [
     { relative: ".cursorrules", optional: true },
@@ -563,25 +602,49 @@ export async function discoverAiResourceFiles(cwd: string): Promise<DiscoveredFi
   ];
 
   for (const { relative } of singleFiles) {
-    const abs = pathModule.resolve(cwd, relative);
+    const abs = pathModule.resolve(resolvedCwd, relative);
     const content = await readTextSafe(abs);
     if (content !== null) found.push({ fileName: relative, content });
   }
 
-  const globDirs: Array<{ dir: string; pattern: RegExp; recurse: boolean }> = [
-    { dir: ".cursor/rules", pattern: /\.mdc$/i, recurse: false },
-    { dir: ".cursor/skills", pattern: /^SKILL\.md$/i, recurse: true },
-    { dir: ".codex/skills", pattern: /^SKILL\.md$/i, recurse: true },
-    { dir: ".agents/skills", pattern: /^SKILL\.md$/i, recurse: true },
-    { dir: ".agent-inventory/skills", pattern: /^SKILL\.md$/i, recurse: true }
+  const globDirs: Array<{ absDir: string; relativeBase: string; pattern: RegExp; recurse: boolean }> = [
+    { absDir: pathModule.resolve(resolvedCwd, ".cursor/rules"), relativeBase: ".cursor/rules", pattern: /\.mdc$/i, recurse: false },
+    { absDir: pathModule.resolve(resolvedCwd, ".cursor/skills"), relativeBase: ".cursor/skills", pattern: /^SKILL\.md$/i, recurse: true },
+    { absDir: pathModule.resolve(resolvedCwd, ".codex/skills"), relativeBase: ".codex/skills", pattern: /^SKILL\.md$/i, recurse: true },
+    { absDir: pathModule.resolve(resolvedCwd, ".agents/skills"), relativeBase: ".agents/skills", pattern: /^SKILL\.md$/i, recurse: true },
+    { absDir: pathModule.resolve(resolvedCwd, ".agent-inventory/skills"), relativeBase: ".agent-inventory/skills", pattern: /^SKILL\.md$/i, recurse: true },
+    ...agentSourceRootDirs(resolvedCwd)
   ];
 
-  for (const { dir, pattern, recurse } of globDirs) {
-    const abs = pathModule.resolve(cwd, dir);
-    await collectFiles(abs, dir, pattern, recurse, found);
+  for (const { absDir, relativeBase, pattern, recurse } of globDirs) {
+    await collectFiles(absDir, relativeBase, pattern, recurse, found);
   }
 
   return found;
+}
+
+function agentSourceRootDirs(cwd: string): Array<{ absDir: string; relativeBase: string; pattern: RegExp; recurse: boolean }> {
+  const rootName = pathModule.basename(cwd).toLowerCase();
+  const parentName = pathModule.basename(pathModule.dirname(cwd)).toLowerCase();
+  const skillPattern = /^SKILL\.md$/i;
+
+  if (rootName === ".agent-inventory") {
+    return [{ absDir: pathModule.join(cwd, "skills"), relativeBase: ".agent-inventory/skills", pattern: skillPattern, recurse: true }];
+  }
+
+  if (rootName === "skills" && parentName === ".agent-inventory") {
+    return [{ absDir: cwd, relativeBase: ".agent-inventory/skills", pattern: skillPattern, recurse: true }];
+  }
+
+  if (rootName === ".agents") {
+    return [{ absDir: pathModule.join(cwd, "skills"), relativeBase: ".agents/skills", pattern: skillPattern, recurse: true }];
+  }
+
+  if (rootName === "skills" && parentName === ".agents") {
+    return [{ absDir: cwd, relativeBase: ".agents/skills", pattern: skillPattern, recurse: true }];
+  }
+
+  return [];
 }
 
 async function readTextSafe(filePath: string): Promise<string | null> {

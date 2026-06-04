@@ -38,6 +38,24 @@ describe("Agent inventory scan", () => {
     cy.contains(".ai-resource-card", /readme-updater|good-ci-cd/i).should("be.visible");
   });
 
+  it("skanner .agent-inventory som valgt rot", () => {
+    const separator = repoRoot.includes("\\") ? "\\" : "/";
+    const inventoryRoot = `${repoRoot.replace(/[\\/]$/, "")}${separator}.agent-inventory`;
+
+    cy.visit("/education/ai");
+
+    cy.get("[data-test='sync-cwd']").clear().type(inventoryRoot, { parseSpecialCharSequences: false });
+    cy.contains("[data-test='run-scan']", "Skann prosjekt").should("not.be.disabled").click();
+
+    cy.get("[data-test='scan-error']").should("not.exist");
+    cy.get("[data-test='scan-result']", { timeout: 120_000 }).should("be.visible");
+    cy.get("[data-test='scan-result']")
+      .invoke("text")
+      .should("match", new RegExp(`Skannet ${expectedSkillCount} filer`));
+
+    cy.contains(".ai-resource-card", /readme-updater|good-ci-cd/i).should("be.visible");
+  });
+
   it("oppdaterer skills ved ny skanning uten duplikater", () => {
     cy.visit("/education/ai");
 

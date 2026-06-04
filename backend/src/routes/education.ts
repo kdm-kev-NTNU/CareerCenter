@@ -9,6 +9,8 @@ import {
   inferAiResourceFromFile,
   AiResourceImportError
 } from "../aiResources.js";
+import { normalizeFolderPath } from "../aiResourceFolders.js";
+import type { AiResourceInput } from "../repository.js";
 import type { Repository } from "../repository.js";
 import {
   aiResourceImportSchema,
@@ -98,13 +100,16 @@ export async function educationRoutes(app: FastifyInstance, repository: Reposito
       status?: string;
       tag?: string;
       q?: string;
+      folderPath?: string;
+      starred?: string;
+      frequent?: string;
     };
     const resources = await repository.listAiResources(request.user.id);
     return filterAiResources(resources, query);
   });
 
   app.post("/api/education/ai-resources", async (request) =>
-    repository.createAiResource(request.user.id, aiResourceSchema.parse(request.body))
+    repository.createAiResource(request.user.id, normalizeAiResourceInput(aiResourceSchema.parse(request.body)))
   );
 
   app.post("/api/education/ai-resources/import", async (request) => {
@@ -126,7 +131,7 @@ export async function educationRoutes(app: FastifyInstance, repository: Reposito
         const input = inferAiResourceFromFile(file);
         const existing = input.installPath ? existingByPath.get(input.installPath.toLowerCase()) : undefined;
         if (existing) {
-          const updated = await repository.updateAiResource(request.user.id, existing.id, input);
+          const updated = await repository.updateAiResource(request.user.id, existing.id, preserveAiResourceMetadata(input, existing));
           if (updated) {
             result.updated.push(updated);
             existingByPath.set(updated.installPath.toLowerCase(), updated);
@@ -214,7 +219,7 @@ export async function educationRoutes(app: FastifyInstance, repository: Reposito
         const input = inferAiResourceFromFile(file);
         const existing = input.installPath ? existingByPath.get(input.installPath.toLowerCase()) : undefined;
         if (existing) {
-          const updated = await repository.updateAiResource(request.user.id, existing.id, input);
+          const updated = await repository.updateAiResource(request.user.id, existing.id, preserveAiResourceMetadata(input, existing));
           if (updated) {
             result.updated.push(updated);
             existingByPath.set(updated.installPath.toLowerCase(), updated);
@@ -243,8 +248,13 @@ export async function educationRoutes(app: FastifyInstance, repository: Reposito
     const result = await repository.updateAiResource(
       request.user.id,
       (request.params as { id: string }).id,
-      aiResourceSchema.parse(request.body)
+      normalizeAiResourceInput(aiResourceSchema.parse(request.body))
     );
+    return result ?? reply.code(404).send({ message: "AI-ressurs ikke funnet." });
+  });
+
+  app.post("/api/education/ai-resources/:id/used", async (request, reply) => {
+    const result = await repository.markAiResourceUsed(request.user.id, (request.params as { id: string }).id);
     return result ?? reply.code(404).send({ message: "AI-ressurs ikke funnet." });
   });
 
@@ -285,7 +295,7 @@ export async function educationRoutes(app: FastifyInstance, repository: Reposito
 }
 
 async function resolveAndValidateCwd(raw: string, reply: { code: (n: number) => { send: (body: unknown) => unknown } }): Promise<string | null> {
-  const resolved = path.resolve(raw);
+  const resolved = await resolveCwd(raw);
   if (!path.isAbsolute(raw) && raw !== resolved) {
     // Relative paths resolve against the backend process cwd which is misleading
   }
@@ -302,17 +312,62 @@ async function resolveAndValidateCwd(raw: string, reply: { code: (n: number) => 
   return resolved;
 }
 
+async function resolveCwd(raw: string): Promise<string> {
+  const resolved = path.resolve(raw);
+  if (await isDirectory(resolved)) return resolved;
+
+  const windowsWorkspace = normalizeWindowsWorkspacePath(raw);
+  if (!windowsWorkspace) return resolved;
+
+  for (const candidateRoot of workspaceRootCandidates()) {
+    const candidate = path.resolve(candidateRoot, windowsWorkspace.relativePath);
+    if (await isDirectory(candidate)) return candidate;
+  }
+
+  return resolved;
+}
+
+function normalizeWindowsWorkspacePath(raw: string): { relativePath: string } | null {
+  const normalized = raw.replace(/\\/g, "/");
+  const marker = "/CareerCenter";
+  const markerIndex = normalized.toLowerCase().lastIndexOf(marker.toLowerCase());
+  if (!/^[A-Za-z]:\//.test(normalized) || markerIndex < 0) return null;
+
+  const afterRoot = normalized.slice(markerIndex + marker.length).replace(/^\/+/, "");
+  return { relativePath: afterRoot };
+}
+
+function workspaceRootCandidates() {
+  return [
+    path.resolve(process.cwd(), ".."),
+    process.cwd()
+  ];
+}
+
+async function isDirectory(candidate: string) {
+  try {
+    const cwdStat = await stat(candidate);
+    return cwdStat.isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 function filterAiResources(
   resources: AiResource[],
-  query: { target?: string; kind?: string; status?: string; tag?: string; q?: string }
+  query: { target?: string; kind?: string; status?: string; tag?: string; q?: string; folderPath?: string; starred?: string; frequent?: string }
 ) {
   const search = query.q?.trim().toLowerCase();
   const tag = query.tag?.trim().toLowerCase();
-  return resources
+  const folderPath = query.folderPath?.trim();
+  const filtered = resources
     .filter((resource) => !query.target || resource.targetTools.includes(query.target as AiResource["targetTools"][number]))
     .filter((resource) => !query.kind || resource.kind === query.kind)
     .filter((resource) => !query.status || resource.status === query.status)
     .filter((resource) => !tag || resource.tags.some((item) => item.toLowerCase() === tag))
+    .filter((resource) => !folderPath || resource.folderPath === folderPath)
+    .filter((resource) => query.starred !== "true" || resource.isStarred)
+    .filter((resource) => query.frequent !== "true" || resource.usageCount > 0)
     .filter(
       (resource) =>
         !search ||
@@ -326,4 +381,35 @@ function filterAiResources(
           ...resource.targetTools
         ].join(" ").toLowerCase().includes(search)
     );
+  if (query.frequent === "true") {
+    return filtered.sort(
+      (a, b) =>
+        b.usageCount - a.usageCount ||
+        (b.lastUsedAt ?? "").localeCompare(a.lastUsedAt ?? "") ||
+        a.name.localeCompare(b.name)
+    );
+  }
+  return filtered;
+}
+
+function normalizeAiResourceInput(input: AiResourceInput): AiResourceInput {
+  return {
+    ...input,
+    folderPath: normalizeFolderPath(input.folderPath || "Inbox"),
+    isStarred: input.isStarred === true,
+    usageCount: input.usageCount ?? 0,
+    lastUsedAt: input.lastUsedAt ?? null,
+    sourcePath: input.sourcePath?.trim() || undefined
+  };
+}
+
+function preserveAiResourceMetadata(input: AiResourceInput, existing: AiResource): AiResourceInput {
+  return {
+    ...input,
+    folderPath: existing.folderPath || input.folderPath,
+    isStarred: existing.isStarred,
+    usageCount: existing.usageCount,
+    lastUsedAt: existing.lastUsedAt ?? null,
+    sourcePath: input.sourcePath || existing.sourcePath
+  };
 }

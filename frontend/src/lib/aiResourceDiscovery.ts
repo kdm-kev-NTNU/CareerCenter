@@ -18,12 +18,64 @@ const SKILL_DIR_PREFIXES = [
   ".agent-inventory/skills/"
 ];
 
+const INVENTORY_SKILL_CATEGORIES = new Set([
+  "agents",
+  "codex",
+  "cursor-builtin",
+  "plugins",
+  "user"
+]);
+
 export function normalizeDiscoveryPath(path: string): string {
   return path.replace(/\\/g, "/").replace(/^\/+/, "");
 }
 
-export function isDiscoverableAiResourcePath(relativePath: string): boolean {
-  const fileName = normalizeDiscoveryPath(relativePath);
+export function canonicalizeDiscoveredAiResourcePath(relativePath: string, rootName = ""): string {
+  const normalized = normalizeDiscoveryPath(relativePath);
+  const lower = normalized.toLowerCase();
+  const root = normalizeDiscoveryPath(rootName).toLowerCase();
+  const parts = lower.split("/").filter(Boolean);
+  const firstPart = parts[0] ?? "";
+
+  if (!normalized) return normalized;
+
+  if (
+    lower.startsWith(".agent-inventory/") ||
+    lower.startsWith(".agents/") ||
+    lower.startsWith(".codex/") ||
+    lower.startsWith(".cursor/")
+  ) {
+    return normalized;
+  }
+
+  if (root === ".agent-inventory" && lower.startsWith("skills/")) {
+    return `.agent-inventory/${normalized}`;
+  }
+
+  if (root === ".agents" && lower.startsWith("skills/")) {
+    return `.agents/${normalized}`;
+  }
+
+  if (root === ".agent-inventory/skills") {
+    return `.agent-inventory/skills/${normalized}`;
+  }
+
+  if (root === ".agents/skills") {
+    return `.agents/skills/${normalized}`;
+  }
+
+  if (root === "skills" && lower.endsWith("/skill.md")) {
+    const sourceRoot = INVENTORY_SKILL_CATEGORIES.has(firstPart)
+      ? ".agent-inventory/skills"
+      : ".agents/skills";
+    return `${sourceRoot}/${normalized}`;
+  }
+
+  return normalized;
+}
+
+export function isDiscoverableAiResourcePath(relativePath: string, rootName = ""): boolean {
+  const fileName = canonicalizeDiscoveredAiResourcePath(relativePath, rootName);
   const lower = fileName.toLowerCase();
   const base = fileName.split("/").filter(Boolean).pop() ?? fileName;
 
@@ -55,11 +107,13 @@ export function filesFromDirectoryInput(fileList: FileList): Array<{ fileName: s
 
   for (const file of fileList) {
     const webkitPath = file.webkitRelativePath;
+    const rootName = webkitPath ? folderRootFromWebkitPath(webkitPath) : "";
     const relativePath = webkitPath
       ? stripFolderRootFromWebkitPath(webkitPath)
       : file.name;
-    if (isDiscoverableAiResourcePath(relativePath)) {
-      entries.push({ fileName: normalizeDiscoveryPath(relativePath), file });
+    const fileName = canonicalizeDiscoveredAiResourcePath(relativePath, rootName);
+    if (isDiscoverableAiResourcePath(fileName)) {
+      entries.push({ fileName, file });
     }
   }
 
@@ -86,10 +140,11 @@ export async function collectFilesFromDirectoryHandle(
     for await (const entry of (dir as IterableDirectoryHandle).values()) {
       const rel = base ? `${base}/${entry.name}` : entry.name;
       if (entry.kind === "file") {
-        if (isDiscoverableAiResourcePath(rel)) {
+        const fileName = canonicalizeDiscoveredAiResourcePath(rel, handle.name);
+        if (isDiscoverableAiResourcePath(fileName)) {
           const file = await (entry as FileSystemFileHandle).getFile();
           found.push({
-            fileName: normalizeDiscoveryPath(rel),
+            fileName,
             content: await file.text()
           });
         }

@@ -14,6 +14,7 @@ vi.mock("../../api/index.js", () => ({
     deleteAiResource: vi.fn(),
     importAiResources: vi.fn(),
     exportAiResources: vi.fn(),
+    markAiResourceUsed: vi.fn(),
     syncAiResources: vi.fn(),
     scanAiResources: vi.fn()
   }
@@ -33,6 +34,11 @@ const resource = {
   frontmatter: {},
   configFormat: "markdown" as const,
   notes: "",
+  folderPath: "AI Agents/Skills",
+  isStarred: false,
+  usageCount: 0,
+  lastUsedAt: null,
+  sourcePath: "AGENTS.md",
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z"
 };
@@ -49,6 +55,11 @@ const cursorRule = {
   frontmatter: { description: "Tailwind", globs: "**/*.vue", alwaysApply: false },
   configFormat: "mdc" as const,
   notes: "",
+  folderPath: "Development/Code Quality",
+  isStarred: false,
+  usageCount: 0,
+  lastUsedAt: null,
+  sourcePath: ".cursor/rules/tailwind.mdc",
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z"
 };
@@ -61,6 +72,9 @@ describe("EducationAiResourcesView", () => {
     setActivePinia(pinia);
     vi.clearAllMocks();
     mockedApi.aiResources.mockResolvedValue([]);
+    mockedApi.markAiResourceUsed.mockImplementation(async (id: string) =>
+      id === cursorRule.id ? { ...cursorRule, usageCount: cursorRule.usageCount + 1 } : { ...resource, usageCount: resource.usageCount + 1 }
+    );
   });
 
   function mountView() {
@@ -173,6 +187,7 @@ describe("EducationAiResourcesView", () => {
     const wrapper = mountView();
     const store = useEducationAiResourcesStore();
     await store.loadResources();
+    store.selectVirtualGroup("recent");
     await flushPromises();
 
     expect(wrapper.findAll(".ai-resource-card")).toHaveLength(2);
@@ -183,5 +198,24 @@ describe("EducationAiResourcesView", () => {
 
     expect(wrapper.findAll(".ai-resource-card")).toHaveLength(1);
     expect(wrapper.text()).toContain("Tailwind");
+  });
+
+  it("shows folders and can star a resource", async () => {
+    mockedApi.aiResources.mockResolvedValue([resource, cursorRule]);
+    mockedApi.updateAiResource.mockResolvedValue({ ...cursorRule, isStarred: true });
+
+    const wrapper = mountView();
+    const store = useEducationAiResourcesStore();
+    await store.loadResources();
+    store.selectFolder("Development/Code Quality");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Hurtiggrupper");
+    expect(wrapper.text()).toContain("Development/Code Quality");
+
+    await wrapper.find(".star-button").trigger("click");
+    await flushPromises();
+
+    expect(mockedApi.updateAiResource).toHaveBeenCalledWith("ai-2", expect.objectContaining({ isStarred: true }));
   });
 });

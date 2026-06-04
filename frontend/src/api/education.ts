@@ -54,6 +54,8 @@ export const educationApi = {
     request<AiResource>("/api/education/ai-resources", { method: "POST", body: JSON.stringify(payload) }),
   updateAiResource: (id: string, payload: AiResourcePayload) =>
     request<AiResource>(`/api/education/ai-resources/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
+  markAiResourceUsed: (id: string) =>
+    request<AiResource>(`/api/education/ai-resources/${id}/used`, { method: "POST" }),
   deleteAiResource: (id: string) => request<void>(`/api/education/ai-resources/${id}`, { method: "DELETE" }),
   importAiResources: (payload: AiResourceImportPayload) =>
     request<AiResourceImportResult>("/api/education/ai-resources/import", { method: "POST", body: JSON.stringify(payload) }),

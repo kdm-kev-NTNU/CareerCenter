@@ -330,7 +330,11 @@ describe("api client", () => {
       content: "# Instructions",
       frontmatter: {},
       configFormat: "markdown",
-      notes: ""
+      notes: "",
+      folderPath: "AI Agents/Skills",
+      isStarred: false,
+      usageCount: 0,
+      lastUsedAt: null
     });
     await educationApi.updateAiResource("ai-1", {
       name: "AGENTS",
@@ -342,10 +346,15 @@ describe("api client", () => {
       content: "# Instructions updated",
       frontmatter: {},
       configFormat: "markdown",
-      notes: "Updated"
+      notes: "Updated",
+      folderPath: "AI Agents/Skills",
+      isStarred: true,
+      usageCount: 2,
+      lastUsedAt: null
     });
     await educationApi.importAiResources({ files: [{ fileName: "AGENTS.md", content: "# Instructions" }] });
     await educationApi.exportAiResources("codex");
+    await educationApi.markAiResourceUsed("ai-1");
     await educationApi.deleteAiResource("ai-1");
     await educationApi.bachelorKnowledge();
     await educationApi.bachelorKnowledge(null);

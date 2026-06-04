@@ -153,6 +153,11 @@ type AiResourceRow = {
   frontmatter: unknown;
   configFormat: string;
   notes: string;
+  folderPath: string;
+  isStarred: boolean;
+  usageCount: number;
+  lastUsedAt: Date | null;
+  sourcePath: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -484,6 +489,7 @@ export class PrismaRepository implements Repository {
         data: {
           userId,
           ...input,
+          lastUsedAt: input.lastUsedAt ? new Date(input.lastUsedAt) : null,
           frontmatter: input.frontmatter as Prisma.InputJsonValue
         }
       })) as AiResourceRow
@@ -498,7 +504,22 @@ export class PrismaRepository implements Repository {
         where: { id },
         data: {
           ...input,
+          lastUsedAt: input.lastUsedAt ? new Date(input.lastUsedAt) : null,
           frontmatter: input.frontmatter as Prisma.InputJsonValue
+        }
+      })) as AiResourceRow
+    );
+  }
+
+  async markAiResourceUsed(userId: string, id: string): Promise<AiResource | null> {
+    const existing = await this.prisma.aiResource.findFirst({ where: { id, userId } });
+    if (!existing) return null;
+    return this.mapAiResource(
+      (await this.prisma.aiResource.update({
+        where: { id },
+        data: {
+          usageCount: { increment: 1 },
+          lastUsedAt: new Date()
         }
       })) as AiResourceRow
     );
@@ -914,6 +935,11 @@ export class PrismaRepository implements Repository {
       frontmatter: isRecord(row.frontmatter) ? row.frontmatter : {},
       configFormat: row.configFormat as AiResource["configFormat"],
       notes: row.notes,
+      folderPath: row.folderPath || "Inbox",
+      isStarred: row.isStarred === true,
+      usageCount: row.usageCount ?? 0,
+      lastUsedAt: row.lastUsedAt?.toISOString(),
+      sourcePath: row.sourcePath ?? undefined,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString()
     };

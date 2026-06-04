@@ -783,6 +783,20 @@ describe("CareerCenter API", () => {
     expect(imported.json().created).toHaveLength(3);
     expect(imported.json().rejected).toHaveLength(0);
 
+    const importedAgents = imported.json().created.find((resource: { installPath: string }) => resource.installPath === "AGENTS.md");
+    const movedAgents = await app.inject({
+      method: "PUT",
+      url: `/api/education/ai-resources/${importedAgents.id}`,
+      payload: {
+        ...importedAgents,
+        folderPath: "Accessibility/WCAG",
+        isStarred: true
+      }
+    });
+    expect(movedAgents.statusCode).toBe(200);
+    expect(movedAgents.json().folderPath).toBe("Accessibility/WCAG");
+    expect(movedAgents.json().isStarred).toBe(true);
+
     const reimported = await app.inject({
       method: "POST",
       url: "/api/education/ai-resources/import",
@@ -790,6 +804,22 @@ describe("CareerCenter API", () => {
     });
     expect(reimported.statusCode).toBe(200);
     expect(reimported.json().updated).toHaveLength(1);
+    expect(reimported.json().updated[0].folderPath).toBe("Accessibility/WCAG");
+    expect(reimported.json().updated[0].isStarred).toBe(true);
+
+    const starredList = await app.inject({ method: "GET", url: "/api/education/ai-resources?starred=true" });
+    expect(starredList.json().map((resource: { id: string }) => resource.id)).toContain(importedAgents.id);
+
+    const folderList = await app.inject({ method: "GET", url: "/api/education/ai-resources?folderPath=Accessibility%2FWCAG" });
+    expect(folderList.json().map((resource: { id: string }) => resource.id)).toContain(importedAgents.id);
+
+    const used = await app.inject({ method: "POST", url: `/api/education/ai-resources/${importedAgents.id}/used` });
+    expect(used.statusCode).toBe(200);
+    expect(used.json().usageCount).toBe(1);
+    expect(used.json().lastUsedAt).toBeTruthy();
+
+    const frequentList = await app.inject({ method: "GET", url: "/api/education/ai-resources?frequent=true" });
+    expect(frequentList.json()[0].id).toBe(importedAgents.id);
 
     const codexList = await app.inject({ method: "GET", url: "/api/education/ai-resources?target=codex" });
     expect(codexList.statusCode).toBe(200);

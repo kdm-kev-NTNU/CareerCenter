@@ -68,6 +68,13 @@ const syncActionLabels: Record<AiResourceSyncAction, string> = {
   conflict: "Konflikt"
 };
 
+const virtualGroupLabels = {
+  starred: "Stjernet",
+  frequent: "Ofte brukt",
+  recent: "Nylig endret",
+  needs_review: "Trenger sjekk"
+};
+
 function setFrontmatter(payload: AiResourcePayload, key: "description" | "globs", value: string) {
   payload.frontmatter = { ...payload.frontmatter, [key]: value };
 }
@@ -104,8 +111,27 @@ function folderInputChanged(event: Event) {
   input.value = "";
 }
 
+function isFolderSelected(path: string) {
+  return store.selectedResourceGroup.type === "folder" && store.selectedResourceGroup.path === path;
+}
+
+function isVirtualSelected(group: keyof typeof virtualGroupLabels) {
+  return store.selectedResourceGroup.type === "virtual" && store.selectedResourceGroup.group === group;
+}
+
+function selectionLabel() {
+  const selected = store.selectedResourceGroup;
+  return selected.type === "folder" ? selected.path : virtualGroupLabels[selected.group];
+}
+
+async function startEditResource(resource: AiResource) {
+  await store.markResourceUsed(resource);
+  store.startEdit(resource);
+}
+
 async function copyResource(resource: AiResource) {
   await navigator.clipboard?.writeText(resource.content);
+  await store.markResourceUsed(resource);
   copiedId.value = resource.id;
   window.setTimeout(() => {
     if (copiedId.value === resource.id) copiedId.value = "";
@@ -126,7 +152,7 @@ async function copyResource(resource: AiResource) {
     <!-- ===== SYNC PANEL ===== -->
     <article class="panel ai-sync-panel">
       <h2>Skann og synk</h2>
-      <p class="muted-hint">Pek til en prosjektmappe. <strong>Skann</strong> leser Cursor/Codex-filer derfra inn i CareerCenter, inkludert skills fra <code>.agent-inventory/skills/</code> etter <code>powershell -File ./scripts/sync-agent-inventory.ps1</code>. <strong>Synk</strong> skriver dem tilbake etter redigering. På hostet app: bruk <strong>Velg mappe</strong> — serveren kan ikke lese stier på din PC. Full sti i feltet fungerer kun når API kjører lokalt (server-scan).</p>
+      <p class="muted-hint">Pek til en prosjektmappe. <strong>Skann</strong> leser AI-ressursfiler derfra inn i CareerCenter, inkludert <code>.cursor/skills/</code>, <code>.codex/skills/</code>, <code>.agents/skills/</code> og <code>.agent-inventory/skills/</code> etter <code>powershell -File ./scripts/sync-agent-inventory.ps1</code>. <strong>Synk</strong> skriver dem tilbake etter redigering. På hostet app: bruk <strong>Velg mappe</strong> — serveren kan ikke lese stier på din PC. Full sti i feltet fungerer kun når API kjører lokalt (server-scan).</p>
 
       <div class="sync-simple-grid">
         <label class="sync-folder-field">
@@ -231,16 +257,58 @@ async function copyResource(resource: AiResource) {
     </article>
 
     <!-- ===== RESOURCE LIST ===== -->
-    <article class="panel">
-      <div class="panel-header-row">
-        <h2>AI-ressurser</h2>
+    <article class="panel ai-resource-browser">
+      <aside class="ai-resource-sidebar">
+        <div class="sidebar-section">
+          <strong>Hurtiggrupper</strong>
+          <button
+            v-for="group in store.virtualGroupSummaries"
+            :key="group.key"
+            type="button"
+            class="ai-folder-button"
+            :class="{ active: isVirtualSelected(group.key) }"
+            @click="store.selectVirtualGroup(group.key)"
+          >
+            <span>{{ virtualGroupLabels[group.key] }}</span>
+            <small>{{ group.count }}</small>
+          </button>
+        </div>
+        <div class="sidebar-section">
+          <strong>Mapper</strong>
+          <button
+            v-for="folder in store.folderSummaries"
+            :key="folder.path"
+            type="button"
+            class="ai-folder-button"
+            :class="{ active: isFolderSelected(folder.path) }"
+            @click="store.selectFolder(folder.path)"
+          >
+            <span>{{ folder.path }}</span>
+            <small>{{ folder.count }}</small>
+          </button>
+        </div>
+      </aside>
+
+      <div class="ai-resource-list">
+        <div class="panel-header-row">
+        <h2>{{ selectionLabel() }}</h2>
         <small>{{ store.filteredResources.length }} av {{ store.resources.length }}</small>
       </div>
       <p v-if="store.deleteError" class="error-text">{{ store.deleteError }}</p>
       <div v-for="resource in store.filteredResources" :key="resource.id" class="ai-resource-card">
         <div class="ai-resource-main">
           <div class="ai-resource-title-row">
+            <button
+              type="button"
+              class="star-button"
+              :class="{ active: resource.isStarred }"
+              :aria-label="resource.isStarred ? 'Fjern stjerne' : 'Stjern ressurs'"
+              @click="store.toggleStar(resource)"
+            >
+              {{ resource.isStarred ? "★" : "☆" }}
+            </button>
             <strong>{{ resource.name }}</strong>
+            <span class="folder-chip">{{ resource.folderPath }}</span>
             <span class="status-badge accent">{{ statusLabels[resource.status] }}</span>
           </div>
           <small>{{ kindLabels[resource.kind] }} · {{ resource.targetTools.map((target) => targetLabels[target]).join(" + ") }}</small>
@@ -251,8 +319,15 @@ async function copyResource(resource: AiResource) {
           <p v-if="resource.notes">{{ resource.notes }}</p>
         </div>
         <div class="actions column">
-          <button type="button" class="ghost mini-link" data-test="edit-resource" :disabled="store.isSaving || store.deletingId === resource.id" @click="store.startEdit(resource)">Rediger</button>
+          <button type="button" class="ghost mini-link" data-test="edit-resource" :disabled="store.isSaving || store.deletingId === resource.id" @click="startEditResource(resource)">Rediger</button>
           <button type="button" class="ghost mini-link" @click="copyResource(resource)">{{ copiedId === resource.id ? "Kopiert" : "Kopier" }}</button>
+          <small>Brukt {{ resource.usageCount }}</small>
+          <label class="mini-move-field">
+            Flytt
+            <select :value="resource.folderPath" :disabled="store.isSaving" @change="store.moveResource(resource, ($event.target as HTMLSelectElement).value)">
+              <option v-for="folder in store.folderOptions" :key="folder" :value="folder">{{ folder }}</option>
+            </select>
+          </label>
           <button type="button" class="ghost mini-link danger" :class="{ 'is-loading': store.deletingId === resource.id }" :disabled="store.deletingId === resource.id || store.isSaving" @click="store.removeResource(resource.id)">
             {{ store.deletingId === resource.id ? "Sletter…" : "Slett" }}
           </button>
@@ -270,6 +345,7 @@ async function copyResource(resource: AiResource) {
               <option v-for="status in aiResourceStatuses" :key="status" :value="status">{{ statusLabels[status] }}</option>
             </select>
           </label>
+          <label>Mappe<input v-model="store.editingResource.folderPath" list="ai-resource-folders" :disabled="store.isSaving" /></label>
           <label>Format
             <select v-model="store.editingResource.configFormat" :disabled="store.isSaving">
               <option v-for="format in aiResourceConfigFormats" :key="format" :value="format">{{ formatLabels[format] }}</option>
@@ -305,8 +381,12 @@ async function copyResource(resource: AiResource) {
           </div>
         </form>
       </div>
-      <p v-if="!store.filteredResources.length && !appStore.isInitializing">Ingen AI-ressurser funnet. Bruk <strong>Skann prosjekt</strong> for å importere Cursor/Codex-filer.</p>
+      <p v-if="!store.filteredResources.length && !appStore.isInitializing">Ingen AI-ressurser funnet. Bruk <strong>Skann prosjekt</strong> for å importere AI-ressursfiler.</p>
+      </div>
     </article>
+    <datalist id="ai-resource-folders">
+      <option v-for="folder in store.folderOptions" :key="folder" :value="folder" />
+    </datalist>
 
     <!-- ===== ADD MANUALLY (collapsed) ===== -->
     <details class="panel">
@@ -337,6 +417,7 @@ async function copyResource(resource: AiResource) {
             </label>
           </fieldset>
           <label>Install path<input v-model="store.newResource.installPath" placeholder=".cursor/rules/tailwind.mdc" :disabled="store.isSaving" /></label>
+          <label>Mappe<input v-model="store.newResource.folderPath" list="ai-resource-folders" :disabled="store.isSaving" /></label>
           <label>Tags<input v-model="store.tagInput" placeholder="cursor, rules, tailwind" :disabled="store.isSaving" /></label>
           <label class="wide-field">Innhold<textarea v-model="store.newResource.content" placeholder="# Regler eller konfigurasjon" required :disabled="store.isSaving" /></label>
           <p v-if="store.saveError" class="error-text wide-field">{{ store.saveError }}</p>

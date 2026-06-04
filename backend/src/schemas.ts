@@ -137,7 +137,12 @@ export const aiResourceSchema = z.object({
   }),
   frontmatter: z.record(z.unknown()).default({}),
   configFormat: z.enum(aiResourceConfigFormats).default("markdown"),
-  notes: z.string().default("")
+  notes: z.string().default(""),
+  folderPath: z.string().trim().max(160).default("Inbox"),
+  isStarred: z.boolean().default(false),
+  usageCount: z.number().int().min(0).default(0),
+  lastUsedAt: z.union([z.string().datetime(), z.null()]).optional(),
+  sourcePath: z.string().trim().max(260).optional()
 });
 
 export const aiResourceImportSchema = z.object({

@@ -389,6 +389,19 @@ export class MemoryRepository implements Repository {
     return this.cloneAiResource(updated);
   }
 
+  async markAiResourceUsed(userId: string, id: string): Promise<AiResource | null> {
+    const existing = this.aiResources.get(id);
+    if (!existing || existing.userId !== userId) return null;
+    const updated: AiResource & { userId: string } = {
+      ...existing,
+      usageCount: (existing.usageCount ?? 0) + 1,
+      lastUsedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    this.aiResources.set(id, updated);
+    return this.cloneAiResource(updated);
+  }
+
   async deleteAiResource(userId: string, id: string): Promise<boolean> {
     const existing = this.aiResources.get(id);
     if (!existing || existing.userId !== userId) return false;
@@ -634,7 +647,12 @@ export class MemoryRepository implements Repository {
       content: input.content,
       frontmatter: structuredClone(input.frontmatter),
       configFormat: input.configFormat,
-      notes: input.notes
+      notes: input.notes,
+      folderPath: input.folderPath || "Inbox",
+      isStarred: input.isStarred === true,
+      usageCount: input.usageCount ?? 0,
+      lastUsedAt: input.lastUsedAt ?? undefined,
+      sourcePath: input.sourcePath
     };
   }
 
@@ -644,7 +662,12 @@ export class MemoryRepository implements Repository {
       ...publicResource,
       targetTools: [...resource.targetTools],
       tags: [...resource.tags],
-      frontmatter: structuredClone(resource.frontmatter)
+      frontmatter: structuredClone(resource.frontmatter),
+      folderPath: resource.folderPath || "Inbox",
+      isStarred: resource.isStarred === true,
+      usageCount: resource.usageCount ?? 0,
+      lastUsedAt: resource.lastUsedAt,
+      sourcePath: resource.sourcePath
     };
   }
 

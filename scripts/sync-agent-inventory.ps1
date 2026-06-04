@@ -1,4 +1,4 @@
-# Sync global Cursor skills + MCP configs into .agent-inventory (gitignored).
+# Sync global Cursor/Codex/Agents skills + MCP configs into .agent-inventory (gitignored).
 # Re-run after installing plugins/skills:  powershell -File ./scripts/sync-agent-inventory.ps1
 
 $ErrorActionPreference = "Stop"
@@ -7,6 +7,7 @@ $OutRoot = Join-Path $RepoRoot ".agent-inventory"
 $UserHome = $env:USERPROFILE
 $CursorHome = Join-Path $UserHome ".cursor"
 $CodexSkills = Join-Path $UserHome ".codex\skills"
+$AgentsSkills = Join-Path $UserHome ".agents\skills"
 $WorkspaceMcps = Join-Path $CursorHome "projects\c-Users-kevin-Documents-GitHub-CareerCenter\mcps"
 $PluginCache = Join-Path $CursorHome "plugins\cache\cursor-public"
 
@@ -71,6 +72,7 @@ $allSkills = [System.Collections.Generic.List[object]]::new()
 $allSkills.AddRange((Copy-SkillTree (Join-Path $CursorHome "skills") "user" $skillsRoot))
 $allSkills.AddRange((Copy-SkillTree (Join-Path $CursorHome "skills-cursor") "cursor-builtin" $skillsRoot))
 $allSkills.AddRange((Copy-SkillTree $CodexSkills "codex" $skillsRoot))
+$allSkills.AddRange((Copy-SkillTree $AgentsSkills "agents" $skillsRoot))
 $allSkills.AddRange((Copy-PluginSkills $PluginCache $skillsRoot))
 
 # MCP config
@@ -145,6 +147,7 @@ $($mcpServers -join "`n")
 | User skills | ``$($CursorHome -replace '\\','/')/skills`` |
 | Cursor built-in skills | ``$($CursorHome -replace '\\','/')/skills-cursor`` |
 | Codex skills | ``$($CodexSkills -replace '\\','/')`` |
+| Agents skills | ``$($AgentsSkills -replace '\\','/')`` |
 | Plugin skills | ``$($PluginCache -replace '\\','/')/*/skills`` |
 | Global MCP | ``$($CursorHome -replace '\\','/')/mcp.json`` |
 | Workspace MCP cache | ``$($WorkspaceMcps -replace '\\','/')`` |
