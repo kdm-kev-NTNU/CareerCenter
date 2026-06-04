@@ -68,6 +68,9 @@ export function inferAiResourceFromFile(file: ImportFile): AiResourceInput {
   }
 
   if (base.toLowerCase() === "skill.md") {
+    const fromInventory = inferAgentInventorySkill(fileName, content);
+    if (fromInventory) return fromInventory;
+
     const isCursorSkill = lower.includes(".cursor/skills/");
     const kind = isCursorSkill ? "cursor_skill" : "codex_skill";
     const slug = slugify(extractMarkdownTitle(content) || parentFolderName(fileName) || "skill");
@@ -483,6 +486,40 @@ function parentFolderName(path: string) {
   return parts.length > 1 ? parts[parts.length - 2] : "";
 }
 
+function extractAgentInventoryCategory(fileName: string): string {
+  const normalized = normalizePath(fileName);
+  const prefix = ".agent-inventory/skills/";
+  const lower = normalized.toLowerCase();
+  if (!lower.includes(prefix)) return "unknown";
+  const start = lower.indexOf(prefix) + prefix.length;
+  const rest = normalized.slice(start);
+  const parts = rest.split("/").filter(Boolean);
+  if (parts.length < 2) return "unknown";
+  return parts.slice(0, -2).join("/") || "unknown";
+}
+
+function inferAgentInventorySkill(fileName: string, content: string): AiResourceInput | null {
+  const lower = fileName.toLowerCase();
+  if (!lower.includes(".agent-inventory/skills/")) return null;
+
+  const category = extractAgentInventoryCategory(fileName);
+  const slug = slugify(parentFolderName(fileName) || extractMarkdownTitle(content) || "skill");
+  const isCodex = category === "codex";
+
+  return {
+    name: extractMarkdownTitle(content) || titleFromPath(parentFolderName(fileName) || "skill"),
+    kind: isCodex ? "codex_skill" : "cursor_skill",
+    targetTools: [isCodex ? "codex" : "cursor"],
+    status: "active",
+    tags: [isCodex ? "codex" : "cursor", "skill", "inventory", category],
+    installPath: isCodex ? `.codex/skills/${slug}/SKILL.md` : `.cursor/skills/${slug}/SKILL.md`,
+    content,
+    frontmatter: {},
+    configFormat: "markdown",
+    notes: `Importert fra ${fileName}`
+  };
+}
+
 function titleFromPath(path: string) {
   const base = basename(path).replace(/\.[^.]+$/, "");
   return base
@@ -535,7 +572,8 @@ export async function discoverAiResourceFiles(cwd: string): Promise<DiscoveredFi
     { dir: ".cursor/rules", pattern: /\.mdc$/i, recurse: false },
     { dir: ".cursor/skills", pattern: /^SKILL\.md$/i, recurse: true },
     { dir: ".codex/skills", pattern: /^SKILL\.md$/i, recurse: true },
-    { dir: ".agents/skills", pattern: /^SKILL\.md$/i, recurse: true }
+    { dir: ".agents/skills", pattern: /^SKILL\.md$/i, recurse: true },
+    { dir: ".agent-inventory/skills", pattern: /^SKILL\.md$/i, recurse: true }
   ];
 
   for (const { dir, pattern, recurse } of globDirs) {

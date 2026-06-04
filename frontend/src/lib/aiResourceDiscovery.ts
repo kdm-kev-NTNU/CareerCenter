@@ -11,7 +11,12 @@ const SINGLE_FILE_PATHS = new Set([
   ".codex/config.toml"
 ]);
 
-const SKILL_DIR_PREFIXES = [".cursor/skills/", ".codex/skills/", ".agents/skills/"];
+const SKILL_DIR_PREFIXES = [
+  ".cursor/skills/",
+  ".codex/skills/",
+  ".agents/skills/",
+  ".agent-inventory/skills/"
+];
 
 export function normalizeDiscoveryPath(path: string): string {
   return path.replace(/\\/g, "/").replace(/^\/+/, "");
