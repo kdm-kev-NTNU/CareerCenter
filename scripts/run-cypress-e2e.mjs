@@ -88,7 +88,12 @@ if (!me.ok) {
   );
 }
 
-const cypress = spawn(npmCommand, ["run", "test:e2e", "--workspace", "@careercenter/web"], {
+const cypressArgs = ["run", "test:e2e", "--workspace", "@careercenter/web"];
+if (process.env.CYPRESS_SPEC) {
+  cypressArgs.push("--", "--spec", process.env.CYPRESS_SPEC);
+}
+
+const cypress = spawn(npmCommand, cypressArgs, {
   cwd: process.cwd(),
   env: process.env,
   stdio: ["ignore", "pipe", "pipe"],
