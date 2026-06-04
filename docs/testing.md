@@ -39,6 +39,26 @@ In GitHub **Settings → Branches → main**, require these status checks before
 
 Optionally require `docker` if image builds must block merges.
 
+## Agent inventory E2E
+
+The spec `frontend/cypress/e2e/agent-inventory-scan.cy.ts` scans the real repo root for skills under `.agent-inventory/skills/` (gitignored mirror). Run the sync script first, then the spec:
+
+```bash
+powershell -File ./scripts/sync-agent-inventory.ps1
+# From repo root (starts API + web, then Cypress):
+CYPRESS_SPEC=cypress/e2e/agent-inventory-scan.cy.ts npm run test:e2e
+```
+
+On Windows PowerShell:
+
+```powershell
+powershell -File ./scripts/sync-agent-inventory.ps1
+$env:CYPRESS_SPEC = "cypress/e2e/agent-inventory-scan.cy.ts"
+npm run test:e2e
+```
+
+On GitHub Actions the spec is skipped when `.agent-inventory` is missing (no local Cursor paths on the runner).
+
 ## Debugging low coverage
 
 After a failed merge, the script prints the lowest-covered files. Coverage artifacts are uploaded from CI under `coverage-unit` and `coverage-full`.

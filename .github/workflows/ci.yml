@@ -53,6 +53,8 @@ jobs:
     needs: unit
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      CI: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
