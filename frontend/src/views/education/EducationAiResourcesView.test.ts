@@ -2,6 +2,7 @@ import { mount, flushPromises } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../../api/index.js";
+import { useAppStore } from "../../stores/app.js";
 import { useEducationAiResourcesStore } from "../../stores/educationAiResources.js";
 import EducationAiResourcesView from "./EducationAiResourcesView.vue";
 
@@ -68,7 +69,7 @@ describe("EducationAiResourcesView", () => {
     });
   }
 
-  it("shows the auto-load sync command", () => {
+  it("shows the auto-load sync command and dry-run variant", () => {
     const store = useEducationAiResourcesStore();
     store.exportTarget = "cursor";
     store.syncApiUrl = "http://127.0.0.1:3000";
@@ -77,8 +78,28 @@ describe("EducationAiResourcesView", () => {
     const wrapper = mountView();
 
     expect(wrapper.text()).toContain("Auto-load / Sync");
+    expect(wrapper.find(".sync-steps").exists()).toBe(true);
     expect(wrapper.find("[data-test='sync-command']").text()).toContain("ai-resource-sync.mjs");
     expect(wrapper.find("[data-test='sync-command']").text()).toContain("--target cursor");
+    expect(wrapper.find("[data-test='sync-command']").text()).toContain("--yes");
+    expect(wrapper.find("[data-test='sync-dry-run-command']").text()).not.toContain("--yes");
+    expect(wrapper.find("[data-test='test-sync-connection']").exists()).toBe(true);
+  });
+
+  it("shows success message from store", async () => {
+    const wrapper = mountView();
+    const store = useEducationAiResourcesStore();
+    store.successMessage = "Ressurs lagt til.";
+    await flushPromises();
+    expect(wrapper.find("[data-test='success-message']").text()).toContain("Ressurs lagt til.");
+  });
+
+  it("shows loading label while app initializes", async () => {
+    const wrapper = mountView();
+    const appStore = useAppStore();
+    appStore.isInitializing = true;
+    await flushPromises();
+    expect(wrapper.find("[data-test='ai-resources-loading']").text()).toContain("Laster AI-ressurser");
   });
 
   it("shows rejected import files", async () => {

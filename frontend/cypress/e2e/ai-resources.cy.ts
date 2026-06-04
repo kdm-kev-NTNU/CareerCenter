@@ -7,6 +7,23 @@ describe("AI resources", () => {
     cy.request("POST", "/api/auth/register", { name: userName, pin });
   });
 
+  it("returns to AI resources after login from redirect", () => {
+    cy.request("POST", "/api/auth/logout");
+    cy.clearCookies();
+    cy.visit("/education/ai");
+
+    cy.location("pathname").should("eq", "/login");
+    cy.location("search").should("contain", "redirect=");
+    cy.location("search").should("contain", "/education/ai");
+
+    cy.get(".auth-form").contains("label", "Navn").find("input").type(userName);
+    cy.get(".auth-form").contains("label", "Pinkode").find("input").type(pin, { log: false });
+    cy.get(".auth-form button.primary").click();
+
+    cy.location("pathname").should("eq", "/education/ai");
+    cy.contains("Auto-load / Sync").should("be.visible");
+  });
+
   it("imports AI resources, exports sync-ready files, and shows the CLI command", () => {
     cy.visit("/education/ai");
 

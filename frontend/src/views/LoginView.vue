@@ -1,10 +1,19 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { useAuthStore } from "../stores/auth.js";
 
 const router = useRouter();
+const route = useRoute();
 const authStore = useAuthStore();
+
+function postAuthPath() {
+  const redirect = route.query.redirect;
+  if (typeof redirect === "string" && redirect.startsWith("/") && !redirect.startsWith("//")) {
+    return redirect;
+  }
+  return "/";
+}
 
 const mode = ref<"login" | "register">("login");
 const name = ref("");
@@ -30,7 +39,7 @@ async function submit() {
       await authStore.login(name.value, pin.value);
     }
     pin.value = "";
-    await router.replace("/");
+    await router.replace(postAuthPath());
   } catch (caught) {
     authStore.setError(caught instanceof Error ? caught.message : "Innlogging feilet.");
   } finally {

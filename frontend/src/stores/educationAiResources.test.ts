@@ -139,6 +139,65 @@ describe("useEducationAiResourcesStore", () => {
     expect(store.filteredResources).toEqual([resource]);
   });
 
+  it("sets loading flags and success message on create", async () => {
+    mockedApi.aiResources.mockResolvedValue([]);
+    mockedApi.createAiResource.mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      return cursorRule;
+    });
+
+    const store = useEducationAiResourcesStore();
+    store.newResource.name = "Tailwind";
+    store.newResource.content = "# Tailwind";
+    const promise = store.addResource();
+    expect(store.isSaving).toBe(true);
+    await promise;
+    expect(store.isSaving).toBe(false);
+    expect(store.successMessage).toBe("Ressurs lagt til.");
+    expect(store.saveError).toBe("");
+  });
+
+  it("records save errors without mutating list", async () => {
+    mockedApi.aiResources.mockResolvedValue([]);
+    mockedApi.createAiResource.mockRejectedValue(new Error("Validering feilet"));
+
+    const store = useEducationAiResourcesStore();
+    store.newResource.name = "X";
+    store.newResource.content = "Y";
+    await store.addResource();
+    expect(store.saveError).toBe("Validering feilet");
+    expect(store.resources).toHaveLength(0);
+    expect(store.isSaving).toBe(false);
+  });
+
+  it("builds dry-run command without --yes", () => {
+    const store = useEducationAiResourcesStore();
+    expect(store.syncCommand).toContain("--yes");
+    expect(store.syncDryRunCommand).not.toContain("--yes");
+    expect(store.syncDryRunCommand).toContain("--target all");
+  });
+
+  it("tests sync API connection via health endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const store = useEducationAiResourcesStore();
+    store.syncApiUrl = "http://127.0.0.1:3000";
+    await store.testSyncConnection();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.objectContaining({ href: "http://127.0.0.1:3000/api/health" }),
+      expect.objectContaining({ credentials: "include" })
+    );
+    expect(store.syncConnectionStatus).toBe("ok");
+    expect(store.syncConnectionMessage).toContain("svarer");
+
+    vi.unstubAllGlobals();
+  });
+
   it("imports multiple files from a FileList", async () => {
     mockedApi.importAiResources.mockResolvedValue({
       created: [resource, cursorRule],
