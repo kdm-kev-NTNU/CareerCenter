@@ -7,7 +7,7 @@ describe("aiResourceFolderSync", () => {
 
     const root = {
       name: "CareerCenter",
-      getDirectoryHandle: vi.fn(async (name: string, options?: { create?: boolean }) => {
+      getDirectoryHandle: vi.fn(async (name: string, _options?: { create?: boolean }) => {
         if (name === ".cursor") {
           return {
             getDirectoryHandle: vi.fn(async (rules: string, rulesOptions?: { create?: boolean }) => {

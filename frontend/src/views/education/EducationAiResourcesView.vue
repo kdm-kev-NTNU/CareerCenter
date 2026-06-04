@@ -13,8 +13,7 @@ import type {
   AiResourceKind,
   AiResourceStatus,
   AiResourceSyncAction,
-  AiResourceTargetTool,
-  AiResourceWriteStrategy
+  AiResourceTargetTool
 } from "@careercenter/shared";
 import { ref } from "vue";
 import { useAppStore } from "../../stores/app.js";
@@ -67,13 +66,6 @@ const syncActionLabels: Record<AiResourceSyncAction, string> = {
   update: "Oppdatert",
   noop: "Uendret",
   conflict: "Konflikt"
-};
-
-const writeStrategyLabels: Record<AiResourceWriteStrategy, string> = {
-  replace: "Replace",
-  managed_markdown_block: "Managed Markdown",
-  json_mcp_merge: "MCP JSON merge",
-  toml_managed_block: "Managed TOML"
 };
 
 function setFrontmatter(payload: AiResourcePayload, key: "description" | "globs", value: string) {
