@@ -2,6 +2,10 @@ describe("AI resources", () => {
   const pin = "1234";
   let userName: string;
 
+  function openManualWorkbench() {
+    cy.contains("summary", "Legg til manuelt").click();
+  }
+
   beforeEach(() => {
     userName = `AIResourceE2E${Date.now()}`;
     cy.request("POST", "/api/auth/register", { name: userName, pin });
@@ -25,20 +29,19 @@ describe("AI resources", () => {
     cy.get(".auth-form button.primary").click();
 
     cy.location("pathname").should("eq", "/education/ai");
-    cy.contains("Auto-load / Sync").should("be.visible");
+    cy.contains("h2", "Skann og synk").should("be.visible");
   });
 
-  it("imports AI resources, exports sync-ready files, and shows the CLI command", () => {
+  it("imports AI resources from the manual workbench", () => {
     cy.visit("/education/ai");
 
-    cy.contains("button", "AI-ressurser").should("be.visible");
-    cy.contains("Auto-load / Sync").should("be.visible");
-    cy.get("[data-test='sync-command']")
-      .should("contain", "node scripts/ai-resource-sync.mjs")
-      .and("contain", "--target all")
-      .and("contain", "--yes");
+    cy.contains("h2", "Skann og synk").should("be.visible");
+    cy.contains("[data-test='run-scan']", "Skann prosjekt").should("be.visible");
+    cy.contains("[data-test='run-sync']", "Synk til prosjekt").should("be.visible");
 
-    cy.contains(".ai-import-panel", "Import").within(() => {
+    openManualWorkbench();
+
+    cy.contains("h3", "Import fra fil").parent().within(() => {
       cy.contains("label", "Filnavn").find("input").clear().type("AGENTS.md");
       cy.contains("label", "Innhold").find("textarea").clear().type("# Codex E2E\nUse CareerCenter resources.", {
         parseSpecialCharSequences: false
@@ -66,17 +69,15 @@ describe("AI resources", () => {
       ]
     });
 
-    cy.contains(".ai-export-panel", "Eksport").within(() => {
-      cy.contains("button", "Bygg eksport").click();
-    });
-
-    cy.contains(".export-file", "AGENTS.md").should("contain", "Managed Markdown");
-    cy.contains(".export-file", ".codex/config.toml").should("contain", "Managed TOML");
-    cy.contains(".export-file", ".cursor/mcp.json").should("contain", "MCP JSON merge");
+    cy.reload();
+    cy.contains(".ai-resource-card", "Codex project instructions").should("be.visible");
+    cy.contains(".ai-resource-card", "MCP: docs").should("be.visible");
   });
 
   it("creates, filters, edits, and deletes AI resources from the UI", () => {
     cy.visit("/education/ai");
+
+    openManualWorkbench();
 
     cy.contains("form.ai-resource-form label", "Navn").find("input").type("E2E Prompt");
     cy.contains("form.ai-resource-form label", "Type").find("select").select("prompt_snippet");
