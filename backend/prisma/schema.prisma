@@ -31,7 +31,6 @@ model User {
   graduateProgramLocations         GraduateProgramLocationOption[]
   graduateProgramRequirementTypes  GraduateProgramRequirementType[]
   graduatePrograms                   GraduateProgram[]
-  careerBoards                CareerBoard[]
 }
 
 model CoursePlan {
@@ -48,40 +47,11 @@ model CoursePlan {
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-model Company {
-  id             String           @id @default(cuid())
-  name           String           @unique
-  description    String
-  tracks         String[]
-  tier           Int
-  geography      String
-  roleTypes      String[]
-  difficulty     String
-  upside         String
-  relevanceScore Int
-  websiteUrl     String?
-  internships      Internship[]
-  graduatePrograms GraduateProgram[]
-}
-
 model CareerTrackSetting {
-  id           String           @id
+  id           String @id
   defaultLabel String
   label        String
-  sortOrder    Int              @default(0)
-  nodes        CareerMapNode[]
-}
-
-model CareerMapNode {
-  id           String           @id
-  defaultTitle String
-  title        String
-  defaultItems String[]
-  items        String[]
-  level        Int
-  trackId      String?
-  sortOrder    Int              @default(0)
-  track        CareerTrackSetting? @relation(fields: [trackId], references: [id], onDelete: SetNull)
+  sortOrder    Int    @default(0)
 }
 
 model InternshipStatusOption {
@@ -114,7 +84,6 @@ model InternshipRequirementType {
 model Internship {
   id             String                    @id @default(cuid())
   userId         String
-  companyId      String?
   companyName    String
   title          String
   description    String                    @default("")
@@ -127,7 +96,6 @@ model Internship {
   createdAt      DateTime                  @default(now())
   updatedAt      DateTime                  @updatedAt
   user           User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  company        Company?                  @relation(fields: [companyId], references: [id], onDelete: SetNull)
   status         InternshipStatusOption    @relation(fields: [statusId], references: [id])
   requirements   InternshipRequirementItem[]
 }
@@ -297,7 +265,6 @@ model GraduateProgramRequirementType {
 model GraduateProgram {
   id             String                         @id @default(cuid())
   userId         String
-  companyId      String?
   companyName    String
   title          String
   description    String                         @default("")
@@ -310,7 +277,6 @@ model GraduateProgram {
   createdAt      DateTime                       @default(now())
   updatedAt      DateTime                       @updatedAt
   user           User                           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  company        Company?                       @relation(fields: [companyId], references: [id], onDelete: SetNull)
   status         GraduateProgramStatusOption    @relation(fields: [statusId], references: [id])
   requirements   GraduateProgramRequirementItem[]
 }
@@ -324,17 +290,4 @@ model GraduateProgramRequirementItem {
   notes             String                         @default("")
   graduateProgram   GraduateProgram                @relation(fields: [graduateProgramId], references: [id], onDelete: Cascade)
   requirementType   GraduateProgramRequirementType @relation(fields: [requirementTypeId], references: [id])
-}
-
-model CareerBoard {
-  id          String   @id @default(cuid())
-  userId      String
-  name        String
-  description String   @default("")
-  viewport    Json?
-  graph       Json
-  isDefault   Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
