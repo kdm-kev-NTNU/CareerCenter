@@ -175,15 +175,6 @@ describe("CareerCenter API", () => {
     await app.close();
   });
 
-  it("searches companies by query and track", async () => {
-    const app = await createTestApp();
-
-    const companies = await app.inject({ method: "GET", url: "/api/companies?q=Statkraft&track=ENERGY_QUANT" });
-    expect(companies.json()[0].name).toBe("Statkraft");
-
-    await app.close();
-  });
-
   it("returns 404 for unknown updates and course deletes", async () => {
     const app = await createTestApp();
 
@@ -196,62 +187,6 @@ describe("CareerCenter API", () => {
 
     const missingCourseDelete = await app.inject({ method: "DELETE", url: "/api/courses/missing-course" });
     expect(missingCourseDelete.statusCode).toBe(404);
-
-    await app.close();
-  });
-
-  it("filters companies by tier and geography", async () => {
-    const app = await createTestApp();
-
-    const companies = await app.inject({ method: "GET", url: "/api/companies?tier=1&geography=Norge" });
-    expect(companies.json().every((company: any) => company.tier === 1 && company.geography.includes("Norge"))).toBe(true);
-
-    await app.close();
-  });
-
-  it("returns career map nodes and track settings", async () => {
-    const app = await createTestApp();
-
-    const map = await app.inject({ method: "GET", url: "/api/career-map" });
-    expect(map.statusCode).toBe(200);
-    expect(map.json().nodes.some((node: any) => node.id === "energy-1")).toBe(true);
-    expect(map.json().tracks.some((track: any) => track.id === "ENERGY_QUANT")).toBe(true);
-
-    await app.close();
-  });
-
-  it("updates and resets a career map node", async () => {
-    const app = await createTestApp();
-
-    const updated = await app.inject({
-      method: "PUT",
-      url: "/api/career-map/nodes/energy-1",
-      payload: { title: "Spor A nivå 1 (redigert)", items: ["Statkraft", "Equinor"] }
-    });
-    expect(updated.statusCode).toBe(200);
-    expect(updated.json().title).toBe("Spor A nivå 1 (redigert)");
-    expect(updated.json().items).toEqual(["Statkraft", "Equinor"]);
-
-    const reset = await app.inject({ method: "POST", url: "/api/career-map/nodes/energy-1/reset" });
-    expect(reset.statusCode).toBe(200);
-    expect(reset.json().title).toBe("Spor A nivå 1: Norge, 0-3 år");
-
-    await app.close();
-  });
-
-  it("returns 404 when updating or resetting an unknown career map node", async () => {
-    const app = await createTestApp();
-
-    const updated = await app.inject({
-      method: "PUT",
-      url: "/api/career-map/nodes/missing-node",
-      payload: { title: "Missing", items: ["Statkraft"] }
-    });
-    expect(updated.statusCode).toBe(404);
-
-    const reset = await app.inject({ method: "POST", url: "/api/career-map/nodes/missing-node/reset" });
-    expect(reset.statusCode).toBe(404);
-    expect(reset.json()).toEqual({ message: "Node ikke funnet." });
 
     await app.close();
   });
@@ -348,7 +283,6 @@ describe("CareerCenter API", () => {
       method: "POST",
       url: "/api/graduate-programs",
       payload: {
-        companyId: "nbim",
         companyName: "NBIM",
         title: "Technology Graduate Programme",
         description: "Investment tech graduate track",
@@ -445,48 +379,6 @@ describe("CareerCenter API", () => {
 
     const deleted = await app.inject({ method: "DELETE", url: "/api/career-tracks/UNKNOWN_TRACK" });
     expect(deleted.statusCode).toBe(404);
-
-    await app.close();
-  });
-
-  it("creates, updates, duplicates, and deletes career boards", async () => {
-    const app = await createTestApp();
-
-    const list = await app.inject({ method: "GET", url: "/api/boards" });
-    expect(list.statusCode).toBe(200);
-    expect(list.json().some((board: { isDefault: boolean }) => board.isDefault)).toBe(true);
-
-    const defaultBoard = list.json().find((board: { isDefault: boolean }) => board.isDefault);
-    const fetched = await app.inject({ method: "GET", url: `/api/boards/${defaultBoard.id}` });
-    expect(fetched.statusCode).toBe(200);
-    expect(fetched.json().graph.nodes.length).toBeGreaterThan(0);
-
-    const created = await app.inject({
-      method: "POST",
-      url: "/api/boards",
-      payload: { name: "Plan B", description: "Alternativ rute" }
-    });
-    expect(created.statusCode).toBe(200);
-
-    const updated = await app.inject({
-      method: "PUT",
-      url: `/api/boards/${created.json().id}`,
-      payload: {
-        graph: {
-          nodes: [{ id: "n1", type: "milestone", position: { x: 0, y: 0 }, data: { label: "Start" } }],
-          edges: []
-        }
-      }
-    });
-    expect(updated.statusCode).toBe(200);
-    expect(updated.json().graph.nodes).toHaveLength(1);
-
-    const duplicated = await app.inject({ method: "POST", url: `/api/boards/${created.json().id}/duplicate` });
-    expect(duplicated.statusCode).toBe(200);
-    expect(duplicated.json().name).toContain("kopi");
-
-    const deleted = await app.inject({ method: "DELETE", url: `/api/boards/${created.json().id}` });
-    expect(deleted.statusCode).toBe(204);
 
     await app.close();
   });
@@ -721,14 +613,14 @@ describe("CareerCenter API", () => {
   it("returns 400 for invalid request bodies", async () => {
     const app = await createTestApp();
 
-    const invalidCompany = await app.inject({
+    const invalidCourse = await app.inject({
       method: "POST",
-      url: "/api/companies",
-      payload: { name: "" }
+      url: "/api/courses",
+      payload: { semester: 7, courseCode: "", title: "", credits: -1, status: "planned", notes: "", trackTags: [], sortOrder: 0 }
     });
-    expect(invalidCompany.statusCode).toBe(400);
-    expect(invalidCompany.json().message).toBe("Ugyldig forespørsel.");
-    expect(invalidCompany.json().issues).toBeDefined();
+    expect(invalidCourse.statusCode).toBe(400);
+    expect(invalidCourse.json().message).toBe("Ugyldig forespørsel.");
+    expect(invalidCourse.json().issues).toBeDefined();
 
     await app.close();
   });
@@ -1049,35 +941,6 @@ describe("CareerCenter API", () => {
     await app.close();
   });
 
-  it("creates a company and finds it via search", async () => {
-    const app = await createTestApp();
-
-    const payload = {
-      name: "NyBedrift AS",
-      description: "Testbedrift for API",
-      tracks: ["ENERGY_QUANT"],
-      tier: 2,
-      geography: "Trondheim",
-      roleTypes: ["Data Scientist"],
-      difficulty: "High",
-      upside: "Very high",
-      relevanceScore: 75,
-      websiteUrl: "https://example.com"
-    };
-
-    const created = await app.inject({ method: "POST", url: "/api/companies", payload });
-    expect(created.statusCode).toBe(200);
-    expect(created.json().name).toBe("NyBedrift AS");
-
-    const search = await app.inject({ method: "GET", url: "/api/companies?q=NyBedrift" });
-    expect(search.json().some((company: { name: string }) => company.name === "NyBedrift AS")).toBe(true);
-
-    const duplicate = await app.inject({ method: "POST", url: "/api/companies", payload });
-    expect(duplicate.statusCode).toBe(409);
-
-    await app.close();
-  });
-
   describe("graduate program listings", () => {
     async function loadGraduateSettings(app: Awaited<ReturnType<typeof createTestApp>>) {
       const settings = await app.inject({ method: "GET", url: "/api/graduate-program-settings" });
@@ -1105,27 +968,6 @@ describe("CareerCenter API", () => {
       });
       expect(created.statusCode).toBe(422);
       expect(created.json().message).toBe("Ugyldig status.");
-      await app.close();
-    });
-
-    it("rejects create with invalid companyId", async () => {
-      const app = await createTestApp();
-      const settings = await loadGraduateSettings(app);
-      const created = await app.inject({
-        method: "POST",
-        url: "/api/graduate-programs",
-        payload: {
-          companyId: "missing-company",
-          companyName: "Test AS",
-          title: "Graduate",
-          statusId: settings.statuses[0].id,
-          locationIds: [],
-          trackTags: [],
-          requirements: []
-        }
-      });
-      expect(created.statusCode).toBe(422);
-      expect(created.json().message).toBe("Ugyldig bedrift.");
       await app.close();
     });
 
@@ -1373,27 +1215,6 @@ describe("CareerCenter API", () => {
       });
       expect(created.statusCode).toBe(422);
       expect(created.json().message).toBe("Ugyldig status.");
-      await app.close();
-    });
-
-    it("rejects create with invalid companyId", async () => {
-      const app = await createTestApp();
-      const settings = await loadInternshipSettings(app);
-      const created = await app.inject({
-        method: "POST",
-        url: "/api/internships",
-        payload: {
-          companyId: "missing-company",
-          companyName: "Test AS",
-          title: "Intern",
-          statusId: settings.statuses[0].id,
-          locationIds: [],
-          trackTags: [],
-          requirements: []
-        }
-      });
-      expect(created.statusCode).toBe(422);
-      expect(created.json().message).toBe("Ugyldig bedrift.");
       await app.close();
     });
 

@@ -9,7 +9,6 @@ import { registerErrorHandler } from "./middleware/errorHandler.js";
 import type { Repository } from "./repository.js";
 import { authRoutes } from "./routes/auth.js";
 import { careerMapRoutes } from "./routes/careerMap.js";
-import { companiesRoutes } from "./routes/companies.js";
 import { coursesRoutes } from "./routes/courses.js";
 import { healthRoutes } from "./routes/health.js";
 import { graduateProgramSettingsRoutes } from "./routes/graduateProgramSettings.js";
@@ -19,8 +18,6 @@ import { internshipsRoutes } from "./routes/internships.js";
 import { bachelorStorageRoutes } from "./routes/bachelorStorage.js";
 import { educationRoutes } from "./routes/education.js";
 import { competitionsRoutes } from "./routes/competitions.js";
-import { boardsRoutes } from "./routes/boards.js";
-
 const TEST_AUTH_USER_NAME = "__test__";
 const TEST_AUTH_USER_PIN = "0000";
 
@@ -91,13 +88,11 @@ export async function buildServer(options: ServerOptions) {
 
   app.register((instance) => careerMapRoutes(instance, repository));
   app.register((instance) => coursesRoutes(instance, repository));
-  app.register((instance) => companiesRoutes(instance, repository));
   app.register((instance) => internshipsRoutes(instance, repository));
   app.register((instance) => internshipSettingsRoutes(instance, repository));
   app.register((instance) => graduateProgramsRoutes(instance, repository));
   app.register((instance) => graduateProgramSettingsRoutes(instance, repository));
   app.register((instance) => competitionsRoutes(instance, repository));
-  app.register((instance) => boardsRoutes(instance, repository));
   app.register((instance) => educationRoutes(instance, repository));
   app.register((instance) => bachelorStorageRoutes(instance, repository));
 

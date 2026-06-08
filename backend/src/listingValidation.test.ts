@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { InvalidReferenceError } from "./repository.js";
 import { validateListingInput } from "./listingValidation.js";
 
@@ -43,20 +43,4 @@ describe("validateListingInput", () => {
     ).rejects.toThrow(new InvalidReferenceError("Ugyldig kravtype."));
   });
 
-  it("rejects invalid companyId when companyExists returns false", async () => {
-    await expect(
-      validateListingInput(
-        { companyId: "missing-co", statusId: "status-1", locationIds: [], requirements: [] },
-        settings,
-        { companyExists: vi.fn().mockResolvedValue(false) }
-      )
-    ).rejects.toThrow(new InvalidReferenceError("Ugyldig bedrift."));
-  });
-
-  it("accepts valid companyId when companyExists returns true", async () => {
-    const input = { companyId: "statkraft", statusId: "status-1", locationIds: [], requirements: [] };
-    await expect(
-      validateListingInput(input, settings, { companyExists: vi.fn().mockResolvedValue(true) })
-    ).resolves.toEqual(input);
-  });
 });

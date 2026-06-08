@@ -54,29 +54,8 @@ export const courseSchema = z.object({
   sortOrder: z.number().int().default(0)
 });
 
-export const mapNodeSchema = z.object({
-  title: z.string().min(1),
-  items: z.array(z.string().min(1))
-});
-
 export const trackSchema = z.object({
   label: z.string().min(1)
-});
-
-const companyDifficulties = ["Medium", "Medium/high", "High", "Very high"] as const;
-const companyUpsides = ["High", "Very high"] as const;
-
-export const companySchema = z.object({
-  name: z.string().min(1),
-  description: z.string().min(1),
-  tracks: z.array(z.enum(careerTracks)).min(1),
-  tier: z.union([z.literal(1), z.literal(2), z.literal(3)]),
-  geography: z.string().min(1),
-  roleTypes: z.array(z.string().min(1)).min(1),
-  difficulty: z.enum(companyDifficulties),
-  upside: z.enum(companyUpsides),
-  relevanceScore: z.number().int().min(0).max(100),
-  websiteUrl: optionalUrlField
 });
 
 export const competitionSchema = z.object({
@@ -205,84 +184,7 @@ export const graduateProgramRequirementItemSchema = z.object({
   notes: z.string().default("")
 });
 
-const boardPositionSchema = z.object({
-  x: z.number(),
-  y: z.number()
-});
-
-const boardViewportSchema = z.object({
-  x: z.number(),
-  y: z.number(),
-  zoom: z.number()
-});
-
-const boardTrackField = z.enum(careerTracks).optional();
-
-const boardCompanyDataSchema = z.object({
-  companyId: z.string().min(1),
-  note: z.string().optional(),
-  track: boardTrackField
-});
-
-const boardMilestoneDataSchema = z.object({
-  label: z.string().min(1),
-  track: boardTrackField
-});
-
-const boardNoteDataSchema = z.object({
-  text: z.string().min(1)
-});
-
-const boardNodeSchema = z.discriminatedUnion("type", [
-  z.object({
-    id: z.string().min(1),
-    type: z.literal("company"),
-    position: boardPositionSchema,
-    data: boardCompanyDataSchema
-  }),
-  z.object({
-    id: z.string().min(1),
-    type: z.literal("milestone"),
-    position: boardPositionSchema,
-    data: boardMilestoneDataSchema
-  }),
-  z.object({
-    id: z.string().min(1),
-    type: z.literal("note"),
-    position: boardPositionSchema,
-    data: boardNoteDataSchema
-  })
-]);
-
-const boardEdgeSchema = z.object({
-  id: z.string().min(1),
-  source: z.string().min(1),
-  target: z.string().min(1),
-  label: z.string().optional()
-});
-
-export const boardGraphSchema = z.object({
-  nodes: z.array(boardNodeSchema),
-  edges: z.array(boardEdgeSchema)
-});
-
-export const boardCreateSchema = z.object({
-  name: z.string().min(1),
-  description: z.string().default(""),
-  graph: boardGraphSchema.optional(),
-  isDefault: z.boolean().optional()
-});
-
-export const boardUpdateSchema = z.object({
-  name: z.string().min(1).optional(),
-  description: z.string().optional(),
-  viewport: boardViewportSchema.nullable().optional(),
-  graph: boardGraphSchema.optional(),
-  isDefault: z.boolean().optional()
-});
-
 export const internshipSchema = z.object({
-  companyId: z.union([z.string().min(1), z.null()]).optional(),
   companyName: z.string().min(1),
   title: z.string().min(1),
   description: z.string().default(""),
@@ -296,7 +198,6 @@ export const internshipSchema = z.object({
 });
 
 export const graduateProgramSchema = z.object({
-  companyId: z.union([z.string().min(1), z.null()]).optional(),
   companyName: z.string().min(1),
   title: z.string().min(1),
   description: z.string().default(""),

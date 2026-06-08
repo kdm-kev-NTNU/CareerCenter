@@ -5,32 +5,21 @@ import type {
   BachelorFolder,
   BachelorFolderTreeNode,
   BachelorKnowledge,
-  BoardGraph,
-  BoardViewport,
-  CareerBoard,
-  CareerBoardSummary,
-  CareerMapNode,
   CareerTrack,
   CareerTrackSetting,
-  Company,
   CompetitionEntry,
   CoursePlan,
   EducationBook,
   LearningPlatform,
   SelfStudyCourse
 } from "@careercenter/shared";
-import { CompanyDuplicateError, InvalidReferenceError } from "./repository.js";
+import { InvalidReferenceError } from "./repository.js";
 import type {
   BachelorFileCreateInput,
   BachelorFileUpdateInput,
   BachelorFolderInput,
   BachelorKnowledgeInput,
-  BoardCreateInput,
-  BoardUpdateInput,
-  CareerMapNodeInput,
   CareerTrackInput,
-  CompanyInput,
-  CompanyQuery,
   CompetitionInput,
   CourseInput,
   EducationBookInput,
@@ -54,31 +43,6 @@ type CourseRow = {
   status: string;
   notes: string;
   trackTags: string[];
-  sortOrder: number;
-};
-
-type CompanyRow = {
-  id: string;
-  name: string;
-  description: string;
-  tracks: string[];
-  tier: number;
-  geography: string;
-  roleTypes: string[];
-  difficulty: string;
-  upside: string;
-  relevanceScore: number;
-  websiteUrl: string | null;
-};
-
-type MapNodeRow = {
-  id: string;
-  defaultTitle: string;
-  title: string;
-  defaultItems: string[];
-  items: string[];
-  level: number;
-  trackId: CareerTrack | null;
   sortOrder: number;
 };
 
@@ -271,26 +235,6 @@ export class PrismaRepository implements Repository {
     };
   }
 
-  async getCareerMap(): Promise<{ nodes: CareerMapNode[]; tracks: CareerTrackSetting[] }> {
-    const [nodes, tracks] = await Promise.all([
-      this.prisma.careerMapNode.findMany({ orderBy: [{ level: "asc" }, { sortOrder: "asc" }] }) as Promise<MapNodeRow[]>,
-      this.prisma.careerTrackSetting.findMany({ orderBy: { sortOrder: "asc" } }) as Promise<TrackRow[]>
-    ]);
-    return { nodes: nodes.map((node) => this.mapNode(node)), tracks: tracks.map((track) => this.mapTrack(track)) };
-  }
-
-  async updateCareerMapNode(id: string, input: CareerMapNodeInput): Promise<CareerMapNode | null> {
-    const existing = await this.prisma.careerMapNode.findUnique({ where: { id } });
-    if (!existing) return null;
-    return this.mapNode((await this.prisma.careerMapNode.update({ where: { id }, data: { title: input.title, items: input.items } })) as MapNodeRow);
-  }
-
-  async resetCareerMapNode(id: string): Promise<CareerMapNode | null> {
-    const existing = await this.prisma.careerMapNode.findUnique({ where: { id } });
-    if (!existing) return null;
-    return this.mapNode((await this.prisma.careerMapNode.update({ where: { id }, data: { title: existing.defaultTitle, items: existing.defaultItems } })) as MapNodeRow);
-  }
-
   async listCareerTracks(): Promise<CareerTrackSetting[]> {
     const rows = (await this.prisma.careerTrackSetting.findMany({ orderBy: { sortOrder: "asc" } })) as TrackRow[];
     return rows.map((row) => this.mapTrack(row));
@@ -333,42 +277,6 @@ export class PrismaRepository implements Repository {
   async deleteCourse(userId: string, id: string): Promise<boolean> {
     const result = await this.prisma.coursePlan.deleteMany({ where: { id, userId } });
     return result.count > 0;
-  }
-
-  async listCompanies(query: CompanyQuery): Promise<Company[]> {
-    const rows = (await this.prisma.company.findMany({ orderBy: { relevanceScore: "desc" } })) as CompanyRow[];
-    const search = query.q?.toLowerCase().trim();
-    return rows
-      .map((row) => this.mapCompany(row))
-      .filter((company) => !search || [company.name, company.description, company.geography, ...company.roleTypes].join(" ").toLowerCase().includes(search))
-      .filter((company) => !query.track || company.tracks.includes(query.track))
-      .filter((company) => !query.tier || company.tier === query.tier)
-      .filter((company) => !query.geography || company.geography.toLowerCase().includes(query.geography.toLowerCase()));
-  }
-
-  async createCompany(input: CompanyInput): Promise<Company> {
-    try {
-      const row = (await this.prisma.company.create({
-        data: {
-          name: input.name,
-          description: input.description,
-          tracks: input.tracks,
-          tier: input.tier,
-          geography: input.geography,
-          roleTypes: input.roleTypes,
-          difficulty: input.difficulty,
-          upside: input.upside,
-          relevanceScore: input.relevanceScore,
-          websiteUrl: input.websiteUrl ?? null
-        }
-      })) as CompanyRow;
-      return this.mapCompany(row);
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-        throw new CompanyDuplicateError();
-      }
-      throw error;
-    }
   }
 
   async listCompetitions(userId: string): Promise<CompetitionEntry[]> {
@@ -715,148 +623,8 @@ export class PrismaRepository implements Repository {
     return attach(byParent.get(null) ?? []);
   }
 
-  async listBoards(userId: string): Promise<CareerBoardSummary[]> {
-    const rows = await this.prisma.careerBoard.findMany({
-      where: { userId },
-      orderBy: [{ isDefault: "desc" }, { updatedAt: "desc" }]
-    });
-    return rows.map((row) => this.mapBoardSummary(row));
-  }
-
-  async getBoard(userId: string, id: string): Promise<CareerBoard | null> {
-    const row = await this.prisma.careerBoard.findFirst({ where: { id, userId } });
-    return row ? this.mapBoard(row) : null;
-  }
-
-  async createBoard(userId: string, input: BoardCreateInput): Promise<CareerBoard> {
-    if (input.isDefault) {
-      await this.prisma.careerBoard.updateMany({ where: { userId }, data: { isDefault: false } });
-    }
-    const row = await this.prisma.careerBoard.create({
-      data: {
-        userId,
-        name: input.name,
-        description: input.description,
-        graph: (input.graph ?? { nodes: [], edges: [] }) as object,
-        isDefault: input.isDefault ?? false
-      }
-    });
-    return this.mapBoard(row);
-  }
-
-  async updateBoard(userId: string, id: string, input: BoardUpdateInput): Promise<CareerBoard | null> {
-    const existing = await this.prisma.careerBoard.findFirst({ where: { id, userId } });
-    if (!existing) return null;
-    if (input.isDefault) {
-      await this.prisma.careerBoard.updateMany({ where: { userId }, data: { isDefault: false } });
-    }
-    const row = await this.prisma.careerBoard.update({
-      where: { id },
-      data: {
-        name: input.name,
-        description: input.description,
-        viewport:
-          input.viewport === undefined
-            ? undefined
-            : input.viewport === null
-              ? Prisma.DbNull
-              : (input.viewport as object),
-        graph: input.graph === undefined ? undefined : (input.graph as object),
-        isDefault: input.isDefault
-      }
-    });
-    return this.mapBoard(row);
-  }
-
-  async deleteBoard(userId: string, id: string): Promise<boolean> {
-    const result = await this.prisma.careerBoard.deleteMany({ where: { id, userId } });
-    return result.count > 0;
-  }
-
-  async duplicateBoard(userId: string, id: string): Promise<CareerBoard | null> {
-    const existing = await this.prisma.careerBoard.findFirst({ where: { id, userId } });
-    if (!existing) return null;
-    const row = await this.prisma.careerBoard.create({
-      data: {
-        userId,
-        name: `${existing.name} kopi`,
-        description: existing.description,
-        viewport: existing.viewport as object,
-        graph: existing.graph as object,
-        isDefault: false
-      }
-    });
-    return this.mapBoard(row);
-  }
-
-  private mapBoardSummary(row: {
-    id: string;
-    name: string;
-    description: string;
-    isDefault: boolean;
-    createdAt: Date;
-    updatedAt: Date;
-  }): CareerBoardSummary {
-    return {
-      id: row.id,
-      name: row.name,
-      description: row.description,
-      isDefault: row.isDefault,
-      createdAt: row.createdAt.toISOString(),
-      updatedAt: row.updatedAt.toISOString()
-    };
-  }
-
-  private mapBoard(row: {
-    id: string;
-    name: string;
-    description: string;
-    viewport: unknown;
-    graph: unknown;
-    isDefault: boolean;
-    createdAt: Date;
-    updatedAt: Date;
-  }): CareerBoard {
-    return {
-      id: row.id,
-      name: row.name,
-      description: row.description,
-      viewport: (row.viewport as BoardViewport | null) ?? null,
-      graph: row.graph as BoardGraph,
-      isDefault: row.isDefault,
-      createdAt: row.createdAt.toISOString(),
-      updatedAt: row.updatedAt.toISOString()
-    };
-  }
-
   private mapCourse(row: CourseRow): CoursePlan {
     return { ...row, semester: row.semester as CoursePlan["semester"], status: row.status as CoursePlan["status"], trackTags: row.trackTags as CoursePlan["trackTags"] };
-  }
-
-  private mapCompany(row: CompanyRow): Company {
-    return {
-      id: row.id,
-      name: row.name,
-      description: row.description,
-      tracks: row.tracks as Company["tracks"],
-      tier: row.tier as Company["tier"],
-      geography: row.geography,
-      roleTypes: row.roleTypes,
-      difficulty: row.difficulty as Company["difficulty"],
-      upside: row.upside as Company["upside"],
-      relevanceScore: row.relevanceScore,
-      websiteUrl: row.websiteUrl ?? undefined
-    };
-  }
-
-  private mapNode(row: MapNodeRow): CareerMapNode {
-    return {
-      id: row.id,
-      title: row.title,
-      level: row.level as CareerMapNode["level"],
-      track: row.trackId ?? undefined,
-      items: [...row.items]
-    };
   }
 
   private mapTrack(row: TrackRow): CareerTrackSetting {
