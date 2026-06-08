@@ -1,15 +1,11 @@
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import type { CareerTrack, Internship } from "@careercenter/shared";
-import { api, type CompanyPayload, type InternshipPayload } from "../api/index.js";
-import { useCompaniesStore } from "./companies.js";
+import { api, type InternshipPayload } from "../api/index.js";
 import { useInternshipSettingsStore } from "./internshipSettings.js";
-
-const CUSTOM_COMPANY = "__custom__";
 
 function emptyForm(settingsStore: ReturnType<typeof useInternshipSettingsStore>): InternshipPayload {
   return {
-    companyId: null,
     companyName: "",
     title: "",
     description: "",
@@ -38,9 +34,7 @@ export const useInternshipsStore = defineStore("internships", () => {
   const isSubmitting = ref(false);
   const isLoading = ref(false);
   const loadError = ref("");
-  const companyPicker = ref("");
   const form = ref<InternshipPayload>({
-    companyId: null,
     companyName: "",
     title: "",
     description: "",
@@ -85,16 +79,13 @@ export const useInternshipsStore = defineStore("internships", () => {
 
   function resetForm() {
     editingId.value = null;
-    companyPicker.value = "";
     const settingsStore = useInternshipSettingsStore();
     form.value = emptyForm(settingsStore);
   }
 
   function startEdit(internship: Internship) {
     editingId.value = internship.id;
-    companyPicker.value = internship.companyId ?? CUSTOM_COMPANY;
     form.value = {
-      companyId: internship.companyId ?? null,
       companyName: internship.companyName,
       title: internship.title,
       description: internship.description,
@@ -111,18 +102,6 @@ export const useInternshipsStore = defineStore("internships", () => {
         notes: item.notes
       }))
     };
-  }
-
-  function applyCompanySelection(companies: Array<{ id: string; name: string }>) {
-    if (companyPicker.value === CUSTOM_COMPANY) {
-      form.value.companyId = null;
-      return;
-    }
-    const company = companies.find((item) => item.id === companyPicker.value);
-    if (company) {
-      form.value.companyId = company.id;
-      form.value.companyName = company.name;
-    }
   }
 
   function toggleLocation(id: string) {
@@ -145,9 +124,8 @@ export const useInternshipsStore = defineStore("internships", () => {
     return form.value.requirements.find((item) => item.requirementTypeId === typeId);
   }
 
-  async function saveInternship(companies: Array<{ id: string; name: string }>) {
+  async function saveInternship() {
     if (isSubmitting.value) return;
-    applyCompanySelection(companies);
     if (!form.value.companyName.trim() || !form.value.title.trim() || !form.value.statusId) {
       throw new Error("Bedriftsnavn, stillingstittel og status er obligatorisk.");
     }
@@ -180,52 +158,6 @@ export const useInternshipsStore = defineStore("internships", () => {
     if (editingId.value === id) resetForm();
   }
 
-  function internshipToPayload(internship: Internship): InternshipPayload {
-    return {
-      companyId: internship.companyId ?? null,
-      companyName: internship.companyName,
-      title: internship.title,
-      description: internship.description,
-      applicationUrl: internship.applicationUrl,
-      notes: internship.notes,
-      deadline: internship.deadline?.slice(0, 10) ?? null,
-      statusId: internship.statusId,
-      locationIds: [...internship.locationIds],
-      trackTags: [...internship.trackTags],
-      requirements: internship.requirements.map((item) => ({
-        requirementTypeId: item.requirementTypeId,
-        isRequired: item.isRequired,
-        isDone: item.isDone,
-        notes: item.notes
-      }))
-    };
-  }
-
-  async function promoteToCompany(internshipId: string, companyPayload: CompanyPayload) {
-    const internship = internships.value.find((item) => item.id === internshipId);
-    if (!internship || internship.companyId) {
-      throw new Error("Oppføringen er allerede koblet til Bedriftsbasen.");
-    }
-
-    const created = await api.createCompany({
-      ...companyPayload,
-      name: companyPayload.name.trim(),
-      description: companyPayload.description.trim(),
-      geography: companyPayload.geography.trim(),
-      websiteUrl: companyPayload.websiteUrl?.trim() || undefined
-    });
-
-    const updated = await api.updateInternship(internshipId, {
-      ...internshipToPayload(internship),
-      companyId: created.id,
-      companyName: created.name
-    });
-
-    internships.value = internships.value.map((item) => (item.id === updated.id ? updated : item));
-    await useCompaniesStore().loadCompanies();
-    return updated;
-  }
-
   function progressLabel(internship: Internship) {
     const required = internship.requirements.filter((item) => item.isRequired);
     const done = required.filter((item) => item.isDone).length;
@@ -242,21 +174,17 @@ export const useInternshipsStore = defineStore("internships", () => {
     isSubmitting,
     isLoading,
     loadError,
-    companyPicker,
     form,
     isEditing,
-    CUSTOM_COMPANY,
     syncFormFromSettings,
     loadInternships,
     resetForm,
     startEdit,
-    applyCompanySelection,
     toggleLocation,
     toggleTrack,
     requirementFor,
     saveInternship,
     removeInternship,
-    promoteToCompany,
     progressLabel
   };
 });

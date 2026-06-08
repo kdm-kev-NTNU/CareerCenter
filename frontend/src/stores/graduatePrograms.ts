@@ -1,15 +1,11 @@
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import type { CareerTrack, GraduateProgram } from "@careercenter/shared";
-import { api, type CompanyPayload, type GraduateProgramPayload } from "../api/index.js";
-import { useCompaniesStore } from "./companies.js";
+import { api, type GraduateProgramPayload } from "../api/index.js";
 import { useGraduateProgramSettingsStore } from "./graduateProgramSettings.js";
-
-const CUSTOM_COMPANY = "__custom__";
 
 function emptyForm(settingsStore: ReturnType<typeof useGraduateProgramSettingsStore>): GraduateProgramPayload {
   return {
-    companyId: null,
     companyName: "",
     title: "",
     description: "",
@@ -38,9 +34,7 @@ export const useGraduateProgramsStore = defineStore("graduatePrograms", () => {
   const isSubmitting = ref(false);
   const isLoading = ref(false);
   const loadError = ref("");
-  const companyPicker = ref("");
   const form = ref<GraduateProgramPayload>({
-    companyId: null,
     companyName: "",
     title: "",
     description: "",
@@ -86,16 +80,13 @@ export const useGraduateProgramsStore = defineStore("graduatePrograms", () => {
 
   function resetForm() {
     editingId.value = null;
-    companyPicker.value = "";
     const settingsStore = useGraduateProgramSettingsStore();
     form.value = emptyForm(settingsStore);
   }
 
   function startEdit(program: GraduateProgram) {
     editingId.value = program.id;
-    companyPicker.value = program.companyId ?? CUSTOM_COMPANY;
     form.value = {
-      companyId: program.companyId ?? null,
       companyName: program.companyName,
       title: program.title,
       description: program.description,
@@ -112,18 +103,6 @@ export const useGraduateProgramsStore = defineStore("graduatePrograms", () => {
         notes: item.notes
       }))
     };
-  }
-
-  function applyCompanySelection(companies: Array<{ id: string; name: string }>) {
-    if (companyPicker.value === CUSTOM_COMPANY) {
-      form.value.companyId = null;
-      return;
-    }
-    const company = companies.find((item) => item.id === companyPicker.value);
-    if (company) {
-      form.value.companyId = company.id;
-      form.value.companyName = company.name;
-    }
   }
 
   function toggleLocation(id: string) {
@@ -146,9 +125,8 @@ export const useGraduateProgramsStore = defineStore("graduatePrograms", () => {
     return form.value.requirements.find((item) => item.requirementTypeId === typeId);
   }
 
-  async function saveGraduateProgram(companies: Array<{ id: string; name: string }>) {
+  async function saveGraduateProgram() {
     if (isSubmitting.value) return;
-    applyCompanySelection(companies);
     if (!form.value.companyName.trim() || !form.value.title.trim() || !form.value.statusId) {
       throw new Error("Bedriftsnavn, programnavn og status er obligatorisk.");
     }
@@ -181,52 +159,6 @@ export const useGraduateProgramsStore = defineStore("graduatePrograms", () => {
     if (editingId.value === id) resetForm();
   }
 
-  function programToPayload(program: GraduateProgram): GraduateProgramPayload {
-    return {
-      companyId: program.companyId ?? null,
-      companyName: program.companyName,
-      title: program.title,
-      description: program.description,
-      applicationUrl: program.applicationUrl,
-      notes: program.notes,
-      deadline: program.deadline?.slice(0, 10) ?? null,
-      statusId: program.statusId,
-      locationIds: [...program.locationIds],
-      trackTags: [...program.trackTags],
-      requirements: program.requirements.map((item) => ({
-        requirementTypeId: item.requirementTypeId,
-        isRequired: item.isRequired,
-        isDone: item.isDone,
-        notes: item.notes
-      }))
-    };
-  }
-
-  async function promoteToCompany(programId: string, companyPayload: CompanyPayload) {
-    const program = graduatePrograms.value.find((item) => item.id === programId);
-    if (!program || program.companyId) {
-      throw new Error("Oppføringen er allerede koblet til Bedriftsbasen.");
-    }
-
-    const created = await api.createCompany({
-      ...companyPayload,
-      name: companyPayload.name.trim(),
-      description: companyPayload.description.trim(),
-      geography: companyPayload.geography.trim(),
-      websiteUrl: companyPayload.websiteUrl?.trim() || undefined
-    });
-
-    const updated = await api.updateGraduateProgram(programId, {
-      ...programToPayload(program),
-      companyId: created.id,
-      companyName: created.name
-    });
-
-    graduatePrograms.value = graduatePrograms.value.map((item) => (item.id === updated.id ? updated : item));
-    await useCompaniesStore().loadCompanies();
-    return updated;
-  }
-
   function progressLabel(program: GraduateProgram) {
     const required = program.requirements.filter((item) => item.isRequired);
     const done = required.filter((item) => item.isDone).length;
@@ -243,21 +175,17 @@ export const useGraduateProgramsStore = defineStore("graduatePrograms", () => {
     isSubmitting,
     isLoading,
     loadError,
-    companyPicker,
     form,
     isEditing,
-    CUSTOM_COMPANY,
     syncFormFromSettings,
     loadGraduatePrograms,
     resetForm,
     startEdit,
-    applyCompanySelection,
     toggleLocation,
     toggleTrack,
     requirementFor,
     saveGraduateProgram,
     removeGraduateProgram,
-    promoteToCompany,
     progressLabel
   };
 });

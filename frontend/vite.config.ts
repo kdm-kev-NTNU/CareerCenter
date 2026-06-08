@@ -38,8 +38,7 @@ export default defineConfig({
     globals: true,
     exclude: [
       "cypress/**",
-      "playwright.config.ts",
-      "src/components/board/CareerBoardCanvas.spec.ts"
+      "playwright.config.ts"
     ],
     coverage: {
       provider: "v8",

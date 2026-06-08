@@ -3,8 +3,6 @@ import { createRouter, createWebHistory } from "vue-router";
 import { useAppStore } from "../stores/app.js";
 import EducationLayout from "../components/education/EducationLayout.vue";
 import AppShell from "../components/layout/AppShell.vue";
-import CareerBoardView from "../views/CareerBoardView.vue";
-import CompaniesView from "../views/CompaniesView.vue";
 import DashboardView from "../views/DashboardView.vue";
 import EducationAiResourcesView from "../views/education/EducationAiResourcesView.vue";
 import EducationBachelorView from "../views/education/EducationBachelorView.vue";
@@ -44,18 +42,6 @@ const router = createRouter({
           name: "master",
           component: MasterPlanView,
           meta: { title: "Master Plan" }
-        },
-        {
-          path: "map",
-          name: "map",
-          component: CareerBoardView,
-          meta: { title: "Karriereboard" }
-        },
-        {
-          path: "companies",
-          name: "companies",
-          component: CompaniesView,
-          meta: { title: "Bedriftsbase" }
         },
         {
           path: "internships",
