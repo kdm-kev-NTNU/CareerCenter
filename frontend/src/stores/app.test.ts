@@ -6,7 +6,6 @@ import { useAppStore } from "./app.js";
 vi.mock("../api/index.js", () => ({
   api: {
     tracks: vi.fn(),
-    companies: vi.fn(),
     courses: vi.fn(),
     competitions: vi.fn(),
     settings: vi.fn(),
@@ -19,8 +18,7 @@ vi.mock("../api/index.js", () => ({
     aiResources: vi.fn(),
     bachelorKnowledge: vi.fn(),
     bachelorFolderTree: vi.fn(),
-    bachelorFiles: vi.fn(),
-    boards: vi.fn()
+    bachelorFiles: vi.fn()
   }
 }));
 
@@ -31,7 +29,6 @@ describe("useAppStore", () => {
     setActivePinia(createPinia());
     vi.clearAllMocks();
     mockedApi.tracks.mockResolvedValue([]);
-    mockedApi.companies.mockResolvedValue([]);
     mockedApi.courses.mockResolvedValue([]);
     mockedApi.competitions.mockResolvedValue([]);
     mockedApi.settings.mockResolvedValue({ statuses: [], locations: [], requirementTypes: [] });
@@ -45,7 +42,6 @@ describe("useAppStore", () => {
     mockedApi.bachelorKnowledge.mockResolvedValue([]);
     mockedApi.bachelorFolderTree.mockResolvedValue([]);
     mockedApi.bachelorFiles.mockResolvedValue([]);
-    mockedApi.boards.mockResolvedValue([]);
   });
 
   it("initialize loads app data and marks initialized", async () => {

@@ -63,7 +63,7 @@ describe("useGraduateProgramsStore", () => {
   it("throws when saving with missing required fields", async () => {
     const store = useGraduateProgramsStore();
     store.resetForm();
-    await expect(store.saveGraduateProgram([])).rejects.toThrow("Bedriftsnavn, programnavn og status er obligatorisk.");
+    await expect(store.saveGraduateProgram()).rejects.toThrow("Bedriftsnavn, programnavn og status er obligatorisk.");
     expect(mockedApi.createGraduateProgram).not.toHaveBeenCalled();
   });
 
@@ -110,7 +110,7 @@ describe("useGraduateProgramsStore", () => {
     store.resetForm();
     store.form.companyName = "DNB";
     store.form.title = "Graduate";
-    await store.saveGraduateProgram([]);
+    await store.saveGraduateProgram();
     expect(mockedApi.createGraduateProgram).toHaveBeenCalledTimes(1);
     expect(store.graduatePrograms[0]?.id).toBe("gp-new");
     expect(store.isSubmitting).toBe(false);
