@@ -220,97 +220,6 @@ export interface CoursePlan {
   sortOrder: number;
 }
 
-export interface Company {
-  id: string;
-  name: string;
-  description: string;
-  tracks: CareerTrack[];
-  tier: 1 | 2 | 3;
-  geography: string;
-  roleTypes: string[];
-  difficulty: "Medium" | "Medium/high" | "High" | "Very high";
-  upside: "High" | "Very high";
-  relevanceScore: number;
-  websiteUrl?: string;
-}
-
-export interface CareerMapNode {
-  id: string;
-  title: string;
-  level: 0 | 1 | 2 | 3;
-  track?: CareerTrack;
-  items: string[];
-}
-
-export type BoardNodeType = "company" | "milestone" | "note";
-
-export interface BoardViewport {
-  x: number;
-  y: number;
-  zoom: number;
-}
-
-export interface BoardPosition {
-  x: number;
-  y: number;
-}
-
-export interface BoardCompanyNodeData {
-  companyId: string;
-  note?: string;
-  track?: CareerTrack;
-}
-
-export interface BoardMilestoneNodeData {
-  label: string;
-  track?: CareerTrack;
-}
-
-export interface BoardNoteNodeData {
-  text: string;
-}
-
-export type BoardNodeData = BoardCompanyNodeData | BoardMilestoneNodeData | BoardNoteNodeData;
-
-export interface BoardGraphNode {
-  id: string;
-  type: BoardNodeType;
-  position: BoardPosition;
-  data: BoardNodeData;
-}
-
-export interface BoardGraphEdge {
-  id: string;
-  source: string;
-  target: string;
-  label?: string;
-}
-
-export interface BoardGraph {
-  nodes: BoardGraphNode[];
-  edges: BoardGraphEdge[];
-}
-
-export interface CareerBoard {
-  id: string;
-  name: string;
-  description: string;
-  viewport: BoardViewport | null;
-  graph: BoardGraph;
-  isDefault: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface CareerBoardSummary {
-  id: string;
-  name: string;
-  description: string;
-  isDefault: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
 export function assertSemester(value: number): 7 | 8 | 9 | 10 {
   if ([7, 8, 9, 10].includes(value)) {
     return value as 7 | 8 | 9 | 10;
@@ -417,7 +326,6 @@ export interface InternshipRequirementItem {
 
 export interface Internship {
   id: string;
-  companyId?: string;
   companyName: string;
   title: string;
   description: string;
@@ -471,7 +379,6 @@ export interface GraduateProgramRequirementItem {
 
 export interface GraduateProgram {
   id: string;
-  companyId?: string;
   companyName: string;
   title: string;
   description: string;
