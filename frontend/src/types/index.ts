@@ -23,26 +23,8 @@ export interface CoursePayload {
   sortOrder: number;
 }
 
-export interface MapNodePayload {
-  title: string;
-  items: string[];
-}
-
 export interface TrackPayload {
   label: string;
-}
-
-export interface CompanyPayload {
-  name: string;
-  description: string;
-  tracks: CareerTrack[];
-  tier: 1 | 2 | 3;
-  geography: string;
-  roleTypes: string[];
-  difficulty: "Medium" | "Medium/high" | "High" | "Very high";
-  upside: "High" | "Very high";
-  relevanceScore: number;
-  websiteUrl?: string;
 }
 
 export interface CompetitionPayload {
@@ -142,7 +124,6 @@ export interface InternshipRequirementItemPayload {
 }
 
 export interface InternshipPayload {
-  companyId?: string | null;
   companyName: string;
   title: string;
   description: string;
@@ -163,7 +144,6 @@ export interface GraduateProgramRequirementItemPayload {
 }
 
 export interface GraduateProgramPayload {
-  companyId?: string | null;
   companyName: string;
   title: string;
   description: string;

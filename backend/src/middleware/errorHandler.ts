@@ -4,7 +4,6 @@ import { ZodError } from "zod";
 import { env } from "../config/env.js";
 import {
   CatalogInUseError,
-  CompanyDuplicateError,
   InvalidReferenceError
 } from "../repository.js";
 
@@ -28,10 +27,6 @@ export function registerErrorHandler(app: FastifyInstance) {
     }
 
     if (error instanceof CatalogInUseError) {
-      return reply.code(409).send({ message: error.message });
-    }
-
-    if (error instanceof CompanyDuplicateError) {
       return reply.code(409).send({ message: error.message });
     }
 

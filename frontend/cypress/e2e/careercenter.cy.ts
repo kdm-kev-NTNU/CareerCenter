@@ -1,66 +1,4 @@
 describe("CareerCenter", () => {
-  it("promotes a free-text internship company to Bedriftsbase", () => {
-    const companyName = `E2EPromote ${Date.now()}`;
-
-    cy.visit("/internships");
-    cy.contains("button", "+ Legg til").click();
-    cy.get('[role="dialog"]').contains("label", "Bedrift").find("select").select("Annet (fritekst)");
-    cy.get('[role="dialog"]').contains("label", "Bedriftsnavn").find("input").type(companyName);
-    cy.get('[role="dialog"]').contains("label", "Stilling / rolle").find("input").type("Summer Analyst");
-    cy.get('[role="dialog"]').contains("button", "Legg til").click();
-
-    cy.contains(".listing-row", companyName).find('button[aria-label="Legg til i Bedriftsbase"]').click();
-    cy.get(".modal-body textarea[placeholder*='bedriften']").type("Promotert fra internship");
-    cy.get(".modal-body input[placeholder='Oslo / Norge']").type("Oslo");
-    cy.get(".modal-body input[placeholder='Data Scientist']").type("Analyst");
-    cy.get(".role-type-input button").click();
-    cy.contains(".modal-footer button", "Legg til i Bedriftsbase").click();
-
-    cy.contains(".listing-row", companyName).find('button[aria-label="Legg til i Bedriftsbase"]').should("not.exist");
-    cy.contains(".listing-row", companyName).find('[aria-label="I Bedriftsbasen"]').should("be.visible");
-
-    cy.visit("/companies");
-    cy.get("input[placeholder*='selskap']").clear().type(companyName);
-    cy.contains(".company-card", companyName).should("be.visible");
-  });
-
-  it("loads the career board and shows company nodes", () => {
-    cy.visit("/");
-
-    cy.contains("button", "Karriereboard").click();
-    cy.get(".board-shell").should("be.visible");
-    cy.get(".vue-flow").should("exist");
-    cy.contains(".board-palette", "Bedrifter").should("be.visible");
-    cy.contains(".board-node", "Statkraft").should("be.visible");
-  });
-
-  it("adds a note on the career board via pane click", () => {
-    const noteText = "Vurderer Statkraft som første steg";
-
-    cy.visit("/");
-
-    cy.contains("button", "Karriereboard").click();
-    cy.get(".vue-flow__pane").click(120, 120, { force: true });
-    cy.contains("button", "Lag notat her").click();
-    cy.get(".board-node-note textarea").type(noteText).blur();
-    cy.get(".board-node-note").should("contain", noteText);
-  });
-
-  it("renames the active career board and persists the name", () => {
-    const renamed = "Mitt hovedkart";
-
-    cy.visit("/");
-
-    cy.contains("button", "Karriereboard").click();
-    cy.get('input[placeholder="Brettnavn"]').clear().type(renamed).blur();
-    cy.contains("small", "Lagret").should("be.visible");
-    cy.get("select option:selected").should("contain", renamed);
-
-    cy.reload();
-    cy.contains("button", "Karriereboard").click();
-    cy.get("select option:selected").should("contain", renamed);
-  });
-
   it("creates a graduate program with requirements and status", () => {
     cy.visit("/");
 
@@ -68,7 +6,7 @@ describe("CareerCenter", () => {
     cy.contains("button", "+ Legg til").click();
     cy.get('[role="dialog"]').contains("h2", "Legg til graduate-program").should("be.visible");
 
-    cy.get('[role="dialog"]').contains("label", "Bedrift").find("select").select("nbim");
+    cy.get('[role="dialog"]').contains("label", "Bedriftsnavn").find("input").type("NBIM");
     cy.get('[role="dialog"]').contains("label", "Programnavn").find("input").type("Technology Graduate Programme");
     cy.get('[role="dialog"]').contains("label", "Søknadslenke").find("input").type("https://example.com/graduate");
     cy.get('[role="dialog"]').contains(".requirement-row", "CV").find('input[type="checkbox"]').last().check();
@@ -87,7 +25,7 @@ describe("CareerCenter", () => {
     cy.contains("button", "+ Legg til").click();
     cy.get('[role="dialog"]').contains("h2", "Legg til internship").should("be.visible");
 
-    cy.get('[role="dialog"]').contains("label", "Bedrift").find("select").select("statkraft");
+    cy.get('[role="dialog"]').contains("label", "Bedriftsnavn").find("input").type("Statkraft");
     cy.get('[role="dialog"]').contains("label", "Stilling / rolle").find("input").type("Technology Summer Intern");
     cy.get('[role="dialog"]').contains("label", "Søknadslenke").find("input").type("https://example.com/intern");
     cy.get('[role="dialog"]').contains("button", "Legg til").click();
@@ -121,49 +59,6 @@ describe("CareerCenter", () => {
     cy.contains("FastAPI for Beginners").should("not.exist");
   });
 
-  it("allows editing and resetting a career track label", () => {
-    const editedLabel = "Energy & Quant (redigert)";
-
-    cy.visit("/");
-
-    cy.contains("button", "Karriereboard").click();
-    cy.get(".board-palette-tracks").click();
-    cy.contains(".track-row", "ENERGY_QUANT").contains("button", "Rediger").click();
-    cy.contains(".track-row.editing", "ENERGY_QUANT").find(".inline-title").clear().type(editedLabel);
-    cy.contains(".track-row.editing", "ENERGY_QUANT").contains("button", "Lagre").click();
-
-    cy.contains(".track-row", editedLabel).should("be.visible");
-
-    cy.contains(".track-row", "ENERGY_QUANT").contains("button", "Rediger").click();
-    cy.contains(".track-row.editing", "ENERGY_QUANT").contains("button", "Tilbakestill").click();
-
-    cy.contains(".track-row", "Energy, Power Trading & Quant").should("be.visible");
-    cy.contains(".track-row", editedLabel).should("not.exist");
-  });
-
-  it("adds a company and finds it via search", () => {
-    const companyName = `E2EBedrift ${Date.now()}`;
-
-    cy.visit("/companies");
-    cy.contains("h1", "Bedriftsbase").should("be.visible");
-
-    cy.contains("button", "+ Legg til").click();
-    cy.get(".modal-panel").should("be.visible");
-    cy.contains("#modal-title", "Legg til bedrift").should("be.visible");
-
-    cy.get(".modal-body input[placeholder='Bedriftsnavn']").type(companyName);
-    cy.get(".modal-body textarea[placeholder*='bedriften']").type("E2E-testbedrift");
-    cy.get(".modal-body input[placeholder='Oslo / Norge']").type("Oslo");
-    cy.get(".modal-body input[placeholder='Data Scientist']").type("Analytiker");
-    cy.get(".role-type-input button").click();
-    cy.contains(".modal-footer button", "Legg til bedrift").click();
-
-    cy.contains(".company-card", companyName).should("be.visible");
-
-    cy.get("input[placeholder*='selskap']").clear().type(companyName);
-    cy.contains(".company-card", companyName).should("be.visible");
-  });
-
   it("creates and deletes a competition entry", () => {
     const title = `E2E Hackathon ${Date.now()}`;
 
@@ -187,7 +82,7 @@ describe("CareerCenter", () => {
   it("filters internships by search query", () => {
     cy.visit("/internships");
     cy.contains("button", "+ Legg til").click();
-    cy.get('[role="dialog"]').contains("label", "Bedrift").find("select").select("statkraft");
+    cy.get('[role="dialog"]').contains("label", "Bedriftsnavn").find("input").type("Statkraft");
     cy.get('[role="dialog"]').contains("label", "Stilling / rolle").find("input").type("Filter Intern");
     cy.get('[role="dialog"]').contains("button", "Legg til").click();
     cy.contains(".listing-row", "Filter Intern").should("be.visible");
@@ -280,17 +175,11 @@ describe("CareerCenter", () => {
     cy.get(".timeline").should("exist");
     cy.contains("button", "Liste").click();
 
-    cy.contains("button", "Bedrifter").click();
-    cy.get("input[placeholder*='selskap']").type("Stat");
-
     cy.contains("button", "Utdanning").click();
     cy.contains("button", "Oversikt").click();
     cy.contains("button", "Kurs").click();
     cy.contains("button", "Bøker").click();
     cy.contains("button", "Plattformer").click();
     cy.contains("button", "Bachelor-lærdom").click();
-
-    cy.contains("button", "Karriereboard").click();
-    cy.get(".board-shell").should("be.visible");
   });
 });

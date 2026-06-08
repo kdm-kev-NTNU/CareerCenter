@@ -23,7 +23,6 @@ const graduateProgramInclude = {
 type GraduateProgramRow = {
   id: string;
   userId: string;
-  companyId: string | null;
   companyName: string;
   title: string;
   description: string;
@@ -60,7 +59,6 @@ export function createPrismaGraduateProgramRepository(prisma: PrismaClient) {
   function mapGraduateProgram(row: GraduateProgramRow, locations: GraduateProgramLocationOption[]): GraduateProgram {
     return {
       id: row.id,
-      companyId: row.companyId ?? undefined,
       companyName: row.companyName,
       title: row.title,
       description: row.description,
@@ -199,17 +197,11 @@ export function createPrismaGraduateProgramRepository(prisma: PrismaClient) {
 
     async createGraduateProgram(userId: string, input: GraduateProgramInput) {
       const settings = await loadSettings(userId);
-      const validated = await validateListingInput(input, settings, {
-        companyExists: async (companyId) => {
-          const company = await prisma.company.findFirst({ where: { id: companyId } });
-          return company !== null;
-        }
-      });
+      const validated = await validateListingInput(input, settings);
       const requirements = buildRequirements(validated.requirements, settings.requirementTypes);
       const row = (await prisma.graduateProgram.create({
         data: {
           userId,
-          companyId: validated.companyId ?? null,
           companyName: validated.companyName,
           title: validated.title,
           description: validated.description,
@@ -230,19 +222,13 @@ export function createPrismaGraduateProgramRepository(prisma: PrismaClient) {
       const existing = await prisma.graduateProgram.findFirst({ where: { id, userId } });
       if (!existing) return null;
       const settings = await loadSettings(userId);
-      const validated = await validateListingInput(input, settings, {
-        companyExists: async (companyId) => {
-          const company = await prisma.company.findFirst({ where: { id: companyId } });
-          return company !== null;
-        }
-      });
+      const validated = await validateListingInput(input, settings);
       const requirements = buildRequirements(validated.requirements, settings.requirementTypes);
       const row = (await prisma.$transaction(async (tx) => {
         await tx.graduateProgramRequirementItem.deleteMany({ where: { graduateProgramId: id } });
         return tx.graduateProgram.update({
           where: { id },
           data: {
-            companyId: validated.companyId ?? null,
             companyName: validated.companyName,
             title: validated.title,
             description: validated.description,

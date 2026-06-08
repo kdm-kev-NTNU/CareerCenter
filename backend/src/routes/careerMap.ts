@@ -2,24 +2,9 @@ import { careerTracks } from "@careercenter/shared";
 import type { CareerTrack } from "@careercenter/shared";
 import type { FastifyInstance } from "fastify";
 import type { Repository } from "../repository.js";
-import { mapNodeSchema, trackSchema } from "../schemas.js";
+import { trackSchema } from "../schemas.js";
 
 export async function careerMapRoutes(app: FastifyInstance, repository: Repository) {
-  app.get("/api/career-map", async () => repository.getCareerMap());
-
-  app.put("/api/career-map/nodes/:id", async (request, reply) => {
-    const result = await repository.updateCareerMapNode(
-      (request.params as { id: string }).id,
-      mapNodeSchema.parse(request.body)
-    );
-    return result ?? reply.code(404).send({ message: "Node ikke funnet." });
-  });
-
-  app.post("/api/career-map/nodes/:id/reset", async (request, reply) => {
-    const result = await repository.resetCareerMapNode((request.params as { id: string }).id);
-    return result ?? reply.code(404).send({ message: "Node ikke funnet." });
-  });
-
   app.get("/api/career-tracks", async () => repository.listCareerTracks());
 
   app.put("/api/career-tracks/:id", async (request, reply) => {

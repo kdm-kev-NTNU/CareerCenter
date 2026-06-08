@@ -3,7 +3,7 @@ import Fastify from "fastify";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { registerErrorHandler } from "./errorHandler.js";
-import { CatalogInUseError, CompanyDuplicateError, InvalidReferenceError } from "../repository.js";
+import { CatalogInUseError, InvalidReferenceError } from "../repository.js";
 
 async function createApp() {
   const app = Fastify({ logger: false });
@@ -16,9 +16,6 @@ async function createApp() {
   });
   app.get("/catalog-in-use", async () => {
     throw new CatalogInUseError("I bruk.");
-  });
-  app.get("/duplicate", async () => {
-    throw new CompanyDuplicateError("Finnes.");
   });
   app.get("/prisma-fk", async () => {
     throw new Prisma.PrismaClientKnownRequestError("FK", {
@@ -70,7 +67,6 @@ describe("registerErrorHandler", () => {
     const app = await createApp();
     expect((await app.inject({ method: "GET", url: "/invalid-ref" })).statusCode).toBe(422);
     expect((await app.inject({ method: "GET", url: "/catalog-in-use" })).statusCode).toBe(409);
-    expect((await app.inject({ method: "GET", url: "/duplicate" })).statusCode).toBe(409);
     await app.close();
   });
 

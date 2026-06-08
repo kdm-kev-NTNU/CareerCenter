@@ -14,20 +14,14 @@ export interface ListingRequirementInput {
 }
 
 export interface ListingInputBase {
-  companyId?: string | null;
   statusId: string;
   locationIds: string[];
   requirements: ListingRequirementInput[];
 }
 
-export type ListingValidationOptions = {
-  companyExists?: (companyId: string) => Promise<boolean>;
-};
-
 export async function validateListingInput<T extends ListingInputBase>(
   input: T,
-  settings: ListingCatalogSettings,
-  options: ListingValidationOptions = {}
+  settings: ListingCatalogSettings
 ): Promise<T> {
   const statusIds = new Set(settings.statuses.map((item) => item.id));
   if (!statusIds.has(input.statusId)) {
@@ -44,13 +38,6 @@ export async function validateListingInput<T extends ListingInputBase>(
   const invalidRequirement = input.requirements.find((item) => !requirementTypeIds.has(item.requirementTypeId));
   if (invalidRequirement) {
     throw new InvalidReferenceError("Ugyldig kravtype.");
-  }
-
-  if (input.companyId) {
-    const exists = options.companyExists ? await options.companyExists(input.companyId) : true;
-    if (!exists) {
-      throw new InvalidReferenceError("Ugyldig bedrift.");
-    }
   }
 
   return input;

@@ -2,7 +2,6 @@ import { defineStore } from "pinia";
 import { ref } from "vue";
 import { api } from "../api/index.js";
 import { useCareerMapStore } from "./careerMap.js";
-import { useCompaniesStore } from "./companies.js";
 import { useCoursesStore } from "./courses.js";
 import { useCompetitionsStore } from "./competitions.js";
 import { useEducationBachelorStore } from "./educationBachelor.js";
@@ -14,8 +13,6 @@ import { useGraduateProgramSettingsStore } from "./graduateProgramSettings.js";
 import { useGraduateProgramsStore } from "./graduatePrograms.js";
 import { useInternshipSettingsStore } from "./internshipSettings.js";
 import { useInternshipsStore } from "./internships.js";
-import { useBoardStore } from "./board.js";
-
 export const useAppStore = defineStore("app", () => {
   const error = ref("");
   const initialized = ref(false);
@@ -31,10 +28,8 @@ export const useAppStore = defineStore("app", () => {
 
   async function initialize() {
     isInitializing.value = true;
-    localStorage.removeItem("careercenter-map-drafts");
     clearError();
     const careerMapStore = useCareerMapStore();
-    const companiesStore = useCompaniesStore();
     const coursesStore = useCoursesStore();
     const competitionsStore = useCompetitionsStore();
     const internshipSettingsStore = useInternshipSettingsStore();
@@ -46,12 +41,10 @@ export const useAppStore = defineStore("app", () => {
     const educationPlatformsStore = useEducationPlatformsStore();
     const educationBachelorStore = useEducationBachelorStore();
     const educationAiResourcesStore = useEducationAiResourcesStore();
-    const boardStore = useBoardStore();
 
     try {
       const [tracks] = await Promise.all([
         api.tracks(),
-        companiesStore.loadCompanies(),
         coursesStore.loadCourses(),
         competitionsStore.loadCompetitions()
       ]);
@@ -73,8 +66,7 @@ export const useAppStore = defineStore("app", () => {
         educationBooksStore.loadBooks(),
         educationPlatformsStore.loadPlatforms(),
         educationBachelorStore.loadAll(),
-        educationAiResourcesStore.loadResources(),
-        boardStore.loadBoards()
+        educationAiResourcesStore.loadResources()
       ]);
       initialized.value = true;
     } catch (caught) {

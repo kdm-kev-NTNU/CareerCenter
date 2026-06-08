@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { RouterLink } from "vue-router";
 import { competitionScopeLabels } from "@careercenter/shared";
-import { useCompaniesStore } from "../stores/companies.js";
 import { useCompetitionsStore } from "../stores/competitions.js";
 import { useCoursesStore } from "../stores/courses.js";
+import { useGraduateProgramsStore } from "../stores/graduatePrograms.js";
+import { useInternshipsStore } from "../stores/internships.js";
 
 const coursesStore = useCoursesStore();
-const companiesStore = useCompaniesStore();
+const internshipsStore = useInternshipsStore();
+const graduateProgramsStore = useGraduateProgramsStore();
 const competitionsStore = useCompetitionsStore();
 
 function formatUpcomingDate(value?: string): string {
@@ -23,13 +25,13 @@ function formatUpcomingDate(value?: string): string {
       <p>fag er lagt inn for semester 7-10.</p>
     </article>
     <article class="panel strong">
-      <h2>Bedrifter</h2>
-      <strong>{{ companiesStore.companies.length }}</strong>
-      <p>bedrifter er registrert i Bedriftsbasen.</p>
+      <h2>Muligheter</h2>
+      <strong>{{ internshipsStore.internships.length + graduateProgramsStore.graduatePrograms.length }}</strong>
+      <p>internship- og graduate-programmer er registrert.</p>
     </article>
     <article class="panel strong">
       <h2>Neste steg</h2>
-      <p>Legg til internship eller graduate-programmer og koble dem til bedrifter i Bedriftsbasen.</p>
+      <p>Legg til internship eller graduate-programmer og følg opp søknadene dine.</p>
     </article>
     <article class="panel wide">
       <div class="panel-heading-row">
@@ -47,13 +49,6 @@ function formatUpcomingDate(value?: string): string {
           {{ competitionScopeLabels[entry.scope] }} ·
           {{ formatUpcomingDate(entry.registrationDeadline ?? entry.startDate) }}
         </small>
-      </div>
-    </article>
-    <article class="panel wide">
-      <h2>Hoyest relevans akkurat na</h2>
-      <div class="company-row" v-for="company in companiesStore.recommendedCompanies" :key="company.id">
-        <span>{{ company.name }}</span>
-        <small>{{ company.geography }} - score {{ company.relevanceScore }}</small>
       </div>
     </article>
   </section>

@@ -9,8 +9,6 @@ const navItems = [
   { to: "/", label: "Dashboard" },
   { to: "/master", label: "Master Plan" },
   { to: "/education", label: "Utdanning" },
-  { to: "/map", label: "Karriereboard" },
-  { to: "/companies", label: "Bedrifter" },
   { to: "/internships", label: "Internship" },
   { to: "/graduate", label: "Graduate" },
   { to: "/competitions", label: "Hackathons & konkurranser" }

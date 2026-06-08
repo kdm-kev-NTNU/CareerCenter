@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { companySchema, courseSchema } from "./schemas.js";
+import { courseSchema, internshipSchema } from "./schemas.js";
 
 describe("schemas", () => {
   it("parses valid course payloads", () => {
@@ -16,7 +16,13 @@ describe("schemas", () => {
     expect(parsed.courseCode).toBe("TDT4173");
   });
 
-  it("rejects invalid company payloads", () => {
-    expect(() => companySchema.parse({ name: "" })).toThrow();
+  it("rejects internship payloads without company name", () => {
+    expect(() =>
+      internshipSchema.parse({
+        companyName: "",
+        title: "Intern",
+        statusId: "status-1"
+      })
+    ).toThrow();
   });
 });

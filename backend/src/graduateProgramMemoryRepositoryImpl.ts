@@ -16,13 +16,9 @@ import type {
 import { validateListingInput } from "./listingValidation.js";
 import { CatalogInUseError } from "./repository.js";
 
-export type MemoryGraduateProgramRepositoryDeps = {
-  companyExists?: (companyId: string) => boolean;
-};
-
 type StoredGraduateProgram = GraduateProgram & { userId: string };
 
-export function createMemoryGraduateProgramRepository(deps: MemoryGraduateProgramRepositoryDeps = {}) {
+export function createMemoryGraduateProgramRepository() {
   let catalogSeeded = false;
   const statuses = new Map<string, GraduateProgramStatusOption & { userId: string }>();
   const locations = new Map<string, GraduateProgramLocationOption & { userId: string }>();
@@ -85,7 +81,6 @@ export function createMemoryGraduateProgramRepository(deps: MemoryGraduateProgra
     return {
       id,
       userId,
-      companyId: input.companyId ?? undefined,
       companyName: input.companyName,
       title: input.title,
       description: input.description,
@@ -198,11 +193,7 @@ export function createMemoryGraduateProgramRepository(deps: MemoryGraduateProgra
 
     async createGraduateProgram(userId: string, input: GraduateProgramInput) {
       const settings = getSettings(userId);
-      const validated = await validateListingInput(input, settings, {
-        companyExists: deps.companyExists
-          ? async (companyId) => deps.companyExists!(companyId)
-          : undefined
-      });
+      const validated = await validateListingInput(input, settings);
       const entry = toGraduateProgram(nanoid(), userId, validated, settings);
       graduatePrograms.set(entry.id, entry);
       return hydrateGraduateProgram(entry, settings);
@@ -212,11 +203,7 @@ export function createMemoryGraduateProgramRepository(deps: MemoryGraduateProgra
       const existing = graduatePrograms.get(id);
       if (!existing || existing.userId !== userId) return null;
       const settings = getSettings(userId);
-      const validated = await validateListingInput(input, settings, {
-        companyExists: deps.companyExists
-          ? async (companyId) => deps.companyExists!(companyId)
-          : undefined
-      });
+      const validated = await validateListingInput(input, settings);
       const entry: StoredGraduateProgram = {
         ...toGraduateProgram(id, userId, validated, settings),
         createdAt: existing.createdAt,

@@ -8,14 +8,8 @@ import type {
   BachelorFolder,
   BachelorFolderTreeNode,
   BachelorKnowledge,
-  BoardGraph,
-  BoardViewport,
-  CareerBoard,
-  CareerBoardSummary,
-  CareerMapNode,
   CareerTrack,
   CareerTrackSetting,
-  Company,
   CompetitionEntry,
   CompetitionFormat,
   CompetitionScope,
@@ -59,31 +53,6 @@ export interface CourseInput {
   sortOrder: number;
 }
 
-export interface CompanyQuery {
-  q?: string;
-  track?: CareerTrack;
-  tier?: number;
-  geography?: string;
-}
-
-export interface CompanyInput {
-  name: string;
-  description: string;
-  tracks: CareerTrack[];
-  tier: 1 | 2 | 3;
-  geography: string;
-  roleTypes: string[];
-  difficulty: Company["difficulty"];
-  upside: Company["upside"];
-  relevanceScore: number;
-  websiteUrl?: string;
-}
-
-export interface CareerMapNodeInput {
-  title: string;
-  items: string[];
-}
-
 export interface CareerTrackInput {
   label: string;
 }
@@ -119,7 +88,6 @@ export interface InternshipRequirementItemInput {
 }
 
 export interface InternshipInput {
-  companyId?: string | null;
   companyName: string;
   title: string;
   description: string;
@@ -147,7 +115,6 @@ export interface GraduateProgramRequirementItemInput {
 }
 
 export interface GraduateProgramInput {
-  companyId?: string | null;
   companyName: string;
   title: string;
   description: string;
@@ -177,13 +144,6 @@ export class InvalidReferenceError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "InvalidReferenceError";
-  }
-}
-
-export class CompanyDuplicateError extends Error {
-  constructor(message = "En bedrift med dette navnet finnes allerede.") {
-    super(message);
-    this.name = "CompanyDuplicateError";
   }
 }
 
@@ -264,21 +224,6 @@ export interface BachelorFileUpdateInput {
   storagePath?: string;
 }
 
-export interface BoardCreateInput {
-  name: string;
-  description: string;
-  graph?: BoardGraph;
-  isDefault?: boolean;
-}
-
-export interface BoardUpdateInput {
-  name?: string;
-  description?: string;
-  viewport?: BoardViewport | null;
-  graph?: BoardGraph;
-  isDefault?: boolean;
-}
-
 export interface Repository {
   findUserByName(name: string): Promise<AuthUserRecord | null>;
   findUserByIdForAuth(id: string): Promise<AuthUserRecord | null>;
@@ -288,9 +233,6 @@ export interface Repository {
   resetFailedAttempts(id: string): Promise<void>;
   lockUser(id: string, until: Date): Promise<void>;
   initializeNewUser(userId: string): Promise<void>;
-  getCareerMap(): Promise<{ nodes: CareerMapNode[]; tracks: CareerTrackSetting[] }>;
-  updateCareerMapNode(id: string, input: CareerMapNodeInput): Promise<CareerMapNode | null>;
-  resetCareerMapNode(id: string): Promise<CareerMapNode | null>;
   listCareerTracks(): Promise<CareerTrackSetting[]>;
   updateCareerTrack(id: CareerTrack, input: CareerTrackInput): Promise<CareerTrackSetting | null>;
   resetCareerTrack(id: CareerTrack): Promise<CareerTrackSetting | null>;
@@ -299,8 +241,6 @@ export interface Repository {
   createCourse(userId: string, input: CourseInput): Promise<CoursePlan>;
   updateCourse(userId: string, id: string, input: CourseInput): Promise<CoursePlan | null>;
   deleteCourse(userId: string, id: string): Promise<boolean>;
-  listCompanies(query: CompanyQuery): Promise<Company[]>;
-  createCompany(input: CompanyInput): Promise<Company>;
   listCompetitions(userId: string): Promise<CompetitionEntry[]>;
   createCompetition(userId: string, input: CompetitionInput): Promise<CompetitionEntry>;
   updateCompetition(userId: string, id: string, input: CompetitionInput): Promise<CompetitionEntry | null>;
@@ -366,10 +306,4 @@ export interface Repository {
   createGraduateProgram(userId: string, input: GraduateProgramInput): Promise<GraduateProgram>;
   updateGraduateProgram(userId: string, id: string, input: GraduateProgramInput): Promise<GraduateProgram | null>;
   deleteGraduateProgram(userId: string, id: string): Promise<boolean>;
-  listBoards(userId: string): Promise<CareerBoardSummary[]>;
-  getBoard(userId: string, id: string): Promise<CareerBoard | null>;
-  createBoard(userId: string, input: BoardCreateInput): Promise<CareerBoard>;
-  updateBoard(userId: string, id: string, input: BoardUpdateInput): Promise<CareerBoard | null>;
-  deleteBoard(userId: string, id: string): Promise<boolean>;
-  duplicateBoard(userId: string, id: string): Promise<CareerBoard | null>;
 }

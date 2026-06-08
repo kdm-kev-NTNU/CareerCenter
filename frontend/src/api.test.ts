@@ -2,7 +2,6 @@ import type { CareerTrack } from "@careercenter/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { authApi } from "./api/auth.js";
 import {
-  boardsApi,
   competitionsApi,
   educationApi,
   graduateProgramSettingsApi,
@@ -24,18 +23,17 @@ describe("api client", () => {
   });
 
   it("sets a JSON content type when sending a body", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({ id: "company-1" }));
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({ id: "course-1" }));
 
-    await api.createCompany({
-      name: "NyBedrift AS",
-      description: "Test",
-      tracks: ["ENERGY_QUANT"],
-      tier: 1,
-      geography: "Oslo",
-      roleTypes: ["Data Scientist"],
-      difficulty: "High",
-      upside: "High",
-      relevanceScore: 80
+    await api.createCourse({
+      semester: 7,
+      courseCode: "TDT4173",
+      title: "Machine Learning",
+      credits: 7.5,
+      status: "planned",
+      notes: "",
+      trackTags: ["ENERGY_QUANT"],
+      sortOrder: 0
     });
 
     const [, options] = fetchMock.mock.calls[0];
@@ -64,19 +62,7 @@ describe("api client", () => {
   it("builds GET and PUT requests for all API resources", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(() => Promise.resolve(jsonResponse([])));
 
-    await api.careerMap();
-    await api.companies("?q=Statkraft");
-    await api.createCompany({
-      name: "NyBedrift AS",
-      description: "Test",
-      tracks: ["ENERGY_QUANT"],
-      tier: 1,
-      geography: "Oslo",
-      roleTypes: ["Data Scientist"],
-      difficulty: "High",
-      upside: "High",
-      relevanceScore: 80
-    });
+    await api.tracks();
     await api.courses();
     await api.updateCourse("course-1", {
       semester: 7,
@@ -99,36 +85,26 @@ describe("api client", () => {
       sortOrder: 1
     });
     await api.deleteCourse("course-1");
-    await api.updateMapNode("energy-1", { title: "Spor A", items: ["Statkraft"] });
-    await api.resetMapNode("energy-1");
-    await api.tracks();
     await api.updateTrack("ENERGY_QUANT", { label: "Energy & Quant" });
     await api.resetTrack("ENERGY_QUANT");
     await api.deleteTrack("ENERGY_QUANT");
 
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
-      "/api/career-map",
-      "/api/companies?q=Statkraft",
-      "/api/companies",
-      "/api/courses",
-      "/api/courses/course-1",
-      "/api/courses",
-      "/api/courses/course-1",
-      "/api/career-map/nodes/energy-1",
-      "/api/career-map/nodes/energy-1/reset",
       "/api/career-tracks",
+      "/api/courses",
+      "/api/courses/course-1",
+      "/api/courses",
+      "/api/courses/course-1",
       "/api/career-tracks/ENERGY_QUANT",
       "/api/career-tracks/ENERGY_QUANT/reset",
       "/api/career-tracks/ENERGY_QUANT"
     ]);
-    expect(fetchMock.mock.calls[4][1]?.method).toBe("PUT");
-    expect(fetchMock.mock.calls[5][1]?.method).toBe("POST");
-    expect(fetchMock.mock.calls[6][1]?.method).toBe("DELETE");
-    expect(fetchMock.mock.calls[7][1]?.method).toBe("PUT");
-    expect(fetchMock.mock.calls[8][1]?.method).toBe("POST");
-    expect(fetchMock.mock.calls[10][1]?.method).toBe("PUT");
-    expect(fetchMock.mock.calls[11][1]?.method).toBe("POST");
-    expect(fetchMock.mock.calls[12][1]?.method).toBe("DELETE");
+    expect(fetchMock.mock.calls[2][1]?.method).toBe("PUT");
+    expect(fetchMock.mock.calls[3][1]?.method).toBe("POST");
+    expect(fetchMock.mock.calls[4][1]?.method).toBe("DELETE");
+    expect(fetchMock.mock.calls[5][1]?.method).toBe("PUT");
+    expect(fetchMock.mock.calls[6][1]?.method).toBe("POST");
+    expect(fetchMock.mock.calls[7][1]?.method).toBe("DELETE");
     expect(fetchMock.mock.calls.every(([, init]) => init?.credentials === "include")).toBe(true);
   });
 
@@ -155,7 +131,7 @@ describe("api client", () => {
     await expect(api.courses()).rejects.toThrow("Ugyldig forespørsel.");
   });
 
-  it("builds requests for boards, competitions, listings, education, and auth", async () => {
+  it("builds requests for competitions, listings, education, and auth", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((url, init) => {
       if (init?.body instanceof FormData) {
         const file = init.body.get("file");
@@ -192,13 +168,6 @@ describe("api client", () => {
       notes: "",
       sortOrder: 0
     };
-
-    await boardsApi.boards();
-    await boardsApi.board("board-1");
-    await boardsApi.createBoard({ name: "Plan B" });
-    await boardsApi.updateBoard("board-1", { name: "Plan B+" });
-    await boardsApi.duplicateBoard("board-1");
-    await boardsApi.deleteBoard("board-1");
 
     await competitionsApi.competitions();
     await competitionsApi.createCompetition({
@@ -390,7 +359,6 @@ describe("api client", () => {
     await authApi.logout();
 
     const urls = fetchMock.mock.calls.map(([url]) => url);
-    expect(urls).toContain("/api/boards");
     expect(urls).toContain("/api/competitions");
     expect(urls.some((url) => typeof url === "string" && url.startsWith("/api/internships?"))).toBe(true);
     expect(urls).toContain("/api/education/bachelor/files");

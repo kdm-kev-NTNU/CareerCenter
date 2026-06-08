@@ -5,12 +5,8 @@ import type {
   BachelorFolder,
   BachelorFolderTreeNode,
   BachelorKnowledge,
-  CareerBoard,
-  CareerBoardSummary,
-  CareerMapNode,
   CareerTrack,
   CareerTrackSetting,
-  Company,
   CompetitionEntry,
   CoursePlan,
   EducationBook,
@@ -18,20 +14,13 @@ import type {
   SelfStudyCourse,
   UserProfile
 } from "@careercenter/shared";
-import { buildDefaultBoardGraph } from "./boardGraphSeed.js";
-import { companies as seededCompanies, careerMapNodeSeeds, careerTrackSeeds } from "./seedData.js";
-import { CompanyDuplicateError } from "./repository.js";
+import { careerTrackSeeds } from "./seedData.js";
 import type {
   BachelorFileCreateInput,
   BachelorFileUpdateInput,
   BachelorFolderInput,
   BachelorKnowledgeInput,
-  BoardCreateInput,
-  BoardUpdateInput,
-  CareerMapNodeInput,
   CareerTrackInput,
-  CompanyInput,
-  CompanyQuery,
   CompetitionInput,
   CourseInput,
   EducationBookInput,
@@ -45,10 +34,8 @@ import { createMemoryInternshipRepository } from "./internshipMemoryRepositoryIm
 import type { AuthUserRecord } from "./repository.js";
 
 type StoredTrack = CareerTrackSetting & { defaultLabel: string };
-type StoredNode = CareerMapNode & { defaultTitle: string; defaultItems: string[]; sortOrder: number };
 
 export class MemoryRepository implements Repository {
-  private companies = [...seededCompanies];
   private readonly internshipRepo;
   private readonly graduateProgramRepo;
   private users = new Map<string, AuthUserRecord>();
@@ -65,26 +52,9 @@ export class MemoryRepository implements Repository {
   private tracks = new Map<string, StoredTrack>(careerTrackSeeds.map((track) => [track.id, { ...track, defaultLabel: track.label }]));
 
   constructor() {
-    const companyExists = (companyId: string) => this.companies.some((company) => company.id === companyId);
-    this.internshipRepo = createMemoryInternshipRepository({ companyExists });
-    this.graduateProgramRepo = createMemoryGraduateProgramRepository({ companyExists });
+    this.internshipRepo = createMemoryInternshipRepository();
+    this.graduateProgramRepo = createMemoryGraduateProgramRepository();
   }
-  private mapNodes = new Map<string, StoredNode>(
-    careerMapNodeSeeds.map((node) => [
-      node.id,
-      {
-        id: node.id,
-        title: node.title,
-        level: node.level,
-        track: node.track,
-        items: [...node.items],
-        defaultTitle: node.defaultTitle,
-        defaultItems: [...node.defaultItems],
-        sortOrder: node.sortOrder
-      }
-    ])
-  );
-  private boards = new Map<string, CareerBoard & { userId: string }>();
 
   async findUserByName(name: string): Promise<AuthUserRecord | null> {
     const id = this.usersByName.get(name);
@@ -106,7 +76,6 @@ export class MemoryRepository implements Repository {
     };
     this.users.set(id, record);
     this.usersByName.set(name, id);
-    await this.ensureDefaultBoard(id);
     return { id, name };
   }
 
@@ -135,52 +104,7 @@ export class MemoryRepository implements Repository {
     user.lockedUntil = until;
   }
 
-  async initializeNewUser(userId: string): Promise<void> {
-    await this.ensureDefaultBoard(userId);
-  }
-
-  private async ensureDefaultBoard(userId: string) {
-    const hasBoard = [...this.boards.values()].some((board) => board.userId === userId);
-    if (hasBoard) return;
-    const now = new Date().toISOString();
-    const board: CareerBoard & { userId: string } = {
-      id: "default-board",
-      userId,
-      name: "Karrierekart",
-      description: "Standard kart med bedrifter og spor",
-      viewport: { x: 0, y: 0, zoom: 0.75 },
-      graph: buildDefaultBoardGraph(careerMapNodeSeeds, this.companies),
-      isDefault: true,
-      createdAt: now,
-      updatedAt: now
-    };
-    this.boards.set(board.id, board);
-  }
-
-  async getCareerMap(): Promise<{ nodes: CareerMapNode[]; tracks: CareerTrackSetting[] }> {
-    return {
-      nodes: [...this.mapNodes.values()]
-        .sort((a, b) => a.level - b.level || a.sortOrder - b.sortOrder)
-        .map((node) => this.cloneNode(node)),
-      tracks: [...this.tracks.values()].sort((a, b) => a.sortOrder - b.sortOrder).map((track) => this.cloneTrack(track))
-    };
-  }
-
-  async updateCareerMapNode(id: string, input: CareerMapNodeInput): Promise<CareerMapNode | null> {
-    const existing = this.mapNodes.get(id);
-    if (!existing) return null;
-    const next = { ...existing, title: input.title, items: [...input.items] };
-    this.mapNodes.set(id, next);
-    return this.cloneNode(next);
-  }
-
-  async resetCareerMapNode(id: string): Promise<CareerMapNode | null> {
-    const existing = this.mapNodes.get(id);
-    if (!existing) return null;
-    const next = { ...existing, title: existing.defaultTitle, items: [...existing.defaultItems] };
-    this.mapNodes.set(id, next);
-    return this.cloneNode(next);
-  }
+  async initializeNewUser(_userId: string): Promise<void> {}
 
   async listCareerTracks(): Promise<CareerTrackSetting[]> {
     return [...this.tracks.values()].sort((a, b) => a.sortOrder - b.sortOrder).map((track) => this.cloneTrack(track));
@@ -230,26 +154,6 @@ export class MemoryRepository implements Repository {
     const existing = this.courses.get(id);
     if (!existing || existing.userId !== userId) return false;
     return this.courses.delete(id);
-  }
-
-  async listCompanies(query: CompanyQuery): Promise<Company[]> {
-    const search = query.q?.toLowerCase().trim();
-    return this.companies
-      .filter((company) => !search || [company.name, company.description, company.geography, ...company.roleTypes].join(" ").toLowerCase().includes(search))
-      .filter((company) => !query.track || company.tracks.includes(query.track))
-      .filter((company) => !query.tier || company.tier === query.tier)
-      .filter((company) => !query.geography || company.geography.toLowerCase().includes(query.geography.toLowerCase()))
-      .sort((a, b) => b.relevanceScore - a.relevanceScore);
-  }
-
-  async createCompany(input: CompanyInput): Promise<Company> {
-    const normalized = input.name.trim().toLowerCase();
-    if (this.companies.some((company) => company.name.trim().toLowerCase() === normalized)) {
-      throw new CompanyDuplicateError();
-    }
-    const company: Company = { id: nanoid(), ...input };
-    this.companies.push(company);
-    return company;
   }
 
   async listCompetitions(userId: string): Promise<CompetitionEntry[]> {
@@ -705,16 +609,6 @@ export class MemoryRepository implements Repository {
     return { ...entry };
   }
 
-  private cloneNode(node: StoredNode): CareerMapNode {
-    return {
-      id: node.id,
-      title: node.title,
-      level: node.level,
-      track: node.track,
-      items: [...node.items]
-    };
-  }
-
   private cloneTrack(track: StoredTrack): CareerTrackSetting {
     return {
       id: track.id,
@@ -723,100 +617,6 @@ export class MemoryRepository implements Repository {
     };
   }
 
-  async listBoards(userId: string): Promise<CareerBoardSummary[]> {
-    await this.ensureDefaultBoard(userId);
-    return [...this.boards.values()]
-      .filter((board) => board.userId === userId)
-      .sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || b.updatedAt.localeCompare(a.updatedAt))
-      .map((board) => this.cloneBoardSummary(board));
-  }
-
-  async getBoard(userId: string, id: string): Promise<CareerBoard | null> {
-    await this.ensureDefaultBoard(userId);
-    const board = this.boards.get(id);
-    if (!board || board.userId !== userId) return null;
-    return this.cloneBoard(board);
-  }
-
-  async createBoard(userId: string, input: BoardCreateInput): Promise<CareerBoard> {
-    await this.ensureDefaultBoard(userId);
-    if (input.isDefault) {
-      for (const board of this.boards.values()) {
-        if (board.userId === userId) board.isDefault = false;
-      }
-    }
-    const now = new Date().toISOString();
-    const board: CareerBoard & { userId: string } = {
-      id: nanoid(),
-      userId,
-      name: input.name,
-      description: input.description,
-      viewport: null,
-      graph: input.graph ?? { nodes: [], edges: [] },
-      isDefault: input.isDefault ?? false,
-      createdAt: now,
-      updatedAt: now
-    };
-    this.boards.set(board.id, board);
-    return this.cloneBoard(board);
-  }
-
-  async updateBoard(userId: string, id: string, input: BoardUpdateInput): Promise<CareerBoard | null> {
-    const existing = this.boards.get(id);
-    if (!existing || existing.userId !== userId) return null;
-    if (input.isDefault) {
-      for (const board of this.boards.values()) {
-        if (board.userId === userId) board.isDefault = false;
-      }
-    }
-    const updated: CareerBoard & { userId: string } = {
-      ...existing,
-      name: input.name ?? existing.name,
-      description: input.description ?? existing.description,
-      viewport: input.viewport === undefined ? existing.viewport : input.viewport,
-      graph: input.graph ?? existing.graph,
-      isDefault: input.isDefault ?? existing.isDefault,
-      updatedAt: new Date().toISOString()
-    };
-    this.boards.set(id, updated);
-    return this.cloneBoard(updated);
-  }
-
-  async deleteBoard(userId: string, id: string): Promise<boolean> {
-    const existing = this.boards.get(id);
-    if (!existing || existing.userId !== userId) return false;
-    return this.boards.delete(id);
-  }
-
-  async duplicateBoard(userId: string, id: string): Promise<CareerBoard | null> {
-    const existing = this.boards.get(id);
-    if (!existing || existing.userId !== userId) return null;
-    return this.createBoard(userId, {
-      name: `${existing.name} kopi`,
-      description: existing.description,
-      graph: structuredClone(existing.graph),
-      isDefault: false
-    });
-  }
-
-  private cloneBoard(board: CareerBoard): CareerBoard {
-    return {
-      ...board,
-      viewport: board.viewport ? { ...board.viewport } : null,
-      graph: structuredClone(board.graph)
-    };
-  }
-
-  private cloneBoardSummary(board: CareerBoard): CareerBoardSummary {
-    return {
-      id: board.id,
-      name: board.name,
-      description: board.description,
-      isDefault: board.isDefault,
-      createdAt: board.createdAt,
-      updatedAt: board.updatedAt
-    };
-  }
 
   getInternshipSettings = (userId: string) => this.internshipRepo.getInternshipSettings(userId);
   createInternshipStatus = (userId: string, input: Parameters<typeof this.internshipRepo.createInternshipStatus>[1]) =>

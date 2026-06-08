@@ -254,30 +254,27 @@ describe("Auth Routes", () => {
       await app.close();
     });
 
-    it("initializes new user with default board on registration", async () => {
+    it("initializes new user with internship and graduate catalogs on registration", async () => {
       const app = await createAuthTestApp();
 
       const response = await app.inject({
         method: "POST",
         url: "/api/auth/register",
-        payload: { name: "UserWithBoard", pin: "1234" }
+        payload: { name: "UserWithCatalogs", pin: "1234" }
       });
 
       expect(response.statusCode).toBe(201);
 
-      // Verify the user was created
       const token = response.cookies.find((cookie) => cookie.name === "token")?.value;
 
-      // Check that we can get boards for this user
-      const boards = await app.inject({
+      const internshipSettings = await app.inject({
         method: "GET",
-        url: "/api/boards",
+        url: "/api/internship-settings",
         cookies: { token: token! }
       });
 
-      expect(boards.statusCode).toBe(200);
-      expect(boards.json()).toHaveLength(1);
-      expect(boards.json()[0].isDefault).toBe(true);
+      expect(internshipSettings.statusCode).toBe(200);
+      expect(internshipSettings.json().statuses.length).toBeGreaterThan(0);
 
       await app.close();
     });

@@ -63,7 +63,7 @@ describe("useInternshipsStore", () => {
   it("throws when saving with missing required fields", async () => {
     const store = useInternshipsStore();
     store.resetForm();
-    await expect(store.saveInternship([])).rejects.toThrow("Bedriftsnavn, stillingstittel og status er obligatorisk.");
+    await expect(store.saveInternship()).rejects.toThrow("Bedriftsnavn, stillingstittel og status er obligatorisk.");
     expect(mockedApi.createInternship).not.toHaveBeenCalled();
   });
 
@@ -110,7 +110,7 @@ describe("useInternshipsStore", () => {
     store.resetForm();
     store.form.companyName = "DNB";
     store.form.title = "Intern";
-    await store.saveInternship([]);
+    await store.saveInternship();
     expect(mockedApi.createInternship).toHaveBeenCalledTimes(1);
     expect(store.internships[0]?.id).toBe("int-new");
     expect(store.isSubmitting).toBe(false);
