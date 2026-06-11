@@ -13,8 +13,7 @@ import type {
   EducationBook,
   LearningPlatform,
   SelfStudyCourse,
-  ThesisCompany,
-  UserProfile
+  ThesisCompany
 } from "@careercenter/shared";
 import { InvalidReferenceError } from "./repository.js";
 import type {
