@@ -295,6 +295,11 @@ nav button.active, nav button:hover { background: #1f2937; color: #ffffff; }
   max-width: 360px;
 }
 .listing-toolbar-add { white-space: nowrap; flex-shrink: 0; }
+.listing-summary {
+  margin: -8px 2px 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
 
 .listing-table { padding: 0; overflow: hidden; }
 .listing-header {
