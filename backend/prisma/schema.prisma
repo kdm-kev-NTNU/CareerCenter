@@ -31,6 +31,7 @@ model User {
   graduateProgramLocations         GraduateProgramLocationOption[]
   graduateProgramRequirementTypes  GraduateProgramRequirementType[]
   graduatePrograms                   GraduateProgram[]
+  thesisCompanies                    ThesisCompany[]
 }
 
 model CoursePlan {
@@ -290,4 +291,23 @@ model GraduateProgramRequirementItem {
   notes             String                         @default("")
   graduateProgram   GraduateProgram                @relation(fields: [graduateProgramId], references: [id], onDelete: Cascade)
   requirementType   GraduateProgramRequirementType @relation(fields: [requirementTypeId], references: [id])
+}
+
+model ThesisCompany {
+  id             String   @id @default(cuid())
+  userId         String
+  companyName    String
+  topicArea      String   @default("")
+  status         String
+  source         String   @default("other")
+  location       String   @default("")
+  contactPerson  String   @default("")
+  websiteUrl     String?
+  targetSemester Int?
+  trackTags      String[]
+  notes          String   @default("")
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

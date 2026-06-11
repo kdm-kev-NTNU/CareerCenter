@@ -12,6 +12,7 @@ import type {
   EducationBook,
   LearningPlatform,
   SelfStudyCourse,
+  ThesisCompany,
   UserProfile
 } from "@careercenter/shared";
 import { careerTrackSeeds } from "./seedData.js";
@@ -27,7 +28,8 @@ import type {
   AiResourceInput,
   LearningPlatformInput,
   Repository,
-  SelfStudyCourseInput
+  SelfStudyCourseInput,
+  ThesisCompanyInput
 } from "./repository.js";
 import { createMemoryGraduateProgramRepository } from "./graduateProgramMemoryRepositoryImpl.js";
 import { createMemoryInternshipRepository } from "./internshipMemoryRepositoryImpl.js";
@@ -42,6 +44,7 @@ export class MemoryRepository implements Repository {
   private usersByName = new Map<string, string>();
   private courses = new Map<string, CoursePlan & { userId: string }>();
   private competitions = new Map<string, CompetitionEntry & { userId: string }>();
+  private thesisCompanies = new Map<string, ThesisCompany & { userId: string }>();
   private selfStudyCourses = new Map<string, SelfStudyCourse & { userId: string }>();
   private educationBooks = new Map<string, EducationBook & { userId: string }>();
   private learningPlatforms = new Map<string, LearningPlatform & { userId: string }>();
@@ -181,6 +184,33 @@ export class MemoryRepository implements Repository {
     const existing = this.competitions.get(id);
     if (!existing || existing.userId !== userId) return false;
     return this.competitions.delete(id);
+  }
+
+  async listThesisCompanies(userId: string): Promise<ThesisCompany[]> {
+    return [...this.thesisCompanies.values()]
+      .filter((entry) => entry.userId === userId)
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.companyName.localeCompare(b.companyName))
+      .map((entry) => this.cloneThesisCompany(entry));
+  }
+
+  async createThesisCompany(userId: string, input: ThesisCompanyInput): Promise<ThesisCompany> {
+    const entry = this.toThesisCompany(nanoid(), input);
+    this.thesisCompanies.set(entry.id, { ...entry, userId });
+    return entry;
+  }
+
+  async updateThesisCompany(userId: string, id: string, input: ThesisCompanyInput): Promise<ThesisCompany | null> {
+    const existing = this.thesisCompanies.get(id);
+    if (!existing || existing.userId !== userId) return null;
+    const entry = this.toThesisCompany(id, input);
+    this.thesisCompanies.set(id, { ...entry, userId });
+    return entry;
+  }
+
+  async deleteThesisCompany(userId: string, id: string): Promise<boolean> {
+    const existing = this.thesisCompanies.get(id);
+    if (!existing || existing.userId !== userId) return false;
+    return this.thesisCompanies.delete(id);
   }
 
   async listSelfStudyCourses(userId: string): Promise<SelfStudyCourse[]> {
@@ -606,6 +636,27 @@ export class MemoryRepository implements Repository {
   }
 
   private cloneCompetition(entry: CompetitionEntry): CompetitionEntry {
+    return { ...entry };
+  }
+
+  private toThesisCompany(id: string, input: ThesisCompanyInput): ThesisCompany {
+    return {
+      id,
+      companyName: input.companyName,
+      topicArea: input.topicArea,
+      status: input.status,
+      source: input.source,
+      location: input.location,
+      contactPerson: input.contactPerson,
+      websiteUrl: input.websiteUrl ?? undefined,
+      targetSemester: input.targetSemester ?? undefined,
+      trackTags: input.trackTags,
+      notes: input.notes,
+      sortOrder: input.sortOrder
+    };
+  }
+
+  private cloneThesisCompany(entry: ThesisCompany): ThesisCompany {
     return { ...entry };
   }
 

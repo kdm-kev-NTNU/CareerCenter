@@ -11,6 +11,7 @@ const navItems = [
   { to: "/education", label: "Utdanning" },
   { to: "/internships", label: "Internship" },
   { to: "/graduate", label: "Graduate" },
+  { to: "/master-thesis", label: "Masteroppgave" },
   { to: "/competitions", label: "Hackathons & konkurranser" }
 ];
 

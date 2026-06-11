@@ -13,6 +13,7 @@ import EducationPlatformsView from "../views/education/EducationPlatformsView.vu
 import LoginView from "../views/LoginView.vue";
 import MasterPlanView from "../views/MasterPlanView.vue";
 import CompetitionsView from "../views/CompetitionsView.vue";
+import ThesisCompaniesView from "../views/ThesisCompaniesView.vue";
 import GraduateProgramsView from "../views/GraduateProgramsView.vue";
 import InternshipsView from "../views/InternshipsView.vue";
 import { useAuthStore } from "../stores/auth.js";
@@ -54,6 +55,12 @@ const router = createRouter({
           name: "graduate",
           component: GraduateProgramsView,
           meta: { title: "Graduate-programmer" }
+        },
+        {
+          path: "master-thesis",
+          name: "master-thesis",
+          component: ThesisCompaniesView,
+          meta: { title: "Masteroppgave" }
         },
         {
           path: "competitions",

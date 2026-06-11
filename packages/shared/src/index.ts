@@ -295,6 +295,49 @@ export interface CompetitionEntry {
   sortOrder: number;
 }
 
+export const thesisCompanyStatuses = [
+  "known",
+  "interested",
+  "contacted",
+  "confirmed",
+  "not_relevant"
+] as const;
+export type ThesisCompanyStatus = (typeof thesisCompanyStatuses)[number];
+
+export const thesisCompanySources = ["network", "internship", "university", "website", "other"] as const;
+export type ThesisCompanySource = (typeof thesisCompanySources)[number];
+
+export const thesisCompanyStatusLabels: Record<ThesisCompanyStatus, string> = {
+  known: "Kjent mulighet",
+  interested: "Interessert",
+  contacted: "Kontaktet",
+  confirmed: "Avtale på plass",
+  not_relevant: "Ikke aktuelt"
+};
+
+export const thesisCompanySourceLabels: Record<ThesisCompanySource, string> = {
+  network: "Nettverk",
+  internship: "Internship / erfaring",
+  university: "NTNU / fakultet",
+  website: "Bedriftens nettside",
+  other: "Annet"
+};
+
+export interface ThesisCompany {
+  id: string;
+  companyName: string;
+  topicArea: string;
+  status: ThesisCompanyStatus;
+  source: ThesisCompanySource;
+  location: string;
+  contactPerson: string;
+  websiteUrl?: string;
+  targetSemester?: 7 | 8 | 9 | 10;
+  trackTags: CareerTrack[];
+  notes: string;
+  sortOrder: number;
+}
+
 export interface InternshipStatusOption {
   id: string;
   label: string;

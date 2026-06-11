@@ -17,6 +17,9 @@ import type {
   CompetitionType,
   CoursePlan,
   CourseStatus,
+  ThesisCompany,
+  ThesisCompanySource,
+  ThesisCompanyStatus,
   EducationBook,
   LearningPlatform,
   GraduateProgram,
@@ -69,6 +72,20 @@ export interface CompetitionInput {
   organizer: string;
   url?: string | null;
   status: CompetitionStatus;
+  notes: string;
+  sortOrder: number;
+}
+
+export interface ThesisCompanyInput {
+  companyName: string;
+  topicArea: string;
+  status: ThesisCompanyStatus;
+  source: ThesisCompanySource;
+  location: string;
+  contactPerson: string;
+  websiteUrl?: string | null;
+  targetSemester?: 7 | 8 | 9 | 10 | null;
+  trackTags: CareerTrack[];
   notes: string;
   sortOrder: number;
 }
@@ -245,6 +262,10 @@ export interface Repository {
   createCompetition(userId: string, input: CompetitionInput): Promise<CompetitionEntry>;
   updateCompetition(userId: string, id: string, input: CompetitionInput): Promise<CompetitionEntry | null>;
   deleteCompetition(userId: string, id: string): Promise<boolean>;
+  listThesisCompanies(userId: string): Promise<ThesisCompany[]>;
+  createThesisCompany(userId: string, input: ThesisCompanyInput): Promise<ThesisCompany>;
+  updateThesisCompany(userId: string, id: string, input: ThesisCompanyInput): Promise<ThesisCompany | null>;
+  deleteThesisCompany(userId: string, id: string): Promise<boolean>;
   listSelfStudyCourses(userId: string): Promise<SelfStudyCourse[]>;
   createSelfStudyCourse(userId: string, input: SelfStudyCourseInput): Promise<SelfStudyCourse>;
   updateSelfStudyCourse(userId: string, id: string, input: SelfStudyCourseInput): Promise<SelfStudyCourse | null>;
