@@ -10,7 +10,9 @@ import {
   competitionStatuses,
   competitionTypes,
   courseStatuses,
-  learningStatuses
+  learningStatuses,
+  thesisCompanySources,
+  thesisCompanyStatuses
 } from "@careercenter/shared";
 import { z } from "zod";
 
@@ -73,6 +75,26 @@ export const competitionSchema = z.object({
     .optional()
     .transform((value) => (value && value.length > 0 ? value : null)),
   status: z.enum(competitionStatuses),
+  notes: z.string().default(""),
+  sortOrder: z.number().int().default(0)
+});
+
+export const thesisCompanySchema = z.object({
+  companyName: z.string().min(1, "Bedriftsnavn er obligatorisk."),
+  topicArea: z.string().default(""),
+  status: z.enum(thesisCompanyStatuses).default("known"),
+  source: z.enum(thesisCompanySources).default("other"),
+  location: z.string().default(""),
+  contactPerson: z.string().default(""),
+  websiteUrl: z
+    .union([z.string().url(), z.literal(""), z.null()])
+    .optional()
+    .transform((value) => (value && value.length > 0 ? value : null)),
+  targetSemester: z
+    .union([z.literal(7), z.literal(8), z.literal(9), z.literal(10), z.null()])
+    .optional()
+    .transform((value) => value ?? null),
+  trackTags: z.array(z.enum(careerTracks)).default([]),
   notes: z.string().default(""),
   sortOrder: z.number().int().default(0)
 });

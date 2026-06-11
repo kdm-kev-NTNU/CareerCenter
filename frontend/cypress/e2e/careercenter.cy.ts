@@ -79,6 +79,26 @@ describe("CareerCenter", () => {
     cy.contains(".listing-row", title).should("not.exist");
   });
 
+  it("creates and deletes a thesis company", () => {
+    const companyName = `E2E Thesis Co ${Date.now()}`;
+
+    cy.visit("/");
+    cy.contains("button", "Masteroppgave").click();
+    cy.contains("h1", "Masteroppgave").should("be.visible");
+
+    cy.contains("button", "+ Legg til").click();
+    cy.get('[role="dialog"]').contains("h2", "Legg til bedrift").should("be.visible");
+    cy.get('[role="dialog"]').contains("label", "Bedriftsnavn").find("input").type(companyName);
+    cy.get('[role="dialog"]').contains("label", "Tema / område").find("input").type("E2E tema");
+    cy.get('[role="dialog"]').contains("button", "Legg til").click();
+
+    cy.contains(".listing-row", companyName).should("be.visible");
+
+    cy.on("window:confirm", () => true);
+    cy.contains(".listing-row", companyName).find('button[aria-label="Slett"]').click();
+    cy.contains(".listing-row", companyName).should("not.exist");
+  });
+
   it("filters internships by search query", () => {
     cy.visit("/internships");
     cy.contains("button", "+ Legg til").click();

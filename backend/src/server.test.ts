@@ -159,6 +159,56 @@ describe("CareerCenter API", () => {
     await app.close();
   });
 
+  it("creates, lists, updates and deletes thesis companies", async () => {
+    const app = await createTestApp();
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/thesis-companies",
+      payload: {
+        companyName: "SINTEF",
+        topicArea: "Energi",
+        status: "known",
+        source: "university",
+        location: "Trondheim",
+        contactPerson: "Kari",
+        websiteUrl: "https://sintef.no",
+        targetSemester: 10,
+        trackTags: ["ENERGY_QUANT"],
+        notes: "Via veileder",
+        sortOrder: 0
+      }
+    });
+    expect(created.statusCode).toBe(200);
+    expect(created.json().companyName).toBe("SINTEF");
+
+    const list = await app.inject({ method: "GET", url: "/api/thesis-companies" });
+    expect(list.json()).toHaveLength(1);
+
+    const updated = await app.inject({
+      method: "PUT",
+      url: `/api/thesis-companies/${created.json().id}`,
+      payload: { ...created.json(), companyName: "SINTEF Digital" }
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json().companyName).toBe("SINTEF Digital");
+
+    const missing = await app.inject({
+      method: "PUT",
+      url: "/api/thesis-companies/missing",
+      payload: created.json()
+    });
+    expect(missing.statusCode).toBe(404);
+
+    const deleted = await app.inject({ method: "DELETE", url: `/api/thesis-companies/${created.json().id}` });
+    expect(deleted.statusCode).toBe(204);
+
+    const afterDelete = await app.inject({ method: "GET", url: "/api/thesis-companies" });
+    expect(afterDelete.json()).toHaveLength(0);
+
+    await app.close();
+  });
+
   it("creates and lists courses for the single app user", async () => {
     const app = await createTestApp();
 

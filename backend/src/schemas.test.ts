@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { courseSchema, internshipSchema } from "./schemas.js";
+import { courseSchema, internshipSchema, thesisCompanySchema } from "./schemas.js";
 
 describe("schemas", () => {
   it("parses valid course payloads", () => {
@@ -22,6 +22,32 @@ describe("schemas", () => {
         companyName: "",
         title: "Intern",
         statusId: "status-1"
+      })
+    ).toThrow();
+  });
+
+  it("parses valid thesis company payloads", () => {
+    const parsed = thesisCompanySchema.parse({
+      companyName: "SINTEF",
+      topicArea: "Energi",
+      status: "known",
+      source: "university",
+      location: "Trondheim",
+      contactPerson: "Kari",
+      websiteUrl: "https://sintef.no",
+      targetSemester: 10,
+      trackTags: ["ENERGY_QUANT"],
+      notes: "Via veileder",
+      sortOrder: 0
+    });
+    expect(parsed.companyName).toBe("SINTEF");
+    expect(parsed.targetSemester).toBe(10);
+  });
+
+  it("rejects thesis company payloads without company name", () => {
+    expect(() =>
+      thesisCompanySchema.parse({
+        companyName: ""
       })
     ).toThrow();
   });

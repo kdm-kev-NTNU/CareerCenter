@@ -27,6 +27,7 @@ vi.mock("./api/index.js", () => ({
     createCourse: vi.fn(),
     deleteCourse: vi.fn(),
     competitions: vi.fn(),
+    thesisCompanies: vi.fn(),
     settings: vi.fn(),
     internships: vi.fn(),
     graduateProgramSettings: vi.fn(),
@@ -48,6 +49,7 @@ function mockInitialData() {
   mockedApi.tracks.mockResolvedValue(careerTrackDefaults);
   mockedApi.courses.mockResolvedValue([]);
   mockedApi.competitions.mockResolvedValue([]);
+  mockedApi.thesisCompanies.mockResolvedValue([]);
   mockedApi.settings.mockResolvedValue({ statuses: [], locations: [], requirementTypes: [] });
   mockedApi.internships.mockResolvedValue([]);
   mockedApi.graduateProgramSettings.mockResolvedValue({ statuses: [], locations: [], requirementTypes: [] });
@@ -138,6 +140,7 @@ describe("App", () => {
       ["/master", "master"],
       ["/internships", "internships"],
       ["/graduate", "graduate"],
+      ["/master-thesis", "master-thesis"],
       ["/competitions", "competitions"],
       ["/education/kurs", "education-courses"],
       ["/education/boker", "education-books"],

@@ -6,6 +6,7 @@ import { graduateProgramsApi } from "./graduatePrograms.js";
 import { internshipSettingsApi } from "./internshipSettings.js";
 import { internshipsApi } from "./internships.js";
 import { educationApi } from "./education.js";
+import { thesisCompaniesApi } from "./thesisCompanies.js";
 export const api = {
   ...careerMapApi,
   ...coursesApi,
@@ -14,7 +15,8 @@ export const api = {
   ...internshipSettingsApi,
   ...graduateProgramsApi,
   ...graduateProgramSettingsApi,
-  ...educationApi
+  ...educationApi,
+  ...thesisCompaniesApi
 };
 
 export { careerMapApi } from "./careerMap.js";
@@ -25,6 +27,7 @@ export { graduateProgramsApi } from "./graduatePrograms.js";
 export { internshipSettingsApi } from "./internshipSettings.js";
 export { internshipsApi } from "./internships.js";
 export { educationApi } from "./education.js";
+export { thesisCompaniesApi } from "./thesisCompanies.js";
 export type { GraduateProgramQuery } from "./graduatePrograms.js";
 export type { InternshipQuery } from "./internships.js";
 export { request } from "./client.js";
@@ -44,5 +47,6 @@ export type {
   InternshipRequirementItemPayload,
   LearningPlatformPayload,
   SelfStudyCoursePayload,
+  ThesisCompanyPayload,
   TrackPayload
 } from "../types/index.js";

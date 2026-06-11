@@ -18,6 +18,7 @@ import { internshipsRoutes } from "./routes/internships.js";
 import { bachelorStorageRoutes } from "./routes/bachelorStorage.js";
 import { educationRoutes } from "./routes/education.js";
 import { competitionsRoutes } from "./routes/competitions.js";
+import { thesisCompaniesRoutes } from "./routes/thesisCompanies.js";
 const TEST_AUTH_USER_NAME = "__test__";
 const TEST_AUTH_USER_PIN = "0000";
 
@@ -93,6 +94,7 @@ export async function buildServer(options: ServerOptions) {
   app.register((instance) => graduateProgramsRoutes(instance, repository));
   app.register((instance) => graduateProgramSettingsRoutes(instance, repository));
   app.register((instance) => competitionsRoutes(instance, repository));
+  app.register((instance) => thesisCompaniesRoutes(instance, repository));
   app.register((instance) => educationRoutes(instance, repository));
   app.register((instance) => bachelorStorageRoutes(instance, repository));
 

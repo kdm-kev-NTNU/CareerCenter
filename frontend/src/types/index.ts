@@ -5,6 +5,8 @@ import type {
   CompetitionStatus,
   CompetitionType,
   CourseStatus,
+  ThesisCompanySource,
+  ThesisCompanyStatus,
   AiResourceConfigFormat,
   AiResourceKind,
   AiResourceStatus,
@@ -39,6 +41,20 @@ export interface CompetitionPayload {
   organizer: string;
   url?: string | null;
   status: CompetitionStatus;
+  notes: string;
+  sortOrder: number;
+}
+
+export interface ThesisCompanyPayload {
+  companyName: string;
+  topicArea: string;
+  status: ThesisCompanyStatus;
+  source: ThesisCompanySource;
+  location: string;
+  contactPerson: string;
+  websiteUrl?: string | null;
+  targetSemester?: 7 | 8 | 9 | 10 | null;
+  trackTags: CareerTrack[];
   notes: string;
   sortOrder: number;
 }

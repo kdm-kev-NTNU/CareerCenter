@@ -13,6 +13,7 @@ import { useGraduateProgramSettingsStore } from "./graduateProgramSettings.js";
 import { useGraduateProgramsStore } from "./graduatePrograms.js";
 import { useInternshipSettingsStore } from "./internshipSettings.js";
 import { useInternshipsStore } from "./internships.js";
+import { useThesisCompaniesStore } from "./thesisCompanies.js";
 export const useAppStore = defineStore("app", () => {
   const error = ref("");
   const initialized = ref(false);
@@ -36,6 +37,7 @@ export const useAppStore = defineStore("app", () => {
     const internshipsStore = useInternshipsStore();
     const graduateProgramSettingsStore = useGraduateProgramSettingsStore();
     const graduateProgramsStore = useGraduateProgramsStore();
+    const thesisCompaniesStore = useThesisCompaniesStore();
     const educationSelfStudyStore = useEducationSelfStudyStore();
     const educationBooksStore = useEducationBooksStore();
     const educationPlatformsStore = useEducationPlatformsStore();
@@ -46,7 +48,8 @@ export const useAppStore = defineStore("app", () => {
       const [tracks] = await Promise.all([
         api.tracks(),
         coursesStore.loadCourses(),
-        competitionsStore.loadCompetitions()
+        competitionsStore.loadCompetitions(),
+        thesisCompaniesStore.loadCompanies()
       ]);
       careerMapStore.setTracks(tracks);
 

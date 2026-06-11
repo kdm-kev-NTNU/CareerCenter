@@ -11,7 +11,10 @@ import type {
   CoursePlan,
   EducationBook,
   LearningPlatform,
-  SelfStudyCourse
+  SelfStudyCourse,
+  ThesisCompany,
+  UserProfile,
+  assertSemester
 } from "@careercenter/shared";
 import { InvalidReferenceError } from "./repository.js";
 import type {
@@ -26,7 +29,8 @@ import type {
   AiResourceInput,
   LearningPlatformInput,
   Repository,
-  SelfStudyCourseInput
+  SelfStudyCourseInput,
+  ThesisCompanyInput
 } from "./repository.js";
 import { createPrismaGraduateProgramRepository } from "./graduateProgramRepositoryImpl.js";
 import { createPrismaInternshipRepository } from "./internshipRepositoryImpl.js";
@@ -67,6 +71,22 @@ type CompetitionRow = {
   organizer: string;
   url: string | null;
   status: string;
+  notes: string;
+  sortOrder: number;
+};
+
+type ThesisCompanyRow = {
+  id: string;
+  userId: string;
+  companyName: string;
+  topicArea: string;
+  status: string;
+  source: string;
+  location: string;
+  contactPerson: string;
+  websiteUrl: string | null;
+  targetSemester: number | null;
+  trackTags: string[];
   notes: string;
   sortOrder: number;
 };
@@ -303,6 +323,33 @@ export class PrismaRepository implements Repository {
 
   async deleteCompetition(userId: string, id: string): Promise<boolean> {
     const result = await this.prisma.competitionEntry.deleteMany({ where: { id, userId } });
+    return result.count > 0;
+  }
+
+  async listThesisCompanies(userId: string): Promise<ThesisCompany[]> {
+    const rows = (await this.prisma.thesisCompany.findMany({
+      where: { userId },
+      orderBy: [{ sortOrder: "asc" }, { companyName: "asc" }]
+    })) as ThesisCompanyRow[];
+    return rows.map((row) => this.mapThesisCompany(row));
+  }
+
+  async createThesisCompany(userId: string, input: ThesisCompanyInput): Promise<ThesisCompany> {
+    return this.mapThesisCompany(
+      (await this.prisma.thesisCompany.create({ data: { userId, ...input } })) as ThesisCompanyRow
+    );
+  }
+
+  async updateThesisCompany(userId: string, id: string, input: ThesisCompanyInput): Promise<ThesisCompany | null> {
+    const existing = await this.prisma.thesisCompany.findFirst({ where: { id, userId } });
+    if (!existing) return null;
+    return this.mapThesisCompany(
+      (await this.prisma.thesisCompany.update({ where: { id }, data: input })) as ThesisCompanyRow
+    );
+  }
+
+  async deleteThesisCompany(userId: string, id: string): Promise<boolean> {
+    const result = await this.prisma.thesisCompany.deleteMany({ where: { id, userId } });
     return result.count > 0;
   }
 
@@ -649,6 +696,23 @@ export class PrismaRepository implements Repository {
       organizer: row.organizer,
       url: row.url ?? undefined,
       status: row.status as CompetitionEntry["status"],
+      notes: row.notes,
+      sortOrder: row.sortOrder
+    };
+  }
+
+  private mapThesisCompany(row: ThesisCompanyRow): ThesisCompany {
+    return {
+      id: row.id,
+      companyName: row.companyName,
+      topicArea: row.topicArea,
+      status: row.status as ThesisCompany["status"],
+      source: row.source as ThesisCompany["source"],
+      location: row.location,
+      contactPerson: row.contactPerson,
+      websiteUrl: row.websiteUrl ?? undefined,
+      targetSemester: row.targetSemester ? assertSemester(row.targetSemester) : undefined,
+      trackTags: row.trackTags as ThesisCompany["trackTags"],
       notes: row.notes,
       sortOrder: row.sortOrder
     };
