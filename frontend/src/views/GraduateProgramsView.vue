@@ -31,6 +31,7 @@ const editingCatalog = ref<{ kind: "status" | "location" | "requirement"; id: st
 const modalTitle = computed(() =>
   programsStore.isEditing ? "Rediger graduate-program" : "Legg til graduate-program"
 );
+const listingCountLabel = computed(() => `Antall stillinger: ${programsStore.graduatePrograms.length}`);
 
 function locationLabel(program: GraduateProgram) {
   return program.locations?.map((l) => l.label).join(", ") || "Sted ikke valgt";
@@ -174,6 +175,7 @@ function formatDeadline(value?: string) {
         </select>
       </template>
     </ListingToolbar>
+    <p class="listing-summary">{{ listingCountLabel }}</p>
 
     <ListingTable :columns="['Bedrift / program', 'Status', 'Sted', 'Frist', 'Krav', '']">
       <p v-if="programsStore.isLoading" class="listing-loading">Laster graduate-programmer...</p>
