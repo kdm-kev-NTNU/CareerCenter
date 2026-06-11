@@ -1,4 +1,5 @@
 import { Prisma, PrismaClient } from "@prisma/client";
+import { assertSemester } from "@careercenter/shared";
 import type {
   AiResource,
   BachelorFile,
@@ -13,8 +14,7 @@ import type {
   LearningPlatform,
   SelfStudyCourse,
   ThesisCompany,
-  UserProfile,
-  assertSemester
+  UserProfile
 } from "@careercenter/shared";
 import { InvalidReferenceError } from "./repository.js";
 import type {

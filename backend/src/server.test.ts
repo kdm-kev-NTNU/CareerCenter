@@ -182,13 +182,28 @@ describe("CareerCenter API", () => {
     expect(created.statusCode).toBe(200);
     expect(created.json().companyName).toBe("SINTEF");
 
+    const createdBody = created.json() as {
+      id: string;
+      companyName: string;
+      topicArea: string;
+      status: string;
+      source: string;
+      location: string;
+      contactPerson: string;
+      websiteUrl: string | null;
+      targetSemester: number;
+      trackTags: string[];
+      notes: string;
+      sortOrder: number;
+    };
+
     const list = await app.inject({ method: "GET", url: "/api/thesis-companies" });
     expect(list.json()).toHaveLength(1);
 
     const updated = await app.inject({
       method: "PUT",
-      url: `/api/thesis-companies/${created.json().id}`,
-      payload: { ...created.json(), companyName: "SINTEF Digital" }
+      url: `/api/thesis-companies/${createdBody.id}`,
+      payload: { ...createdBody, companyName: "SINTEF Digital" }
     });
     expect(updated.statusCode).toBe(200);
     expect(updated.json().companyName).toBe("SINTEF Digital");
@@ -196,11 +211,11 @@ describe("CareerCenter API", () => {
     const missing = await app.inject({
       method: "PUT",
       url: "/api/thesis-companies/missing",
-      payload: created.json()
+      payload: createdBody
     });
     expect(missing.statusCode).toBe(404);
 
-    const deleted = await app.inject({ method: "DELETE", url: `/api/thesis-companies/${created.json().id}` });
+    const deleted = await app.inject({ method: "DELETE", url: `/api/thesis-companies/${createdBody.id}` });
     expect(deleted.statusCode).toBe(204);
 
     const afterDelete = await app.inject({ method: "GET", url: "/api/thesis-companies" });
