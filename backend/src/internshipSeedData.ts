@@ -2,6 +2,7 @@ export const defaultInternshipStatuses = [
   "Interessert",
   "Forbereder søknad",
   "Søkt",
+  "Case / online test",
   "Intervju",
   "Tilbud",
   "Avslått",
