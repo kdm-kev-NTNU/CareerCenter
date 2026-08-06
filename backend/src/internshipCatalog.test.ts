@@ -1,3 +1,4 @@
+import type { PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 import { ensureInternshipCatalog } from "./internshipCatalog.js";
 import { defaultInternshipStatuses } from "./internshipSeedData.js";
@@ -68,7 +69,8 @@ function createCatalogPrismaMock(initialStatuses: StatusRow[] = []) {
   };
 
   return {
-    prisma: prisma as never,
+    prisma,
+    asClient: prisma as unknown as PrismaClient,
     getStatuses: (userId: string) =>
       statuses
         .filter((status) => status.userId === userId)
@@ -88,16 +90,16 @@ const OLD_DEFAULT_STATUSES = [
 
 describe("ensureInternshipCatalog", () => {
   it("seeds all default statuses including Case / online test for empty catalogs", async () => {
-    const { prisma, getStatuses } = createCatalogPrismaMock();
+    const { asClient, getStatuses } = createCatalogPrismaMock();
 
-    await ensureInternshipCatalog(prisma, "user-1");
+    await ensureInternshipCatalog(asClient, "user-1");
 
     expect(getStatuses("user-1").map((status) => status.label)).toEqual(defaultInternshipStatuses);
     expect(defaultInternshipStatuses).toContain("Case / online test");
   });
 
   it("inserts Case / online test after Søkt for legacy catalogs", async () => {
-    const { prisma, getStatuses } = createCatalogPrismaMock(
+    const { asClient, getStatuses } = createCatalogPrismaMock(
       OLD_DEFAULT_STATUSES.map((label, sortOrder) => ({
         id: `old-${sortOrder}`,
         userId: "user-1",
@@ -106,7 +108,7 @@ describe("ensureInternshipCatalog", () => {
       }))
     );
 
-    await ensureInternshipCatalog(prisma, "user-1");
+    await ensureInternshipCatalog(asClient, "user-1");
 
     const labels = getStatuses("user-1").map((status) => status.label);
     expect(labels).toEqual(defaultInternshipStatuses);
@@ -114,7 +116,7 @@ describe("ensureInternshipCatalog", () => {
   });
 
   it("does not duplicate Case / online test when already present", async () => {
-    const { prisma, getStatuses } = createCatalogPrismaMock(
+    const { prisma, asClient, getStatuses } = createCatalogPrismaMock(
       defaultInternshipStatuses.map((label, sortOrder) => ({
         id: `current-${sortOrder}`,
         userId: "user-1",
@@ -123,7 +125,7 @@ describe("ensureInternshipCatalog", () => {
       }))
     );
 
-    await ensureInternshipCatalog(prisma, "user-1");
+    await ensureInternshipCatalog(asClient, "user-1");
 
     const labels = getStatuses("user-1").map((status) => status.label);
     expect(labels).toEqual(defaultInternshipStatuses);
