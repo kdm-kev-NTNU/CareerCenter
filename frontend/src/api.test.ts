@@ -157,6 +157,7 @@ describe("api client", () => {
       applicationUrl: "",
       notes: "",
       statusId: "status-1",
+      stageIds: ["status-1"],
       locationIds: [] as string[],
       trackTags: ["ENERGY_QUANT"] as CareerTrack[],
       requirements: []
@@ -216,6 +217,7 @@ describe("api client", () => {
     await internshipSettingsApi.createStatus(catalogLabel);
     await internshipSettingsApi.updateStatus("status-1", catalogLabel);
     await internshipSettingsApi.deleteStatus("status-1");
+    await internshipSettingsApi.reorderStatuses(["status-2", "status-1"]);
     await internshipSettingsApi.createLocation(catalogLabel);
     await internshipSettingsApi.updateLocation("loc-1", catalogLabel);
     await internshipSettingsApi.deleteLocation("loc-1");

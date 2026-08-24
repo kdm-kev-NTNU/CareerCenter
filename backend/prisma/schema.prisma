@@ -59,6 +59,7 @@ model InternshipStatusOption {
   id          String       @id @default(cuid())
   userId      String
   label       String
+  kind        String       @default("stage")
   sortOrder   Int          @default(0)
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   internships Internship[]
@@ -92,6 +93,7 @@ model Internship {
   notes          String                    @default("")
   deadline       DateTime?
   statusId       String
+  stageIds       String[]                  @default([])
   locationIds    String[]
   trackTags      String[]
   createdAt      DateTime                  @default(now())

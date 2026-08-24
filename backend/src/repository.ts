@@ -112,6 +112,7 @@ export interface InternshipInput {
   notes: string;
   deadline?: Date | null;
   statusId: string;
+  stageIds: string[];
   locationIds: string[];
   trackTags: CareerTrack[];
   requirements: InternshipRequirementItemInput[];
@@ -148,6 +149,7 @@ export interface CatalogLabelInput {
   label: string;
   sortOrder?: number;
   description?: string;
+  kind?: "stage" | "outcome";
 }
 
 export class CatalogInUseError extends Error {
@@ -302,6 +304,7 @@ export interface Repository {
   getInternshipSettings(userId: string): Promise<InternshipSettings>;
   createInternshipStatus(userId: string, input: CatalogLabelInput): Promise<InternshipStatusOption>;
   updateInternshipStatus(userId: string, id: string, input: CatalogLabelInput): Promise<InternshipStatusOption | null>;
+  reorderInternshipStatuses(userId: string, ids: string[]): Promise<InternshipStatusOption[]>;
   deleteInternshipStatus(userId: string, id: string): Promise<boolean>;
   createInternshipLocation(userId: string, input: CatalogLabelInput): Promise<InternshipLocationOption>;
   updateInternshipLocation(userId: string, id: string, input: CatalogLabelInput): Promise<InternshipLocationOption | null>;

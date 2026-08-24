@@ -7,7 +7,8 @@ import type {
 import {
   defaultInternshipLocations,
   defaultInternshipRequirementTypes,
-  defaultInternshipStatuses
+  defaultInternshipStatuses,
+  internshipStatusKind
 } from "./internshipSeedData.js";
 
 export function createDefaultInternshipCatalog(): {
@@ -16,7 +17,12 @@ export function createDefaultInternshipCatalog(): {
   requirementTypes: InternshipRequirementType[];
 } {
   return {
-    statuses: defaultInternshipStatuses.map((label, sortOrder) => ({ id: nanoid(), label, sortOrder })),
+    statuses: defaultInternshipStatuses.map((label, sortOrder) => ({
+      id: nanoid(),
+      label,
+      kind: internshipStatusKind(label),
+      sortOrder
+    })),
     locations: defaultInternshipLocations.map((label, sortOrder) => ({ id: nanoid(), label, sortOrder })),
     requirementTypes: defaultInternshipRequirementTypes.map((item, sortOrder) => ({
       id: nanoid(),

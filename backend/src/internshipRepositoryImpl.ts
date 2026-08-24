@@ -3,9 +3,12 @@ import type {
   Internship,
   InternshipLocationOption,
   InternshipRequirementType,
-  InternshipSettings
+  InternshipSettings,
+  InternshipStatusKind,
+  InternshipStatusOption
 } from "@careercenter/shared";
 import { ensureInternshipCatalog } from "./internshipCatalog.js";
+import { planInternshipStatusReorder } from "./internshipPipeline.js";
 import type {
   CatalogLabelInput,
   InternshipInput,
@@ -20,6 +23,8 @@ const internshipInclude = {
   requirements: { include: { requirementType: true } }
 } as const;
 
+type StatusRow = { id: string; label: string; kind: string; sortOrder: number };
+
 type InternshipRow = {
   id: string;
   userId: string;
@@ -30,11 +35,12 @@ type InternshipRow = {
   notes: string;
   deadline: Date | null;
   statusId: string;
+  stageIds: string[];
   locationIds: string[];
   trackTags: string[];
   createdAt: Date;
   updatedAt: Date;
-  status: { id: string; label: string; sortOrder: number };
+  status: StatusRow;
   requirements: Array<{
     id: string;
     requirementTypeId: string;
@@ -45,6 +51,19 @@ type InternshipRow = {
   }>;
 };
 
+function mapStatusKind(kind: string): InternshipStatusKind {
+  return kind === "outcome" ? "outcome" : "stage";
+}
+
+function mapStatus(row: StatusRow): InternshipStatusOption {
+  return {
+    id: row.id,
+    label: row.label,
+    kind: mapStatusKind(row.kind),
+    sortOrder: row.sortOrder
+  };
+}
+
 export function createPrismaInternshipRepository(prisma: PrismaClient) {
   async function loadSettings(userId: string): Promise<InternshipSettings> {
     await ensureInternshipCatalog(prisma, userId);
@@ -53,7 +72,11 @@ export function createPrismaInternshipRepository(prisma: PrismaClient) {
       prisma.internshipLocationOption.findMany({ where: { userId }, orderBy: { sortOrder: "asc" } }),
       prisma.internshipRequirementType.findMany({ where: { userId }, orderBy: { sortOrder: "asc" } })
     ]);
-    return { statuses, locations, requirementTypes };
+    return {
+      statuses: statuses.map(mapStatus),
+      locations,
+      requirementTypes
+    };
   }
 
   function mapInternship(row: InternshipRow, locations: InternshipLocationOption[]): Internship {
@@ -66,7 +89,8 @@ export function createPrismaInternshipRepository(prisma: PrismaClient) {
       notes: row.notes,
       deadline: row.deadline?.toISOString(),
       statusId: row.statusId,
-      status: row.status,
+      status: mapStatus(row.status),
+      stageIds: row.stageIds,
       locationIds: row.locationIds,
       locations: locations.filter((location) => row.locationIds.includes(location.id)),
       trackTags: row.trackTags as Internship["trackTags"],
@@ -110,21 +134,53 @@ export function createPrismaInternshipRepository(prisma: PrismaClient) {
     async createInternshipStatus(userId: string, input: CatalogLabelInput) {
       const settings = await loadSettings(userId);
       const sortOrder = input.sortOrder ?? settings.statuses.length;
-      return prisma.internshipStatusOption.create({ data: { userId, label: input.label, sortOrder } });
+      const created = await prisma.internshipStatusOption.create({
+        data: {
+          userId,
+          label: input.label,
+          sortOrder,
+          kind: input.kind === "outcome" ? "outcome" : "stage"
+        }
+      });
+      return mapStatus(created);
     },
 
     async updateInternshipStatus(userId: string, id: string, input: CatalogLabelInput) {
       const existing = await prisma.internshipStatusOption.findFirst({ where: { id, userId } });
       if (!existing) return null;
-      return prisma.internshipStatusOption.update({
+      const updated = await prisma.internshipStatusOption.update({
         where: { id },
-        data: { label: input.label, ...(input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}) }
+        data: {
+          label: input.label,
+          ...(input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}),
+          ...(input.kind !== undefined ? { kind: input.kind } : {})
+        }
       });
+      return mapStatus(updated);
+    },
+
+    async reorderInternshipStatuses(userId: string, ids: string[]) {
+      const settings = await loadSettings(userId);
+      const next = planInternshipStatusReorder(settings.statuses, ids);
+      await prisma.$transaction(
+        next.map((status) =>
+          prisma.internshipStatusOption.update({
+            where: { id: status.id },
+            data: { sortOrder: status.sortOrder }
+          })
+        )
+      );
+      return (await loadSettings(userId)).statuses;
     },
 
     async deleteInternshipStatus(userId: string, id: string) {
-      const count = await prisma.internship.count({ where: { userId, statusId: id } });
-      if (count > 0) throw new CatalogInUseError(`Statusen er i bruk på ${count} internship.`);
+      const inUse = await prisma.internship.count({
+        where: {
+          userId,
+          OR: [{ statusId: id }, { stageIds: { has: id } }]
+        }
+      });
+      if (inUse > 0) throw new CatalogInUseError(`Statusen er i bruk på ${inUse} internship.`);
       const result = await prisma.internshipStatusOption.deleteMany({ where: { id, userId } });
       return result.count > 0;
     },
@@ -209,6 +265,7 @@ export function createPrismaInternshipRepository(prisma: PrismaClient) {
           notes: validated.notes,
           deadline: validated.deadline ?? null,
           statusId: validated.statusId,
+          stageIds: validated.stageIds,
           locationIds: validated.locationIds,
           trackTags: validated.trackTags,
           requirements: { create: requirements }
@@ -236,6 +293,7 @@ export function createPrismaInternshipRepository(prisma: PrismaClient) {
             notes: validated.notes,
             deadline: validated.deadline ?? null,
             statusId: validated.statusId,
+            stageIds: validated.stageIds,
             locationIds: validated.locationIds,
             trackTags: validated.trackTags,
             requirements: { create: requirements }

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { catalogLabelSchema } from "../schemas.js";
+import { catalogLabelSchema, catalogReorderSchema } from "../schemas.js";
 import { CatalogInUseError, type Repository } from "../repository.js";
 
 async function handleCatalogError(error: unknown, reply: { code: (status: number) => { send: (body: unknown) => unknown } }) {
@@ -16,6 +16,13 @@ export async function internshipSettingsRoutes(app: FastifyInstance, repository:
 
   app.post("/api/internship-settings/statuses", async (request) => {
     return repository.createInternshipStatus(request.user.id, catalogLabelSchema.parse(request.body));
+  });
+
+  app.put("/api/internship-settings/statuses/reorder", async (request) => {
+    return repository.reorderInternshipStatuses(
+      request.user.id,
+      catalogReorderSchema.parse(request.body).ids
+    );
   });
 
   app.put("/api/internship-settings/statuses/:id", async (request, reply) => {

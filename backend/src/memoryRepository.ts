@@ -674,6 +674,7 @@ export class MemoryRepository implements Repository {
     this.internshipRepo.createInternshipStatus(userId, input);
   updateInternshipStatus = (userId: string, id: string, input: Parameters<typeof this.internshipRepo.updateInternshipStatus>[2]) =>
     this.internshipRepo.updateInternshipStatus(userId, id, input);
+  reorderInternshipStatuses = (userId: string, ids: string[]) => this.internshipRepo.reorderInternshipStatuses(userId, ids);
   deleteInternshipStatus = (userId: string, id: string) => this.internshipRepo.deleteInternshipStatus(userId, id);
   createInternshipLocation = (userId: string, input: Parameters<typeof this.internshipRepo.createInternshipLocation>[1]) =>
     this.internshipRepo.createInternshipLocation(userId, input);

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { CareerTrack, Internship } from "@careercenter/shared";
+import type { CareerTrack, Internship, InternshipStatusOption } from "@careercenter/shared";
 import { computed, onMounted, ref } from "vue";
 import { debounce } from "../utils/debounce.js";
 import AppModal from "../components/listing/AppModal.vue";
@@ -158,6 +158,36 @@ function formatDeadline(value?: string) {
   if (!value) return "Ingen frist";
   return new Date(value).toLocaleDateString("nb-NO");
 }
+
+function statusById(id: string) {
+  return settingsStore.statuses.find((status) => status.id === id);
+}
+
+function pipelineSteps(internship: Internship) {
+  return (internship.stageIds ?? [])
+    .map((id) => statusById(id))
+    .filter((status): status is InternshipStatusOption => Boolean(status));
+}
+
+function canMoveCatalogStatus(id: string, direction: -1 | 1) {
+  const stages = settingsStore.stageStatuses;
+  const index = stages.findIndex((status) => status.id === id);
+  const next = index + direction;
+  return index >= 0 && next >= 0 && next < stages.length;
+}
+
+async function moveCatalogStatus(id: string, direction: -1 | 1) {
+  if (!canMoveCatalogStatus(id, direction)) return;
+  const ids = settingsStore.stageStatuses.map((status) => status.id);
+  const index = ids.indexOf(id);
+  [ids[index], ids[index + direction]] = [ids[index + direction], ids[index]];
+  try {
+    await settingsStore.reorderStatuses(ids);
+    internshipsStore.syncFormFromSettings();
+  } catch (caught) {
+    appStore.setError(caught instanceof Error ? caught.message : "Kunne ikke endre rekkefølge.");
+  }
+}
 </script>
 
 <template>
@@ -193,6 +223,16 @@ function formatDeadline(value?: string) {
           <div class="listing-cell-title">
             <strong>{{ internship.companyName }}</strong>
             <small>{{ internship.title }}</small>
+            <div v-if="pipelineSteps(internship).length" class="pipeline-stepper">
+              <span
+                v-for="(step, index) in pipelineSteps(internship)"
+                :key="step.id"
+                class="pipeline-step"
+                :class="{ current: internship.statusId === step.id }"
+              >
+                {{ step.label }}<template v-if="index < pipelineSteps(internship).length - 1"> → </template>
+              </span>
+            </div>
           </div>
           <StatusBadge :label="internship.status?.label ?? '—'" variant="accent" />
           <span class="listing-cell-muted">{{ locationLabel(internship) }}</span>
@@ -205,6 +245,19 @@ function formatDeadline(value?: string) {
           />
         </div>
         <div v-if="isExpanded(internship.id)" class="listing-detail">
+          <div v-if="pipelineSteps(internship).length">
+            <p class="listing-detail-label">Søknadsflyt</p>
+            <div class="pipeline-stepper">
+              <span
+                v-for="(step, index) in pipelineSteps(internship)"
+                :key="`detail-${step.id}`"
+                class="pipeline-step"
+                :class="{ current: internship.statusId === step.id }"
+              >
+                {{ step.label }}<template v-if="index < pipelineSteps(internship).length - 1"> → </template>
+              </span>
+            </div>
+          </div>
           <div v-if="internship.description">
             <p class="listing-detail-label">Beskrivelse</p>
             <p>{{ internship.description }}</p>
@@ -239,6 +292,7 @@ function formatDeadline(value?: string) {
     <CatalogSettingsPanel>
       <div>
         <h3>Status</h3>
+        <p class="field-hint">Rekkefølgen på stegene blir standardflyt for nye internships. Tilbud, avslått og trukket er utfall.</p>
         <div v-for="status in settingsStore.statuses" :key="status.id" class="catalog-row">
           <template v-if="editingCatalog?.kind === 'status' && editingCatalog.id === status.id">
             <input v-model="editingCatalog.label" />
@@ -246,6 +300,11 @@ function formatDeadline(value?: string) {
           </template>
           <template v-else>
             <span>{{ status.label }}</span>
+            <small v-if="status.kind === 'outcome'" class="catalog-kind">Utfall</small>
+            <template v-if="status.kind !== 'outcome'">
+              <button type="button" class="mini" :disabled="!canMoveCatalogStatus(status.id, -1)" @click="moveCatalogStatus(status.id, -1)">Opp</button>
+              <button type="button" class="mini" :disabled="!canMoveCatalogStatus(status.id, 1)" @click="moveCatalogStatus(status.id, 1)">Ned</button>
+            </template>
             <button type="button" class="mini" @click="editingCatalog = { kind: 'status', id: status.id, label: status.label, description: '' }">Rediger</button>
             <button type="button" class="mini danger" @click="removeCatalogItem('status', status.id)">Slett</button>
           </template>
@@ -318,7 +377,7 @@ function formatDeadline(value?: string) {
         <label>
           Status
           <select v-model="internshipsStore.form.statusId" required>
-            <option v-for="status in settingsStore.statuses" :key="status.id" :value="status.id">{{ status.label }}</option>
+            <option v-for="status in internshipsStore.formStatusOptions" :key="status.id" :value="status.id">{{ status.label }}</option>
           </select>
         </label>
         <label>
@@ -337,6 +396,26 @@ function formatDeadline(value?: string) {
           Notater
           <textarea v-model="internshipsStore.form.notes" placeholder="Kontaktperson, tips, interne notater" />
         </label>
+        <div class="wide-field">
+          <span class="field-label">Søknadsflyt</span>
+          <p class="field-hint">Velg og sorter stegene som gjelder for denne stillingen. Standardmalen brukes som utgangspunkt.</p>
+          <div v-for="id in internshipsStore.form.stageIds" :key="id" class="flow-row">
+            <label class="checkbox-inline">
+              <input type="checkbox" checked @change="internshipsStore.toggleStage(id)" />
+              Gjelder
+            </label>
+            <span>{{ statusById(id)?.label ?? "Steg" }}</span>
+            <button type="button" class="mini" @click="internshipsStore.moveStage(id, -1)">Opp</button>
+            <button type="button" class="mini" @click="internshipsStore.moveStage(id, 1)">Ned</button>
+          </div>
+          <div v-for="status in internshipsStore.unusedTemplateStages" :key="status.id" class="flow-row">
+            <label class="checkbox-inline">
+              <input type="checkbox" @change="internshipsStore.toggleStage(status.id)" />
+              Gjelder
+            </label>
+            <span>{{ status.label }}</span>
+          </div>
+        </div>
         <div class="wide-field chip-group">
           <span class="field-label">Sted</span>
           <button
