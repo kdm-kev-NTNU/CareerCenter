@@ -147,6 +147,7 @@ export interface InternshipPayload {
   notes: string;
   deadline?: string | null;
   statusId: string;
+  stageIds: string[];
   locationIds: string[];
   trackTags: CareerTrack[];
   requirements: InternshipRequirementItemPayload[];
@@ -176,4 +177,5 @@ export interface CatalogLabelPayload {
   label: string;
   sortOrder?: number;
   description?: string;
+  kind?: "stage" | "outcome";
 }

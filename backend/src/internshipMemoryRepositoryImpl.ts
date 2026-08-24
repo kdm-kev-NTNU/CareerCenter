@@ -7,6 +7,7 @@ import type {
   InternshipStatusOption
 } from "@careercenter/shared";
 import { createDefaultInternshipCatalog } from "./internshipCatalogMemory.js";
+import { planInternshipStatusReorder } from "./internshipPipeline.js";
 import type {
   CatalogLabelInput,
   InternshipInput,
@@ -88,11 +89,21 @@ export function createMemoryInternshipRepository() {
       notes: input.notes,
       deadline: input.deadline?.toISOString(),
       statusId: input.statusId,
+      stageIds: [...input.stageIds],
       locationIds: input.locationIds,
       trackTags: input.trackTags,
       requirements,
       createdAt: now,
       updatedAt: now
+    };
+  }
+
+  function toPublicStatus(status: InternshipStatusOption & { userId: string }): InternshipStatusOption {
+    return {
+      id: status.id,
+      label: status.label,
+      kind: status.kind,
+      sortOrder: status.sortOrder
     };
   }
 
@@ -104,21 +115,45 @@ export function createMemoryInternshipRepository() {
     createInternshipStatus(userId: string, input: CatalogLabelInput) {
       ensureCatalog(userId);
       const settings = getSettings(userId);
-      const status = { id: nanoid(), userId, label: input.label, sortOrder: input.sortOrder ?? settings.statuses.length };
+      const status = {
+        id: nanoid(),
+        userId,
+        label: input.label,
+        kind: input.kind === "outcome" ? ("outcome" as const) : ("stage" as const),
+        sortOrder: input.sortOrder ?? settings.statuses.length
+      };
       statuses.set(status.id, status);
-      return Promise.resolve(status);
+      return Promise.resolve(toPublicStatus(status));
     },
 
     updateInternshipStatus(userId: string, id: string, input: CatalogLabelInput) {
       const existing = statuses.get(id);
       if (!existing || existing.userId !== userId) return Promise.resolve(null);
-      const next = { ...existing, label: input.label, sortOrder: input.sortOrder ?? existing.sortOrder };
+      const next = {
+        ...existing,
+        label: input.label,
+        sortOrder: input.sortOrder ?? existing.sortOrder,
+        kind: input.kind ?? existing.kind
+      };
       statuses.set(id, next);
-      return Promise.resolve(next);
+      return Promise.resolve(toPublicStatus(next));
+    },
+
+    reorderInternshipStatuses(userId: string, ids: string[]) {
+      const settings = getSettings(userId);
+      const next = planInternshipStatusReorder(settings.statuses, ids);
+      for (const status of next) {
+        const existing = statuses.get(status.id);
+        if (!existing || existing.userId !== userId) continue;
+        statuses.set(status.id, { ...existing, sortOrder: status.sortOrder });
+      }
+      return Promise.resolve(getSettings(userId).statuses);
     },
 
     deleteInternshipStatus(userId: string, id: string) {
-      const count = [...internships.values()].filter((item) => item.userId === userId && item.statusId === id).length;
+      const count = [...internships.values()].filter(
+        (item) => item.userId === userId && (item.statusId === id || item.stageIds.includes(id))
+      ).length;
       if (count > 0) throw new CatalogInUseError(`Statusen er i bruk på ${count} internship.`);
       return Promise.resolve(statuses.delete(id));
     },

@@ -43,4 +43,68 @@ describe("validateListingInput", () => {
     ).rejects.toThrow(new InvalidReferenceError("Ugyldig kravtype."));
   });
 
+  it("rejects empty stageIds when a flow is provided", async () => {
+    await expect(
+      validateListingInput({ statusId: "status-1", locationIds: [], requirements: [], stageIds: [] }, settings)
+    ).rejects.toThrow(new InvalidReferenceError("Søknadsflyt må ha minst ett steg."));
+  });
+
+  it("rejects duplicate, outcome, and unknown stage ids", async () => {
+    const pipelineSettings = {
+      statuses: [
+        { id: "status-1", kind: "stage" as const },
+        { id: "status-2", kind: "stage" as const },
+        { id: "offer", kind: "outcome" as const }
+      ],
+      locations: [{ id: "loc-1" }],
+      requirementTypes: [{ id: "req-1" }]
+    };
+
+    await expect(
+      validateListingInput(
+        { statusId: "status-1", locationIds: [], requirements: [], stageIds: ["status-1", "status-1"] },
+        pipelineSettings
+      )
+    ).rejects.toThrow(new InvalidReferenceError("Duplikat i søknadsflyt."));
+
+    await expect(
+      validateListingInput(
+        { statusId: "status-1", locationIds: [], requirements: [], stageIds: ["status-1", "offer"] },
+        pipelineSettings
+      )
+    ).rejects.toThrow(new InvalidReferenceError("Utfall kan ikke inngå i søknadsflyten."));
+
+    await expect(
+      validateListingInput(
+        { statusId: "status-1", locationIds: [], requirements: [], stageIds: ["missing"] },
+        pipelineSettings
+      )
+    ).rejects.toThrow(new InvalidReferenceError("Ugyldig steg i flyt."));
+  });
+
+  it("requires a current stage to belong to the internship flow", async () => {
+    const pipelineSettings = {
+      statuses: [
+        { id: "status-1", kind: "stage" as const },
+        { id: "status-2", kind: "stage" as const },
+        { id: "offer", kind: "outcome" as const }
+      ],
+      locations: [],
+      requirementTypes: []
+    };
+
+    await expect(
+      validateListingInput(
+        { statusId: "status-2", locationIds: [], requirements: [], stageIds: ["status-1"] },
+        pipelineSettings
+      )
+    ).rejects.toThrow(new InvalidReferenceError("Statusen må inngå i søknadsflyten."));
+
+    await expect(
+      validateListingInput(
+        { statusId: "offer", locationIds: [], requirements: [], stageIds: ["status-1"] },
+        pipelineSettings
+      )
+    ).resolves.toMatchObject({ statusId: "offer", stageIds: ["status-1"] });
+  });
 });

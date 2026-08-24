@@ -1,13 +1,24 @@
+export const internshipOutcomeStatusLabels = ["Tilbud", "Avslått", "Trukket"] as const;
+
 export const defaultInternshipStatuses = [
   "Interessert",
   "Forbereder søknad",
   "Søkt",
-  "Case / online test",
+  "Online test",
+  "Ferdig med online test",
+  "Case",
+  "Ferdig case",
+  "Videosøknad",
+  "Ferdig videosøknad",
   "Intervju",
   "Tilbud",
   "Avslått",
   "Trukket"
-];
+] as const;
+
+export function internshipStatusKind(label: string): "stage" | "outcome" {
+  return (internshipOutcomeStatusLabels as readonly string[]).includes(label) ? "outcome" : "stage";
+}
 
 export const defaultInternshipLocations = [
   "Oslo",
@@ -32,5 +43,7 @@ export const defaultInternshipRequirementTypes: Array<{ label: string; descripti
   { label: "Attest / politiattest", description: "Hvis stillingen krever sikkerhetsklarering" },
   { label: "Språktest (TOEFL/IELTS)", description: "Dokumentasjon av engelskkunnskaper" },
   { label: "Case / hjemmeoppgave", description: "Teknisk eller forretningscase" },
+  { label: "Online test", description: "Numerisk, logisk eller situasjonsbasert test" },
+  { label: "Videosøknad", description: "Forhåndsinnspilt videosvar eller videointervju" },
   { label: "Intervjuforberedelse", description: "Forberedelse på intervju og spørsmål" }
 ];

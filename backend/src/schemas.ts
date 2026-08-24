@@ -189,7 +189,12 @@ export const bachelorFileUpdateSchema = z.object({
 export const catalogLabelSchema = z.object({
   label: z.string().min(1),
   sortOrder: z.number().int().optional(),
-  description: z.string().default("")
+  description: z.string().default(""),
+  kind: z.enum(["stage", "outcome"]).optional()
+});
+
+export const catalogReorderSchema = z.object({
+  ids: z.array(z.string().min(1)).min(1)
 });
 
 export const internshipRequirementItemSchema = z.object({
@@ -214,6 +219,7 @@ export const internshipSchema = z.object({
   notes: z.string().default(""),
   deadline: optionalDateField,
   statusId: z.string().min(1),
+  stageIds: z.array(z.string().min(1)).min(1),
   locationIds: z.array(z.string()).default([]),
   trackTags: z.array(z.enum(careerTracks)).default([]),
   requirements: z.array(internshipRequirementItemSchema).default([])

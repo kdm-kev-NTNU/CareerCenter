@@ -338,11 +338,13 @@ export interface ThesisCompany {
   sortOrder: number;
 }
 
-export interface InternshipStatusOption {
-  id: string;
-  label: string;
-  sortOrder: number;
-}
+export {
+  internshipStatusKinds,
+  isInternshipStage,
+  internshipTemplateStageIds
+} from "./internshipStatus.js";
+export type { InternshipStatusKind, InternshipStatusOption } from "./internshipStatus.js";
+import type { InternshipStatusOption } from "./internshipStatus.js";
 
 export interface InternshipLocationOption {
   id: string;
@@ -377,6 +379,7 @@ export interface Internship {
   deadline?: string;
   statusId: string;
   status?: InternshipStatusOption;
+  stageIds: string[];
   locationIds: string[];
   locations?: InternshipLocationOption[];
   trackTags: CareerTrack[];

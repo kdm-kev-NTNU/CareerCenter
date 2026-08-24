@@ -213,6 +213,37 @@ nav button.active, nav button:hover { background: #1f2937; color: #ffffff; }
   padding: 8px 0;
   border-top: 1px solid var(--border);
 }
+.catalog-kind {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.field-hint {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+.flow-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+.flow-row span { flex: 1; }
+.pipeline-stepper {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 0;
+  align-items: center;
+  margin-top: 4px;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.pipeline-step { white-space: nowrap; }
+.pipeline-step.current { color: var(--accent, #0f766e); font-weight: 800; }
 .catalog-row.requirement-catalog { flex-wrap: wrap; }
 .catalog-add { display: grid; gap: 8px; margin-top: 12px; }
 .mini.danger { color: #b91c1c; }

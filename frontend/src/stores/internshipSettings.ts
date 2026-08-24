@@ -1,16 +1,20 @@
 import { defineStore } from "pinia";
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import type {
   InternshipLocationOption,
   InternshipRequirementType,
   InternshipStatusOption
 } from "@careercenter/shared";
+import { isInternshipStage } from "@careercenter/shared";
 import { api } from "../api/index.js";
 
 export const useInternshipSettingsStore = defineStore("internshipSettings", () => {
   const statuses = ref<InternshipStatusOption[]>([]);
   const locations = ref<InternshipLocationOption[]>([]);
   const requirementTypes = ref<InternshipRequirementType[]>([]);
+
+  const stageStatuses = computed(() => statuses.value.filter(isInternshipStage));
+  const outcomeStatuses = computed(() => statuses.value.filter((status) => status.kind === "outcome"));
 
   async function loadSettings() {
     const settings = await api.settings();
@@ -20,7 +24,7 @@ export const useInternshipSettingsStore = defineStore("internshipSettings", () =
   }
 
   async function addStatus(label: string) {
-    const created = await api.createStatus({ label });
+    const created = await api.createStatus({ label, kind: "stage" });
     statuses.value.push(created);
   }
 
@@ -28,6 +32,10 @@ export const useInternshipSettingsStore = defineStore("internshipSettings", () =
     const updated = await api.updateStatus(id, { label });
     if (!updated) return;
     statuses.value = statuses.value.map((item) => (item.id === id ? updated : item));
+  }
+
+  async function reorderStatuses(ids: string[]) {
+    statuses.value = await api.reorderStatuses(ids);
   }
 
   async function removeStatus(id: string) {
@@ -71,9 +79,12 @@ export const useInternshipSettingsStore = defineStore("internshipSettings", () =
     statuses,
     locations,
     requirementTypes,
+    stageStatuses,
+    outcomeStatuses,
     loadSettings,
     addStatus,
     updateStatus,
+    reorderStatuses,
     removeStatus,
     addLocation,
     updateLocation,

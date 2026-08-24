@@ -26,6 +26,12 @@ export const internshipSettingsApi = {
   deleteStatus(id: string) {
     return request<void>(`/api/internship-settings/statuses/${id}`, { method: "DELETE" });
   },
+  reorderStatuses(ids: string[]) {
+    return request<InternshipStatusOption[]>("/api/internship-settings/statuses/reorder", {
+      method: "PUT",
+      body: JSON.stringify({ ids })
+    });
+  },
   createLocation(payload: CatalogLabelPayload) {
     return request<InternshipLocationOption>("/api/internship-settings/locations", {
       method: "POST",

@@ -21,7 +21,19 @@ describe("schemas", () => {
       internshipSchema.parse({
         companyName: "",
         title: "Intern",
-        statusId: "status-1"
+        statusId: "status-1",
+        stageIds: ["status-1"]
+      })
+    ).toThrow();
+  });
+
+  it("rejects internship payloads without a pipeline", () => {
+    expect(() =>
+      internshipSchema.parse({
+        companyName: "Statkraft",
+        title: "Intern",
+        statusId: "status-1",
+        stageIds: []
       })
     ).toThrow();
   });

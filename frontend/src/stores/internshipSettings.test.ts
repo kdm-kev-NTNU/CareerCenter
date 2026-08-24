@@ -9,6 +9,7 @@ vi.mock("../api/index.js", () => ({
     createStatus: vi.fn(),
     updateStatus: vi.fn(),
     deleteStatus: vi.fn(),
+    reorderStatuses: vi.fn(),
     createLocation: vi.fn(),
     updateLocation: vi.fn(),
     deleteLocation: vi.fn(),
@@ -25,7 +26,7 @@ describe("useInternshipSettingsStore", () => {
     setActivePinia(createPinia());
     vi.clearAllMocks();
     mockedApi.settings.mockResolvedValue({
-      statuses: [{ id: "s1", label: "Open", sortOrder: 0 }],
+      statuses: [{ id: "s1", label: "Open", kind: "stage", sortOrder: 0 }],
       locations: [{ id: "l1", label: "Oslo", sortOrder: 0 }],
       requirementTypes: [{ id: "r1", label: "CV", description: "", sortOrder: 0 }]
     });
@@ -36,13 +37,20 @@ describe("useInternshipSettingsStore", () => {
     await store.loadSettings();
     expect(store.statuses).toHaveLength(1);
 
-    mockedApi.createStatus.mockResolvedValue({ id: "s2", label: "New", sortOrder: 1 });
+    mockedApi.createStatus.mockResolvedValue({ id: "s2", label: "New", kind: "stage", sortOrder: 1 });
     await store.addStatus("New");
     expect(store.statuses).toHaveLength(2);
 
-    mockedApi.updateStatus.mockResolvedValue({ id: "s2", label: "Updated", sortOrder: 1 });
+    mockedApi.updateStatus.mockResolvedValue({ id: "s2", label: "Updated", kind: "stage", sortOrder: 1 });
     await store.updateStatus("s2", "Updated");
     expect(store.statuses.find((item) => item.id === "s2")?.label).toBe("Updated");
+
+    mockedApi.reorderStatuses.mockResolvedValue([
+      { id: "s2", label: "Updated", kind: "stage", sortOrder: 0 },
+      { id: "s1", label: "Open", kind: "stage", sortOrder: 1 }
+    ]);
+    await store.reorderStatuses(["s2", "s1"]);
+    expect(store.statuses.map((item) => item.id)).toEqual(["s2", "s1"]);
 
     mockedApi.deleteStatus.mockResolvedValue(undefined);
     await store.removeStatus("s2");

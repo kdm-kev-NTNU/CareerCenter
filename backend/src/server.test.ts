@@ -11,6 +11,10 @@ async function createTestApp() {
   return app;
 }
 
+function internshipStageIds(settings: { statuses: Array<{ id: string; kind?: string }> }) {
+  return settings.statuses.filter((status) => status.kind !== "outcome").map((status) => status.id);
+}
+
 describe("CareerCenter API", () => {
   it("rejects login with wrong pin", async () => {
     const app = await buildServer({ repository: new MemoryRepository(), authDisabled: false });
@@ -313,6 +317,7 @@ describe("CareerCenter API", () => {
         notes: "Søk tidlig",
         deadline: "2026-06-01",
         statusId,
+        stageIds: internshipStageIds(settings.json()),
         locationIds: [locationId],
         trackTags: ["ENERGY_QUANT"],
         requirements: settings.json().requirementTypes.slice(0, 2).map((type: { id: string }) => ({
@@ -415,6 +420,7 @@ describe("CareerCenter API", () => {
         companyName: "NBIM",
         title: "Intern",
         statusId,
+        stageIds: internshipStageIds(settings.json()),
         locationIds: [],
         trackTags: [],
         requirements: []
@@ -1258,9 +1264,25 @@ describe("CareerCenter API", () => {
       const settings = await app.inject({ method: "GET", url: "/api/internship-settings" });
       expect(settings.statusCode).toBe(200);
       return settings.json() as {
-        statuses: Array<{ id: string }>;
+        statuses: Array<{ id: string; kind?: string }>;
         locations: Array<{ id: string }>;
         requirementTypes: Array<{ id: string }>;
+      };
+    }
+
+    function internshipBody(
+      settings: Awaited<ReturnType<typeof loadInternshipSettings>>,
+      overrides: Record<string, unknown> = {}
+    ) {
+      return {
+        companyName: "Statkraft",
+        title: "Intern",
+        statusId: settings.statuses[0].id,
+        stageIds: internshipStageIds(settings),
+        locationIds: [] as string[],
+        trackTags: [] as string[],
+        requirements: [] as unknown[],
+        ...overrides
       };
     }
 
@@ -1273,6 +1295,7 @@ describe("CareerCenter API", () => {
           companyName: "Test AS",
           title: "Intern",
           statusId: "missing-status",
+          stageIds: ["missing-status"],
           locationIds: [],
           trackTags: [],
           requirements: []
@@ -1294,34 +1317,61 @@ describe("CareerCenter API", () => {
       await app.close();
     });
 
+    it("rejects create without a pipeline", async () => {
+      const app = await createTestApp();
+      const settings = await loadInternshipSettings(app);
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/internships",
+        payload: internshipBody(settings, { stageIds: [] })
+      });
+      expect(created.statusCode).toBe(400);
+      await app.close();
+    });
+
+    it("stores a custom internship pipeline", async () => {
+      const app = await createTestApp();
+      const settings = await loadInternshipSettings(app);
+      const stageIds = [settings.statuses[2].id, settings.statuses[5].id];
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/internships",
+        payload: internshipBody(settings, {
+          companyName: "McKinsey",
+          title: "Intern",
+          statusId: stageIds[0],
+          stageIds
+        })
+      });
+      expect(created.statusCode).toBe(200);
+      expect(created.json().stageIds).toEqual(stageIds);
+      await app.close();
+    });
+
     it("updates an internship", async () => {
       const app = await createTestApp();
       const settings = await loadInternshipSettings(app);
       const created = await app.inject({
         method: "POST",
         url: "/api/internships",
-        payload: {
+        payload: internshipBody(settings, {
           companyName: "Statkraft",
           title: "Summer Intern",
-          statusId: settings.statuses[0].id,
           locationIds: [settings.locations[0].id],
-          trackTags: ["ENERGY_QUANT"],
-          requirements: []
-        }
+          trackTags: ["ENERGY_QUANT"]
+        })
       });
       expect(created.statusCode).toBe(200);
 
       const updated = await app.inject({
         method: "PUT",
         url: `/api/internships/${created.json().id}`,
-        payload: {
+        payload: internshipBody(settings, {
           companyName: "Statkraft",
           title: "Summer Intern (oppdatert)",
-          statusId: settings.statuses[0].id,
           locationIds: [settings.locations[0].id],
-          trackTags: ["ENERGY_QUANT"],
-          requirements: []
-        }
+          trackTags: ["ENERGY_QUANT"]
+        })
       });
       expect(updated.statusCode).toBe(200);
       expect(updated.json().title).toBe("Summer Intern (oppdatert)");
@@ -1334,14 +1384,7 @@ describe("CareerCenter API", () => {
       const updated = await app.inject({
         method: "PUT",
         url: "/api/internships/missing-id",
-        payload: {
-          companyName: "Statkraft",
-          title: "Ghost",
-          statusId: settings.statuses[0].id,
-          locationIds: [],
-          trackTags: [],
-          requirements: []
-        }
+        payload: internshipBody(settings, { companyName: "Statkraft", title: "Ghost" })
       });
       expect(updated.statusCode).toBe(404);
       await app.close();
@@ -1353,26 +1396,23 @@ describe("CareerCenter API", () => {
       await app.inject({
         method: "POST",
         url: "/api/internships",
-        payload: {
+        payload: internshipBody(settings, {
           companyName: "Equinor",
           title: "Energy Intern",
-          statusId: settings.statuses[0].id,
           locationIds: [settings.locations[0].id],
-          trackTags: ["ENERGY_QUANT"],
-          requirements: []
-        }
+          trackTags: ["ENERGY_QUANT"]
+        })
       });
       await app.inject({
         method: "POST",
         url: "/api/internships",
-        payload: {
+        payload: internshipBody(settings, {
           companyName: "NBIM",
           title: "Investment Intern",
           statusId: settings.statuses[1]?.id ?? settings.statuses[0].id,
           locationIds: settings.locations[1] ? [settings.locations[1].id] : [],
-          trackTags: ["INVESTMENT_TECH"],
-          requirements: []
-        }
+          trackTags: ["INVESTMENT_TECH"]
+        })
       });
 
       const bySearch = await app.inject({ method: "GET", url: "/api/internships?q=Equinor" });
@@ -1428,6 +1468,21 @@ describe("CareerCenter API", () => {
       await app.close();
     });
 
+    it("reorders internship stage template", async () => {
+      const app = await createTestApp();
+      const settings = await loadInternshipSettings(app);
+      const stageIds = internshipStageIds(settings);
+      const reordered = [stageIds[1], stageIds[0], ...stageIds.slice(2)];
+      const result = await app.inject({
+        method: "PUT",
+        url: "/api/internship-settings/statuses/reorder",
+        payload: { ids: reordered }
+      });
+      expect(result.statusCode).toBe(200);
+      expect(internshipStageIds({ statuses: result.json() })).toEqual(reordered);
+      await app.close();
+    });
+
     it("blocks deleting internship location in use", async () => {
       const app = await createTestApp();
       const settings = await loadInternshipSettings(app);
@@ -1435,14 +1490,7 @@ describe("CareerCenter API", () => {
       await app.inject({
         method: "POST",
         url: "/api/internships",
-        payload: {
-          companyName: "Yara",
-          title: "Intern",
-          statusId: settings.statuses[0].id,
-          locationIds: [locationId],
-          trackTags: [],
-          requirements: []
-        }
+        payload: internshipBody(settings, { companyName: "Yara", locationIds: [locationId] })
       });
 
       const deleted = await app.inject({
@@ -1460,14 +1508,10 @@ describe("CareerCenter API", () => {
       await app.inject({
         method: "POST",
         url: "/api/internships",
-        payload: {
+        payload: internshipBody(settings, {
           companyName: "Orkla",
-          title: "Intern",
-          statusId: settings.statuses[0].id,
-          locationIds: [],
-          trackTags: [],
           requirements: [{ requirementTypeId, isRequired: true, isDone: false, notes: "" }]
-        }
+        })
       });
 
       const deleted = await app.inject({
@@ -1484,14 +1528,7 @@ describe("CareerCenter API", () => {
       const created = await app.inject({
         method: "POST",
         url: "/api/internships",
-        payload: {
-          companyName: "Telenor",
-          title: "Intern",
-          statusId: settings.statuses[0].id,
-          locationIds: [],
-          trackTags: [],
-          requirements: []
-        }
+        payload: internshipBody(settings, { companyName: "Telenor" })
       });
       expect(created.statusCode).toBe(200);
       expect(created.json().requirements.length).toBe(settings.requirementTypes.length);
