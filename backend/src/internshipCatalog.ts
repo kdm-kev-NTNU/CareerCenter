@@ -8,6 +8,8 @@ import {
 
 const LEGACY_COMBINED_STATUS_LABEL = "Case / online test";
 const CASE_STATUS_LABEL = "Case";
+const LEGACY_INTERVIEW_STATUS_LABEL = "Intervju";
+const INTERVIEW_1_STATUS_LABEL = "Intervju 1";
 
 async function renameLegacyCombinedStatus(prisma: PrismaClient, userId: string) {
   const existing = await prisma.internshipStatusOption.findMany({ where: { userId } });
@@ -18,6 +20,18 @@ async function renameLegacyCombinedStatus(prisma: PrismaClient, userId: string) 
   await prisma.internshipStatusOption.update({
     where: { id: combined.id },
     data: { label: CASE_STATUS_LABEL }
+  });
+}
+
+async function renameLegacyInterviewStatus(prisma: PrismaClient, userId: string) {
+  const existing = await prisma.internshipStatusOption.findMany({ where: { userId } });
+  const legacy = existing.find((status) => status.label === LEGACY_INTERVIEW_STATUS_LABEL);
+  if (!legacy) return;
+  if (existing.some((status) => status.label === INTERVIEW_1_STATUS_LABEL)) return;
+
+  await prisma.internshipStatusOption.update({
+    where: { id: legacy.id },
+    data: { label: INTERVIEW_1_STATUS_LABEL }
   });
 }
 
@@ -150,6 +164,7 @@ export async function ensureInternshipCatalog(prisma: PrismaClient, userId: stri
     });
   } else {
     await renameLegacyCombinedStatus(prisma, userId);
+    await renameLegacyInterviewStatus(prisma, userId);
     await ensureInternshipStatusKinds(prisma, userId);
     await ensureMissingInternshipStatuses(prisma, userId);
   }

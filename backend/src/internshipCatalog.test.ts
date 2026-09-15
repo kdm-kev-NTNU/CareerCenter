@@ -213,6 +213,11 @@ describe("ensureInternshipCatalog", () => {
     expect(defaultInternshipStatuses).toContain("Ferdig med online test");
     expect(defaultInternshipStatuses).toContain("Videosøknad");
     expect(defaultInternshipStatuses).toContain("Ferdig videosøknad");
+    expect(defaultInternshipStatuses).toContain("Intervju 1");
+    expect(defaultInternshipStatuses).toContain("Intervju 1 med case");
+    expect(defaultInternshipStatuses).toContain("Intervju 2");
+    expect(defaultInternshipStatuses).toContain("Intervju 2 med case");
+    expect(defaultInternshipStatuses).not.toContain("Intervju");
   });
 
   it("inserts split pipeline statuses after Søkt for legacy catalogs", async () => {
@@ -232,6 +237,10 @@ describe("ensureInternshipCatalog", () => {
     expect(labels.indexOf("Online test")).toBe(labels.indexOf("Søkt") + 1);
     expect(labels.indexOf("Case")).toBe(labels.indexOf("Ferdig med online test") + 1);
     expect(labels.indexOf("Videosøknad")).toBe(labels.indexOf("Ferdig case") + 1);
+    expect(labels.indexOf("Intervju 1")).toBe(labels.indexOf("Ferdig videosøknad") + 1);
+    expect(labels.indexOf("Intervju 1 med case")).toBe(labels.indexOf("Intervju 1") + 1);
+    expect(labels.indexOf("Intervju 2")).toBe(labels.indexOf("Intervju 1 med case") + 1);
+    expect(labels.indexOf("Intervju 2 med case")).toBe(labels.indexOf("Intervju 2") + 1);
   });
 
   it("renames Case / online test to Case and inserts missing pipeline statuses", async () => {
@@ -251,6 +260,44 @@ describe("ensureInternshipCatalog", () => {
     expect(labels).not.toContain("Case / online test");
     expect(labels.filter((label) => label === "Case")).toHaveLength(1);
     expect(labels).toEqual([...defaultInternshipStatuses]);
+  });
+
+  it("renames Intervju to Intervju 1 and inserts interview case variants", async () => {
+    const currentWithLegacyInterview = [
+      "Interessert",
+      "Forbereder søknad",
+      "Søkt",
+      "Online test",
+      "Ferdig med online test",
+      "Case",
+      "Ferdig case",
+      "Videosøknad",
+      "Ferdig videosøknad",
+      "Intervju",
+      "Tilbud",
+      "Avslått",
+      "Trukket"
+    ];
+    const { asClient, getStatuses } = createCatalogPrismaMock(
+      currentWithLegacyInterview.map((label, sortOrder) => ({
+        id: `legacy-interview-${sortOrder}`,
+        userId: "user-1",
+        label,
+        kind: ["Tilbud", "Avslått", "Trukket"].includes(label) ? "outcome" : "stage",
+        sortOrder
+      }))
+    );
+
+    await ensureInternshipCatalog(asClient, "user-1");
+
+    const statuses = getStatuses("user-1");
+    const labels = statuses.map((status) => status.label);
+    expect(labels).not.toContain("Intervju");
+    expect(labels).toEqual([...defaultInternshipStatuses]);
+    expect(statuses.find((status) => status.label === "Intervju 1")?.id).toBe("legacy-interview-9");
+    expect(labels.indexOf("Intervju 1 med case")).toBe(labels.indexOf("Intervju 1") + 1);
+    expect(labels.indexOf("Intervju 2")).toBe(labels.indexOf("Intervju 1 med case") + 1);
+    expect(labels.indexOf("Intervju 2 med case")).toBe(labels.indexOf("Intervju 2") + 1);
   });
 
   it("does not duplicate pipeline statuses when already present", async () => {
@@ -288,7 +335,8 @@ describe("ensureInternshipCatalog", () => {
     await ensureInternshipCatalog(asClient, "user-1");
 
     const [internship] = getInternships("user-1");
+    const tilbudIndex = defaultInternshipStatuses.indexOf("Tilbud");
     expect(internship.stageIds.length).toBeGreaterThan(0);
-    expect(internship.stageIds).not.toContain("current-10");
+    expect(internship.stageIds).not.toContain(`current-${tilbudIndex}`);
   });
 });
