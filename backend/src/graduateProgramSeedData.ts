@@ -4,7 +4,10 @@ export const defaultGraduateProgramStatuses = [
   "Søkt",
   "Case / online test",
   "Assessment center",
-  "Intervju",
+  "Intervju 1",
+  "Intervju 1 med case",
+  "Intervju 2",
+  "Intervju 2 med case",
   "Tilbud",
   "Avslått",
   "Trukket"
