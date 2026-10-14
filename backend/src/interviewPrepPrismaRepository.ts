@@ -1,12 +1,15 @@
 import { PrismaClient } from "@prisma/client";
 import type {
   AbilityTestKind,
+  CaseApprovalStatus,
   CaseSourceKind,
   CaseStyle,
+  ImportJobStatus,
   InterviewMode,
   KnowledgeDocKind,
   PrepFormat,
   PrepPlanStatus,
+  PrepQuestionSource,
   QuestionCategory,
   QuestionTarget,
   StarRubricCriterion,
@@ -18,9 +21,13 @@ import { parseStarScores } from "./interview/meccaMappers.js";
 import type {
   AbilityAttemptInput,
   CaseEntryInput,
+  ImportJobCreateInput,
+  ImportJobUpdateInput,
   InterviewAbilityTestAttemptRecord,
+  InterviewBankQuestionRecord,
   InterviewCaseEntryRecord,
   InterviewCaseRepertoireLogRecord,
+  InterviewImportJobRecord,
   InterviewKnowledgeDoc,
   InterviewMessageRecord,
   InterviewPrepPlanRecord,
@@ -65,6 +72,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
         title: input.title,
         content: input.content,
         sourceFilename: input.sourceFilename,
+        originalFileKey: input.originalFileKey,
         contentHash: input.contentHash
       }
     });
@@ -85,6 +93,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
         title: input.title,
         content: input.content,
         sourceFilename: input.sourceFilename,
+        originalFileKey: input.originalFileKey,
         contentHash: input.contentHash
       }
     });
@@ -98,9 +107,87 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
     return true;
   }
 
+  async replaceBankQuestionsForDoc(
+    userId: string,
+    knowledgeDocId: string,
+    questions: Array<{ text: string; category: QuestionCategory; tags: string[]; contentHash: string }>
+  ): Promise<void> {
+    await this.prisma.$transaction([
+      this.prisma.interviewBankQuestion.deleteMany({ where: { userId, knowledgeDocId } }),
+      ...(questions.length > 0
+        ? [
+            this.prisma.interviewBankQuestion.createMany({
+              data: questions.map((item) => ({
+                userId,
+                knowledgeDocId,
+                text: item.text,
+                category: item.category,
+                tags: item.tags,
+                contentHash: item.contentHash
+              }))
+            })
+          ]
+        : [])
+    ]);
+  }
+
+  async listBankQuestions(
+    userId: string,
+    filter?: { q?: string; category?: string; tag?: string }
+  ): Promise<InterviewBankQuestionRecord[]> {
+    const rows = await this.prisma.interviewBankQuestion.findMany({
+      where: {
+        userId,
+        ...(filter?.category ? { category: filter.category } : {}),
+        ...(filter?.tag ? { tags: { has: filter.tag } } : {}),
+        ...(filter?.q
+          ? {
+              text: { contains: filter.q, mode: "insensitive" }
+            }
+          : {})
+      },
+      orderBy: { text: "asc" }
+    });
+    return rows.map((row) => this.mapBankQuestion(row));
+  }
+
+  async getBankQuestionsByIds(userId: string, ids: string[]): Promise<InterviewBankQuestionRecord[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.prisma.interviewBankQuestion.findMany({
+      where: { userId, id: { in: ids } }
+    });
+    return rows.map((row) => this.mapBankQuestion(row));
+  }
+
   async listCaseEntries(userId: string): Promise<InterviewCaseEntryRecord[]> {
     const rows = await this.prisma.interviewCaseEntry.findMany({
       where: { userId },
+      orderBy: { title: "asc" }
+    });
+    return rows.map((row) => this.mapCase(row));
+  }
+
+  async searchCaseEntries(
+    userId: string,
+    filter?: { q?: string; sourceKind?: string; style?: string; approvalStatus?: string }
+  ): Promise<InterviewCaseEntryRecord[]> {
+    const rows = await this.prisma.interviewCaseEntry.findMany({
+      where: {
+        userId,
+        ...(filter?.sourceKind ? { sourceKind: filter.sourceKind } : {}),
+        ...(filter?.style ? { caseStyle: filter.style } : {}),
+        ...(filter?.approvalStatus ? { approvalStatus: filter.approvalStatus } : {}),
+        ...(filter?.q
+          ? {
+              OR: [
+                { title: { contains: filter.q, mode: "insensitive" } },
+                { prompt: { contains: filter.q, mode: "insensitive" } },
+                { interviewerInfo: { contains: filter.q, mode: "insensitive" } },
+                { solution: { contains: filter.q, mode: "insensitive" } }
+              ]
+            }
+          : {})
+      },
       orderBy: { title: "asc" }
     });
     return rows.map((row) => this.mapCase(row));
@@ -125,7 +212,9 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
         sourceKind: input.sourceKind,
         caseStyle: input.caseStyle,
         companyTags: input.companyTags,
-        contentHash: input.contentHash
+        contentHash: input.contentHash,
+        approvalStatus: input.approvalStatus ?? "approved",
+        originalFileKey: input.originalFileKey
       }
     });
     return this.mapCase(row);
@@ -149,7 +238,9 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
         sourceKind: input.sourceKind,
         caseStyle: input.caseStyle,
         companyTags: input.companyTags,
-        contentHash: input.contentHash
+        contentHash: input.contentHash,
+        approvalStatus: input.approvalStatus,
+        originalFileKey: input.originalFileKey
       }
     });
     return this.mapCase(row);
@@ -160,6 +251,14 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
     if (!existing) return false;
     await this.prisma.interviewCaseEntry.delete({ where: { id } });
     return true;
+  }
+
+  async approveCaseEntry(userId: string, id: string): Promise<InterviewCaseEntryRecord | null> {
+    return this.updateCaseEntry(userId, id, { approvalStatus: "approved" });
+  }
+
+  async rejectCaseEntry(userId: string, id: string): Promise<InterviewCaseEntryRecord | null> {
+    return this.updateCaseEntry(userId, id, { approvalStatus: "rejected" });
   }
 
   async listPrepPlans(userId: string): Promise<InterviewPrepPlanRecord[]> {
@@ -212,26 +311,63 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
   async setPrepPlanResearch(
     userId: string,
     id: string,
-    input: { researchNotes: string; clarifications: Array<{ question: string; sortOrder: number }> }
+    input: {
+      researchNotes: string;
+      clarifications: Array<{ question: string; sortOrder: number }>;
+      companyProfileJson?: string;
+      clarificationRound?: number;
+    }
   ): Promise<InterviewPrepPlanRecord | null> {
     const existing = await this.prisma.interviewPrepPlan.findFirst({ where: { id, userId } });
     if (!existing) return null;
+    const round = input.clarificationRound ?? 1;
     await this.prisma.$transaction([
       this.prisma.interviewPrepClarification.deleteMany({ where: { planId: id } }),
       this.prisma.interviewPrepPlan.update({
         where: { id },
         data: {
           researchNotes: input.researchNotes,
+          clarificationRound: round,
+          ...(input.companyProfileJson !== undefined
+            ? { companyProfileJson: input.companyProfileJson }
+            : {}),
           clarifications: {
             create: input.clarifications.map((item) => ({
               question: item.question,
-              sortOrder: item.sortOrder
+              sortOrder: item.sortOrder,
+              round
             }))
           }
         }
       })
     ]);
     return this.getPrepPlan(userId, id);
+  }
+
+  async appendClarificationRound(
+    userId: string,
+    planId: string,
+    clarifications: Array<{ question: string; sortOrder: number }>,
+    round: number
+  ): Promise<InterviewPrepPlanRecord | null> {
+    const existing = await this.prisma.interviewPrepPlan.findFirst({ where: { id: planId, userId } });
+    if (!existing) return null;
+    await this.prisma.$transaction([
+      this.prisma.interviewPrepPlan.update({
+        where: { id: planId },
+        data: {
+          clarificationRound: round,
+          clarifications: {
+            create: clarifications.map((item) => ({
+              question: item.question,
+              sortOrder: item.sortOrder,
+              round
+            }))
+          }
+        }
+      })
+    ]);
+    return this.getPrepPlan(userId, planId);
   }
 
   async saveClarificationAnswers(
@@ -256,8 +392,17 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
     userId: string,
     id: string,
     input: {
-      questions: Array<{ text: string; category: QuestionCategory; target: QuestionTarget }>;
+      questions: Array<{
+        text: string;
+        category: QuestionCategory;
+        target: QuestionTarget;
+        source: PrepQuestionSource;
+        bankQuestionId?: string;
+        storyId?: string;
+        gapReason?: string;
+      }>;
       tasks: Array<{ title: string; description: string }>;
+      recommendedCaseIds?: string[];
     }
   ): Promise<InterviewPrepPlanRecord | null> {
     const existing = await this.prisma.interviewPrepPlan.findFirst({ where: { id, userId } });
@@ -265,6 +410,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
     await this.prisma.$transaction([
       this.prisma.interviewPrepQuestion.deleteMany({ where: { planId: id } }),
       this.prisma.interviewPrepTask.deleteMany({ where: { planId: id } }),
+      this.prisma.interviewPrepPlanCase.deleteMany({ where: { planId: id } }),
       this.prisma.interviewPrepPlan.update({
         where: { id },
         data: {
@@ -273,7 +419,11 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
               text: item.text,
               category: item.category,
               target: item.target,
-              sortOrder: index
+              sortOrder: index,
+              source: item.source ?? "generated",
+              bankQuestionId: item.bankQuestionId,
+              storyId: item.storyId,
+              gapReason: item.gapReason
             }))
           },
           tasks: {
@@ -282,11 +432,73 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
               description: item.description,
               sortOrder: index
             }))
+          },
+          recommendedCases: {
+            create: (input.recommendedCaseIds ?? []).map((caseEntryId, index) => ({
+              caseEntryId,
+              sortOrder: index
+            }))
           }
         }
       })
     ]);
     return this.getPrepPlan(userId, id);
+  }
+
+  async replacePlanQuestion(
+    userId: string,
+    planId: string,
+    questionId: string,
+    replacement: {
+      text: string;
+      category: QuestionCategory;
+      target: QuestionTarget;
+      source: PrepQuestionSource;
+      bankQuestionId?: string;
+      storyId?: string;
+    }
+  ): Promise<InterviewPrepPlanRecord | null> {
+    const plan = await this.getPrepPlan(userId, planId);
+    if (!plan) return null;
+    const existing = plan.questions.find((q) => q.id === questionId);
+    if (!existing) return null;
+    await this.prisma.interviewPrepQuestion.updateMany({
+      where: { id: questionId, planId },
+      data: {
+        text: replacement.text,
+        category: replacement.category,
+        target: replacement.target,
+        source: replacement.source,
+        bankQuestionId: replacement.bankQuestionId ?? null,
+        storyId: replacement.storyId ?? null,
+        gapReason: null
+      }
+    });
+    await this.prisma.interviewPrepPlan.update({
+      where: { id: planId },
+      data: { updatedAt: new Date() }
+    });
+    return this.getPrepPlan(userId, planId);
+  }
+
+  async setPlanQuestionStory(
+    userId: string,
+    planId: string,
+    questionId: string,
+    storyId: string | null
+  ): Promise<InterviewPrepPlanRecord | null> {
+    const plan = await this.getPrepPlan(userId, planId);
+    if (!plan) return null;
+    if (!plan.questions.some((q) => q.id === questionId)) return null;
+    await this.prisma.interviewPrepQuestion.updateMany({
+      where: { id: questionId, planId },
+      data: { storyId }
+    });
+    await this.prisma.interviewPrepPlan.update({
+      where: { id: planId },
+      data: { updatedAt: new Date() }
+    });
+    return this.getPrepPlan(userId, planId);
   }
 
   async getSimulatorSettings(userId: string, mode: InterviewMode): Promise<InterviewSimulatorSettingsRecord | null> {
@@ -335,7 +547,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
 
   async createSession(
     userId: string,
-    input: { mode: InterviewMode; title: string; prepPlanId?: string; systemPrompt: string }
+    input: { mode: InterviewMode; title: string; prepPlanId?: string; caseEntryId?: string; systemPrompt: string }
   ): Promise<InterviewSessionRecord> {
     const row = await this.prisma.interviewSession.create({
       data: {
@@ -343,6 +555,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
         mode: input.mode,
         title: input.title,
         prepPlanId: input.prepPlanId,
+        caseEntryId: input.caseEntryId,
         messages: {
           create: { role: "system", content: input.systemPrompt }
         }
@@ -386,14 +599,16 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
   ): Promise<InterviewSessionRecord | null> {
     const session = await this.getSession(userId, sessionId);
     if (!session) return null;
-    const row = await this.prisma.interviewSession.update({
-      where: { id: sessionId },
+    const result = await this.prisma.interviewSession.updateMany({
+      where: { id: sessionId, userId, finishedAt: null },
       data: {
         feedbackJson: JSON.stringify(feedback),
         finishedAt: new Date()
       }
     });
-    return this.mapSession(row);
+    if (result.count === 0) return null;
+    const row = await this.prisma.interviewSession.findFirst({ where: { id: sessionId, userId } });
+    return row ? this.mapSession(row) : null;
   }
 
   async listStoryBankEntries(userId: string): Promise<InterviewStoryBankEntryRecord[]> {
@@ -483,6 +698,10 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
         userId,
         caseEntryId: input.caseEntryId,
         title: input.title,
+        company: input.company ?? "",
+        format: input.format ?? "",
+        tested: input.tested ?? "",
+        improvement: input.improvement ?? "",
         outcome: input.outcome,
         notes: input.notes,
         practicedAt: input.practicedAt ? new Date(input.practicedAt) : undefined
@@ -553,6 +772,48 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
     return this.mapVideoRun(row);
   }
 
+  async createImportJob(userId: string, input: ImportJobCreateInput): Promise<InterviewImportJobRecord> {
+    const row = await this.prisma.interviewImportJob.create({
+      data: {
+        userId,
+        knowledgeDocId: input.knowledgeDocId
+      }
+    });
+    return this.mapImportJob(row);
+  }
+
+  async getImportJob(userId: string, id: string): Promise<InterviewImportJobRecord | null> {
+    const row = await this.prisma.interviewImportJob.findFirst({ where: { id, userId } });
+    return row ? this.mapImportJob(row) : null;
+  }
+
+  async listImportJobs(userId: string): Promise<InterviewImportJobRecord[]> {
+    const rows = await this.prisma.interviewImportJob.findMany({
+      where: { userId },
+      orderBy: { updatedAt: "desc" }
+    });
+    return rows.map((row) => this.mapImportJob(row));
+  }
+
+  async updateImportJob(
+    userId: string,
+    id: string,
+    input: ImportJobUpdateInput
+  ): Promise<InterviewImportJobRecord | null> {
+    const existing = await this.getImportJob(userId, id);
+    if (!existing) return null;
+    const row = await this.prisma.interviewImportJob.update({
+      where: { id },
+      data: {
+        status: input.status,
+        progress: input.progress,
+        message: input.message,
+        resultJson: input.resultJson
+      }
+    });
+    return this.mapImportJob(row);
+  }
+
   private mapKnowledge(row: {
     id: string;
     userId: string;
@@ -560,6 +821,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
     title: string;
     content: string;
     sourceFilename: string | null;
+    originalFileKey: string | null;
     contentHash: string;
     createdAt: Date;
     updatedAt: Date;
@@ -571,9 +833,32 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       title: row.title,
       content: row.content,
       sourceFilename: row.sourceFilename ?? undefined,
+      originalFileKey: row.originalFileKey ?? undefined,
       contentHash: row.contentHash,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString()
+    };
+  }
+
+  private mapBankQuestion(row: {
+    id: string;
+    userId: string;
+    knowledgeDocId: string;
+    text: string;
+    category: string;
+    tags: string[];
+    contentHash: string;
+    createdAt: Date;
+  }): InterviewBankQuestionRecord {
+    return {
+      id: row.id,
+      userId: row.userId,
+      knowledgeDocId: row.knowledgeDocId,
+      text: row.text,
+      category: row.category as QuestionCategory,
+      tags: row.tags,
+      contentHash: row.contentHash,
+      createdAt: row.createdAt.toISOString()
     };
   }
 
@@ -589,6 +874,8 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
     caseStyle: string | null;
     companyTags: string[];
     contentHash: string;
+    approvalStatus: string;
+    originalFileKey: string | null;
     createdAt: Date;
     updatedAt: Date;
   }): InterviewCaseEntryRecord {
@@ -604,6 +891,8 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       caseStyle: (row.caseStyle as CaseStyle | null) ?? undefined,
       companyTags: row.companyTags,
       contentHash: row.contentHash,
+      approvalStatus: row.approvalStatus as CaseApprovalStatus,
+      originalFileKey: row.originalFileKey ?? undefined,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString()
     };
@@ -618,6 +907,8 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       format: row.format as PrepFormat,
       status: row.status as PrepPlanStatus,
       researchNotes: row.researchNotes,
+      companyProfileJson: row.companyProfileJson,
+      clarificationRound: row.clarificationRound,
       failureReason: row.failureReason ?? undefined,
       clarifications: row.clarifications
         .sort((a, b) => a.sortOrder - b.sortOrder)
@@ -634,6 +925,20 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
           text: item.text,
           category: item.category as QuestionCategory,
           target: item.target as QuestionTarget,
+          sortOrder: item.sortOrder,
+          source: (item.source as PrepQuestionSource | null) ?? "generated",
+          bankQuestionId: item.bankQuestionId ?? undefined,
+          storyId: item.storyId ?? undefined,
+          gapReason: item.gapReason ?? undefined
+        })),
+      recommendedCases: row.recommendedCases
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((item) => ({
+          id: item.id,
+          caseEntryId: item.caseEntryId,
+          title: item.caseEntry.title,
+          prompt: item.caseEntry.prompt,
+          sourceKind: item.caseEntry.sourceKind as CaseSourceKind,
           sortOrder: item.sortOrder
         })),
       tasks: row.tasks
@@ -674,6 +979,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
     mode: string;
     title: string;
     prepPlanId: string | null;
+    caseEntryId: string | null;
     feedbackJson: string | null;
     finishedAt: Date | null;
     createdAt: Date;
@@ -685,6 +991,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       mode: row.mode as InterviewMode,
       title: row.title,
       prepPlanId: row.prepPlanId ?? undefined,
+      caseEntryId: row.caseEntryId ?? undefined,
       feedback: row.feedbackJson ? (JSON.parse(row.feedbackJson) as InterviewFeedbackRubric) : undefined,
       finishedAt: row.finishedAt?.toISOString(),
       createdAt: row.createdAt.toISOString(),
@@ -757,6 +1064,10 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
     userId: string;
     caseEntryId: string | null;
     title: string;
+    company: string;
+    format: string;
+    tested: string;
+    improvement: string;
     outcome: string;
     notes: string;
     practicedAt: Date;
@@ -766,9 +1077,37 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       userId: row.userId,
       caseEntryId: row.caseEntryId ?? undefined,
       title: row.title,
+      company: row.company,
+      format: row.format,
+      tested: row.tested,
+      improvement: row.improvement,
       outcome: row.outcome,
       notes: row.notes,
       practicedAt: row.practicedAt.toISOString()
+    };
+  }
+
+  private mapImportJob(row: {
+    id: string;
+    userId: string;
+    knowledgeDocId: string;
+    status: string;
+    progress: number;
+    message: string;
+    resultJson: string;
+    createdAt: Date;
+    updatedAt: Date;
+  }): InterviewImportJobRecord {
+    return {
+      id: row.id,
+      userId: row.userId,
+      knowledgeDocId: row.knowledgeDocId,
+      status: row.status as ImportJobStatus,
+      progress: row.progress,
+      message: row.message,
+      resultJson: row.resultJson,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString()
     };
   }
 
@@ -836,7 +1175,12 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
 const planIncludes = {
   clarifications: true,
   questions: true,
-  tasks: true
+  tasks: true,
+  recommendedCases: {
+    include: {
+      caseEntry: true
+    }
+  }
 } as const;
 
 type PlanRow = {
@@ -847,10 +1191,32 @@ type PlanRow = {
   format: string;
   status: string;
   researchNotes: string;
+  companyProfileJson: string;
+  clarificationRound: number;
   failureReason: string | null;
   createdAt: Date;
   updatedAt: Date;
   clarifications: Array<{ id: string; question: string; answer: string; sortOrder: number }>;
-  questions: Array<{ id: string; text: string; category: string; target: string; sortOrder: number }>;
+  questions: Array<{
+    id: string;
+    text: string;
+    category: string;
+    target: string;
+    sortOrder: number;
+    source: string | null;
+    bankQuestionId: string | null;
+    storyId: string | null;
+    gapReason: string | null;
+  }>;
+  recommendedCases: Array<{
+    id: string;
+    caseEntryId: string;
+    sortOrder: number;
+    caseEntry: {
+      title: string;
+      prompt: string;
+      sourceKind: string;
+    };
+  }>;
   tasks: Array<{ id: string; title: string; description: string; sortOrder: number; done: boolean }>;
 };

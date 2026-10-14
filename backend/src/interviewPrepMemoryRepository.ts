@@ -1,9 +1,13 @@
 import { nanoid } from "nanoid";
 import type {
   AbilityAttemptInput,
+  ImportJobCreateInput,
+  ImportJobUpdateInput,
   InterviewAbilityTestAttemptRecord,
+  InterviewBankQuestionRecord,
   InterviewCaseEntryRecord,
   InterviewCaseRepertoireLogRecord,
+  InterviewImportJobRecord,
   InterviewKnowledgeDoc,
   InterviewMessageRecord,
   InterviewPrepPlanRecord,
@@ -34,10 +38,16 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+function includesCi(haystack: string, needle: string): boolean {
+  return haystack.toLowerCase().includes(needle.toLowerCase());
+}
+
 export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
   private readonly knowledgeDocs = new Map<string, InterviewKnowledgeDoc>();
+  private readonly bankQuestions = new Map<string, InterviewBankQuestionRecord>();
   private readonly caseEntries = new Map<string, InterviewCaseEntryRecord>();
   private readonly prepPlans = new Map<string, InterviewPrepPlanRecord>();
+  private readonly importJobs = new Map<string, InterviewImportJobRecord>();
   private readonly simulatorSettings = new Map<string, InterviewSimulatorSettingsRecord>();
   private readonly sessions = new Map<string, InterviewSessionRecord>();
   private readonly messages = new Map<string, InterviewMessageRecord>();
@@ -70,6 +80,7 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       title: input.title,
       content: input.content,
       sourceFilename: input.sourceFilename,
+      originalFileKey: input.originalFileKey,
       contentHash: input.contentHash,
       createdAt: timestamp,
       updatedAt: timestamp
@@ -99,12 +110,88 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
     const existing = this.knowledgeDocs.get(id);
     if (!existing || existing.userId !== userId) return false;
     this.knowledgeDocs.delete(id);
+    for (const [questionId, question] of this.bankQuestions) {
+      if (question.knowledgeDocId === id) this.bankQuestions.delete(questionId);
+    }
+    for (const [jobId, job] of this.importJobs) {
+      if (job.knowledgeDocId === id) this.importJobs.delete(jobId);
+    }
     return true;
+  }
+
+  async replaceBankQuestionsForDoc(
+    userId: string,
+    knowledgeDocId: string,
+    questions: Array<{ text: string; category: QuestionCategory; tags: string[]; contentHash: string }>
+  ): Promise<void> {
+    for (const [questionId, question] of this.bankQuestions) {
+      if (question.userId === userId && question.knowledgeDocId === knowledgeDocId) {
+        this.bankQuestions.delete(questionId);
+      }
+    }
+    const timestamp = nowIso();
+    for (const item of questions) {
+      const row: InterviewBankQuestionRecord = {
+        id: nanoid(),
+        userId,
+        knowledgeDocId,
+        text: item.text,
+        category: item.category,
+        tags: item.tags,
+        contentHash: item.contentHash,
+        createdAt: timestamp
+      };
+      this.bankQuestions.set(row.id, row);
+    }
+  }
+
+  async listBankQuestions(
+    userId: string,
+    filter?: { q?: string; category?: string; tag?: string }
+  ): Promise<InterviewBankQuestionRecord[]> {
+    return [...this.bankQuestions.values()]
+      .filter((row) => {
+        if (row.userId !== userId) return false;
+        if (filter?.category && row.category !== filter.category) return false;
+        if (filter?.tag && !row.tags.some((tag) => tag === filter.tag)) return false;
+        if (filter?.q && !includesCi(row.text, filter.q)) return false;
+        return true;
+      })
+      .sort((a, b) => a.text.localeCompare(b.text, "nb"));
+  }
+
+  async getBankQuestionsByIds(userId: string, ids: string[]): Promise<InterviewBankQuestionRecord[]> {
+    const idSet = new Set(ids);
+    return [...this.bankQuestions.values()].filter((row) => row.userId === userId && idSet.has(row.id));
   }
 
   async listCaseEntries(userId: string): Promise<InterviewCaseEntryRecord[]> {
     return [...this.caseEntries.values()]
       .filter((entry) => entry.userId === userId)
+      .sort((a, b) => a.title.localeCompare(b.title, "nb"));
+  }
+
+  async searchCaseEntries(
+    userId: string,
+    filter?: { q?: string; sourceKind?: string; style?: string; approvalStatus?: string }
+  ): Promise<InterviewCaseEntryRecord[]> {
+    return [...this.caseEntries.values()]
+      .filter((entry) => {
+        if (entry.userId !== userId) return false;
+        if (filter?.sourceKind && entry.sourceKind !== filter.sourceKind) return false;
+        if (filter?.style && entry.caseStyle !== filter.style) return false;
+        if (filter?.approvalStatus && entry.approvalStatus !== filter.approvalStatus) return false;
+        if (filter?.q) {
+          const q = filter.q;
+          const matches =
+            includesCi(entry.title, q) ||
+            includesCi(entry.prompt, q) ||
+            includesCi(entry.interviewerInfo, q) ||
+            includesCi(entry.solution, q);
+          if (!matches) return false;
+        }
+        return true;
+      })
       .sort((a, b) => a.title.localeCompare(b.title, "nb"));
   }
 
@@ -129,6 +216,8 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       caseStyle: input.caseStyle,
       companyTags: input.companyTags,
       contentHash: input.contentHash,
+      approvalStatus: input.approvalStatus ?? "approved",
+      originalFileKey: input.originalFileKey,
       createdAt: timestamp,
       updatedAt: timestamp
     };
@@ -155,6 +244,14 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
     return true;
   }
 
+  async approveCaseEntry(userId: string, id: string): Promise<InterviewCaseEntryRecord | null> {
+    return this.updateCaseEntry(userId, id, { approvalStatus: "approved" });
+  }
+
+  async rejectCaseEntry(userId: string, id: string): Promise<InterviewCaseEntryRecord | null> {
+    return this.updateCaseEntry(userId, id, { approvalStatus: "rejected" });
+  }
+
   async listPrepPlans(userId: string): Promise<InterviewPrepPlanRecord[]> {
     return [...this.prepPlans.values()]
       .filter((plan) => plan.userId === userId)
@@ -177,9 +274,12 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       format: input.format,
       status: "draft",
       researchNotes: "",
+      companyProfileJson: "{}",
+      clarificationRound: 0,
       clarifications: [],
       questions: [],
       tasks: [],
+      recommendedCases: [],
       createdAt: timestamp,
       updatedAt: timestamp
     };
@@ -203,13 +303,20 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
   async setPrepPlanResearch(
     userId: string,
     id: string,
-    input: { researchNotes: string; clarifications: Array<{ question: string; sortOrder: number }> }
+    input: {
+      researchNotes: string;
+      clarifications: Array<{ question: string; sortOrder: number }>;
+      companyProfileJson?: string;
+      clarificationRound?: number;
+    }
   ): Promise<InterviewPrepPlanRecord | null> {
     const plan = await this.getPrepPlan(userId, id);
     if (!plan) return null;
     const updated: InterviewPrepPlanRecord = {
       ...plan,
       researchNotes: input.researchNotes,
+      companyProfileJson: input.companyProfileJson ?? plan.companyProfileJson,
+      clarificationRound: input.clarificationRound ?? 1,
       clarifications: input.clarifications.map((item) => ({
         id: nanoid(),
         question: item.question,
@@ -219,6 +326,30 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       updatedAt: nowIso()
     };
     this.prepPlans.set(id, updated);
+    return updated;
+  }
+
+  async appendClarificationRound(
+    userId: string,
+    planId: string,
+    clarifications: Array<{ question: string; sortOrder: number }>,
+    round: number
+  ): Promise<InterviewPrepPlanRecord | null> {
+    const plan = await this.getPrepPlan(userId, planId);
+    if (!plan) return null;
+    const appended = clarifications.map((item) => ({
+      id: nanoid(),
+      question: item.question,
+      answer: "",
+      sortOrder: item.sortOrder
+    }));
+    const updated: InterviewPrepPlanRecord = {
+      ...plan,
+      clarificationRound: round,
+      clarifications: [...plan.clarifications, ...appended],
+      updatedAt: nowIso()
+    };
+    this.prepPlans.set(planId, updated);
     return updated;
   }
 
@@ -242,12 +373,38 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
     return updated;
   }
 
+  private buildRecommendedCases(caseIds: string[]): InterviewPrepPlanRecord["recommendedCases"] {
+    return caseIds
+      .map((caseEntryId, index) => {
+        const entry = this.caseEntries.get(caseEntryId);
+        if (!entry) return null;
+        return {
+          id: nanoid(),
+          caseEntryId,
+          title: entry.title,
+          prompt: entry.prompt,
+          sourceKind: entry.sourceKind,
+          sortOrder: index
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null);
+  }
+
   async setPrepPlanCurated(
     userId: string,
     id: string,
     input: {
-      questions: Array<{ text: string; category: QuestionCategory; target: QuestionTarget }>;
+      questions: Array<{
+        text: string;
+        category: QuestionCategory;
+        target: QuestionTarget;
+        source: "bank" | "generated";
+        bankQuestionId?: string;
+        storyId?: string;
+        gapReason?: string;
+      }>;
       tasks: Array<{ title: string; description: string }>;
+      recommendedCaseIds?: string[];
     }
   ): Promise<InterviewPrepPlanRecord | null> {
     const plan = await this.getPrepPlan(userId, id);
@@ -259,7 +416,11 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
         text: item.text,
         category: item.category,
         target: item.target,
-        sortOrder: index
+        sortOrder: index,
+        source: item.source ?? "generated",
+        bankQuestionId: item.bankQuestionId,
+        storyId: item.storyId,
+        gapReason: item.gapReason
       })),
       tasks: input.tasks.map((item, index) => ({
         id: nanoid(),
@@ -268,9 +429,61 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
         sortOrder: index,
         done: false
       })),
+      recommendedCases: this.buildRecommendedCases(input.recommendedCaseIds ?? []),
       updatedAt: nowIso()
     };
     this.prepPlans.set(id, updated);
+    return updated;
+  }
+
+  async replacePlanQuestion(
+    userId: string,
+    planId: string,
+    questionId: string,
+    replacement: {
+      text: string;
+      category: QuestionCategory;
+      target: QuestionTarget;
+      source: "bank" | "generated";
+      bankQuestionId?: string;
+      storyId?: string;
+    }
+  ): Promise<InterviewPrepPlanRecord | null> {
+    const plan = await this.getPrepPlan(userId, planId);
+    if (!plan) return null;
+    const index = plan.questions.findIndex((q) => q.id === questionId);
+    if (index < 0) return null;
+    const existing = plan.questions[index]!;
+    const questions = [...plan.questions];
+    questions[index] = {
+      id: existing.id,
+      text: replacement.text,
+      category: replacement.category,
+      target: replacement.target,
+      sortOrder: existing.sortOrder,
+      source: replacement.source,
+      bankQuestionId: replacement.bankQuestionId,
+      storyId: replacement.storyId,
+      gapReason: undefined
+    };
+    const updated = { ...plan, questions, updatedAt: nowIso() };
+    this.prepPlans.set(planId, updated);
+    return updated;
+  }
+
+  async setPlanQuestionStory(
+    userId: string,
+    planId: string,
+    questionId: string,
+    storyId: string | null
+  ): Promise<InterviewPrepPlanRecord | null> {
+    const plan = await this.getPrepPlan(userId, planId);
+    if (!plan) return null;
+    const questions = plan.questions.map((q) =>
+      q.id === questionId ? { ...q, storyId: storyId ?? undefined } : q
+    );
+    const updated = { ...plan, questions, updatedAt: nowIso() };
+    this.prepPlans.set(planId, updated);
     return updated;
   }
 
@@ -305,7 +518,7 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
 
   async createSession(
     userId: string,
-    input: { mode: InterviewMode; title: string; prepPlanId?: string; systemPrompt: string }
+    input: { mode: InterviewMode; title: string; prepPlanId?: string; caseEntryId?: string; systemPrompt: string }
   ): Promise<InterviewSessionRecord> {
     const timestamp = nowIso();
     const session: InterviewSessionRecord = {
@@ -314,6 +527,7 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       mode: input.mode,
       title: input.title,
       prepPlanId: input.prepPlanId,
+      caseEntryId: input.caseEntryId,
       createdAt: timestamp,
       updatedAt: timestamp
     };
@@ -357,7 +571,7 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
     feedback: InterviewFeedbackRubric
   ): Promise<InterviewSessionRecord | null> {
     const session = await this.getSession(userId, sessionId);
-    if (!session) return null;
+    if (!session || session.finishedAt) return null;
     const updated: InterviewSessionRecord = {
       ...session,
       feedback,
@@ -456,6 +670,10 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       userId,
       caseEntryId: input.caseEntryId,
       title: input.title,
+      company: input.company ?? "",
+      format: input.format ?? "",
+      tested: input.tested ?? "",
+      improvement: input.improvement ?? "",
       outcome: input.outcome,
       notes: input.notes,
       practicedAt: input.practicedAt ?? nowIso()
@@ -520,5 +738,50 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
     };
     this.videoRuns.set(row.id, row);
     return row;
+  }
+
+  async createImportJob(userId: string, input: ImportJobCreateInput): Promise<InterviewImportJobRecord> {
+    const timestamp = nowIso();
+    const row: InterviewImportJobRecord = {
+      id: nanoid(),
+      userId,
+      knowledgeDocId: input.knowledgeDocId,
+      status: "queued",
+      progress: 0,
+      message: "",
+      resultJson: "[]",
+      createdAt: timestamp,
+      updatedAt: timestamp
+    };
+    this.importJobs.set(row.id, row);
+    return row;
+  }
+
+  async getImportJob(userId: string, id: string): Promise<InterviewImportJobRecord | null> {
+    const row = this.importJobs.get(id);
+    if (!row || row.userId !== userId) return null;
+    return row;
+  }
+
+  async listImportJobs(userId: string): Promise<InterviewImportJobRecord[]> {
+    return [...this.importJobs.values()]
+      .filter((row) => row.userId === userId)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+
+  async updateImportJob(
+    userId: string,
+    id: string,
+    input: ImportJobUpdateInput
+  ): Promise<InterviewImportJobRecord | null> {
+    const existing = await this.getImportJob(userId, id);
+    if (!existing) return null;
+    const updated: InterviewImportJobRecord = {
+      ...existing,
+      ...input,
+      updatedAt: nowIso()
+    };
+    this.importJobs.set(id, updated);
+    return updated;
   }
 }

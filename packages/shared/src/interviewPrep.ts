@@ -77,3 +77,12 @@ export type CaseSourceKind = (typeof caseSourceKinds)[number];
 
 export const caseStyles = ["interviewer_led", "candidate_led"] as const;
 export type CaseStyle = (typeof caseStyles)[number];
+
+export const prepQuestionSources = ["bank", "generated"] as const;
+export type PrepQuestionSource = (typeof prepQuestionSources)[number];
+
+export const caseApprovalStatuses = ["pending", "approved", "rejected"] as const;
+export type CaseApprovalStatus = (typeof caseApprovalStatuses)[number];
+
+export const importJobStatuses = ["queued", "running", "review", "done", "failed"] as const;
+export type ImportJobStatus = (typeof importJobStatuses)[number];

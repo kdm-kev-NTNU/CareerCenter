@@ -63,3 +63,13 @@ export function transitionVideoSim(state: VideoSimState, event: VideoSimEvent): 
 export function canStartRecording(state: VideoSimState): boolean {
   return state === "recording";
 }
+
+/** Camera/mic stream may only be open during device check and recording. */
+export function phaseNeedsCamera(state: VideoSimState): boolean {
+  return state === "device_check" || state === "recording";
+}
+
+/** Question text may only be revealed after a card is selected. */
+export function phaseRevealsPrompt(state: VideoSimState): boolean {
+  return state === "thinking" || state === "recording" || state === "review";
+}

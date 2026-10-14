@@ -34,6 +34,7 @@ model User {
   thesisCompanies                    ThesisCompany[]
   interviewKnowledgeDocs             InterviewKnowledgeDoc[]
   interviewCaseEntries               InterviewCaseEntry[]
+  interviewBankQuestions             InterviewBankQuestion[]
   interviewPrepPlans                 InterviewPrepPlan[]
   interviewSimulatorSettings         InterviewSimulatorSettings[]
   interviewSessions                  InterviewSession[]
@@ -42,6 +43,7 @@ model User {
   interviewAbilityTestAttempts       InterviewAbilityTestAttempt[]
   interviewVideoSettings             InterviewVideoSettings?
   interviewVideoRuns                 InterviewVideoRun[]
+  interviewImportJobs                InterviewImportJob[]
 }
 
 model CoursePlan {
@@ -325,20 +327,41 @@ model ThesisCompany {
 }
 
 model InterviewKnowledgeDoc {
-  id             String               @id @default(cuid())
+  id             String                  @id @default(cuid())
   userId         String
   kind           String
   title          String
-  content        String               @default("")
+  content        String                  @default("")
   sourceFilename String?
   contentHash    String
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
-  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  originalFileKey String?
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  user           User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
   caseEntries    InterviewCaseEntry[]
+  bankQuestions  InterviewBankQuestion[]
+  importJobs     InterviewImportJob[]
 
   @@unique([userId, contentHash])
   @@index([userId, kind])
+}
+
+model InterviewBankQuestion {
+  id             String                @id @default(cuid())
+  userId         String
+  knowledgeDocId String
+  text           String
+  category       String
+  tags           String[]
+  contentHash    String
+  createdAt      DateTime              @default(now())
+  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  knowledgeDoc   InterviewKnowledgeDoc @relation(fields: [knowledgeDocId], references: [id], onDelete: Cascade)
+  prepQuestions  InterviewPrepQuestion[]
+
+  @@unique([userId, contentHash])
+  @@index([userId, category])
+  @@index([knowledgeDocId])
 }
 
 model InterviewCaseEntry {
@@ -353,31 +376,39 @@ model InterviewCaseEntry {
   caseStyle        String?
   companyTags      String[]
   contentHash      String
+  approvalStatus   String                 @default("approved")
+  originalFileKey  String?
   createdAt        DateTime               @default(now())
   updatedAt        DateTime               @updatedAt
   user             User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   knowledgeDoc     InterviewKnowledgeDoc? @relation(fields: [knowledgeDocId], references: [id], onDelete: SetNull)
+  planCases        InterviewPrepPlanCase[]
+  sessions         InterviewSession[]
 
   @@unique([userId, contentHash])
   @@index([userId])
+  @@index([userId, approvalStatus])
 }
 
 model InterviewPrepPlan {
-  id             String                        @id @default(cuid())
-  userId         String
-  companyName    String
-  roleTitle      String                        @default("")
-  format         String
-  status         String
-  researchNotes  String                        @default("")
-  failureReason  String?
-  createdAt      DateTime                      @default(now())
-  updatedAt      DateTime                      @updatedAt
-  user           User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  clarifications InterviewPrepClarification[]
-  questions      InterviewPrepQuestion[]
-  tasks          InterviewPrepTask[]
-  sessions       InterviewSession[]
+  id                  String                        @id @default(cuid())
+  userId              String
+  companyName         String
+  roleTitle           String                        @default("")
+  format              String
+  status              String
+  researchNotes       String                        @default("")
+  companyProfileJson  String                        @default("{}")
+  clarificationRound  Int                           @default(0)
+  failureReason       String?
+  createdAt           DateTime                      @default(now())
+  updatedAt           DateTime                      @updatedAt
+  user                User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clarifications      InterviewPrepClarification[]
+  questions           InterviewPrepQuestion[]
+  tasks               InterviewPrepTask[]
+  recommendedCases    InterviewPrepPlanCase[]
+  sessions            InterviewSession[]
 
   @@index([userId, status])
 }
@@ -388,21 +419,56 @@ model InterviewPrepClarification {
   question  String
   answer    String            @default("")
   sortOrder Int               @default(0)
+  round     Int               @default(1)
   plan      InterviewPrepPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
 
   @@index([planId, sortOrder])
 }
 
 model InterviewPrepQuestion {
-  id        String            @id @default(cuid())
-  planId    String
-  text      String
-  category  String
-  target    String
-  sortOrder Int               @default(0)
-  plan      InterviewPrepPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  id              String                 @id @default(cuid())
+  planId          String
+  text            String
+  category        String
+  target          String
+  sortOrder       Int                    @default(0)
+  source          String                 @default("generated")
+  bankQuestionId  String?
+  storyId         String?
+  gapReason       String?
+  plan            InterviewPrepPlan      @relation(fields: [planId], references: [id], onDelete: Cascade)
+  bankQuestion    InterviewBankQuestion? @relation(fields: [bankQuestionId], references: [id], onDelete: SetNull)
 
   @@index([planId, sortOrder])
+}
+
+model InterviewPrepPlanCase {
+  id          String              @id @default(cuid())
+  planId      String
+  caseEntryId String
+  sortOrder   Int                 @default(0)
+  plan        InterviewPrepPlan   @relation(fields: [planId], references: [id], onDelete: Cascade)
+  caseEntry   InterviewCaseEntry  @relation(fields: [caseEntryId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, caseEntryId])
+  @@index([planId, sortOrder])
+}
+
+model InterviewImportJob {
+  id             String                @id @default(cuid())
+  userId         String
+  knowledgeDocId String
+  status         String                @default("queued")
+  progress       Int                   @default(0)
+  message        String                @default("")
+  resultJson     String                @default("[]")
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  knowledgeDoc   InterviewKnowledgeDoc @relation(fields: [knowledgeDocId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([knowledgeDocId])
 }
 
 model InterviewPrepTask {
@@ -433,17 +499,19 @@ model InterviewSimulatorSettings {
 }
 
 model InterviewSession {
-  id           String             @id @default(cuid())
+  id           String              @id @default(cuid())
   userId       String
   mode         String
-  title        String             @default("")
+  title        String              @default("")
   prepPlanId   String?
+  caseEntryId  String?
   feedbackJson String?
   finishedAt   DateTime?
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
-  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  prepPlan     InterviewPrepPlan? @relation(fields: [prepPlanId], references: [id], onDelete: SetNull)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  prepPlan     InterviewPrepPlan?  @relation(fields: [prepPlanId], references: [id], onDelete: SetNull)
+  caseEntry    InterviewCaseEntry? @relation(fields: [caseEntryId], references: [id], onDelete: SetNull)
   messages     InterviewMessage[]
 
   @@index([userId, mode])
@@ -494,6 +562,10 @@ model InterviewCaseRepertoireLog {
   userId      String
   caseEntryId String?
   title       String
+  company     String   @default("")
+  format      String   @default("")
+  tested      String   @default("")
+  improvement String   @default("")
   outcome     String   @default("")
   notes       String   @default("")
   practicedAt DateTime @default(now())
