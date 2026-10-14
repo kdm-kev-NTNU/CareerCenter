@@ -228,19 +228,72 @@ describe("interview prep routes", () => {
     await app.close();
   });
 
+  it("sends full role-labeled transcript to finish rubric, not only last user message", async () => {
+    const interviewPrepRepository = new InterviewPrepMemoryRepository();
+    const llmClient = new FakeLlmClient({
+      configured: true,
+      completeResult: "Fortell om en gang du gjorde en feil.",
+      structuredResult: {
+        scores: Object.fromEntries(starRubricCriteria.map((key) => [key, 3])),
+        sum: 24,
+        improvement: "Si strukturen opp front."
+      }
+    });
+    const app = await buildServer({
+      repository: new MemoryRepository(),
+      authDisabled: true,
+      llmClient,
+      interviewPrepRepository
+    });
+    await app.ready();
+
+    const session = await app.inject({
+      method: "POST",
+      url: "/api/interview/sessions",
+      payload: { mode: "behavioral_mock", title: "Transcript rubric" }
+    });
+    const sessionId = session.json().id as string;
+
+    await app.inject({
+      method: "POST",
+      url: `/api/interview/sessions/${sessionId}/transcript`,
+      payload: { role: "assistant", content: "Fortell om en gang du gjorde en feil." }
+    });
+    await app.inject({
+      method: "POST",
+      url: `/api/interview/sessions/${sessionId}/transcript`,
+      payload: { role: "user", content: "Jeg glemte en deadline i SpareBank 1." }
+    });
+
+    const finished = await app.inject({ method: "POST", url: `/api/interview/sessions/${sessionId}/finish` });
+    expect(finished.statusCode).toBe(200);
+
+    const rubricCall = llmClient.structuredCalls.at(-1);
+    expect(rubricCall).toBeDefined();
+    const userContent = rubricCall!.options.messages.find((m) => m.role === "user")?.content ?? "";
+    expect(userContent).toContain("Intervjuer: Fortell om en gang du gjorde en feil.");
+    expect(userContent).toContain("Kandidat: Jeg glemte en deadline i SpareBank 1.");
+    expect(userContent).not.toBe("Jeg glemte en deadline i SpareBank 1.");
+    await app.close();
+  });
+
   it("exposes voice session mock and saves transcript messages", async () => {
     const { app } = await buildInterviewApp();
-    const voice = await app.inject({ method: "POST", url: "/api/interview/voice/session" });
-    expect(voice.statusCode).toBe(200);
-    expect(voice.json().mock).toBe(true);
-    expect(JSON.stringify(voice.json())).not.toContain("sk-");
-
     const session = await app.inject({
       method: "POST",
       url: "/api/interview/sessions",
       payload: { mode: "behavioral_mock", title: "Voice stub" }
     });
     const sessionId = session.json().id as string;
+
+    const voice = await app.inject({
+      method: "POST",
+      url: "/api/interview/voice/session",
+      payload: { sessionId }
+    });
+    expect(voice.statusCode).toBe(200);
+    expect(voice.json().mock).toBe(true);
+    expect(JSON.stringify(voice.json())).not.toContain("sk-");
 
     const userLine = await app.inject({
       method: "POST",
@@ -259,47 +312,8 @@ describe("interview prep routes", () => {
     await app.close();
   });
 
-  it("manages story bank, anki export, and ability attempts", async () => {
+  it("records ability attempts", async () => {
     const { app } = await buildInterviewApp();
-    const created = await app.inject({
-      method: "POST",
-      url: "/api/interview/stories",
-      payload: {
-        title: "Ledet prosjekt",
-        situation: "S",
-        task: "T",
-        action: "A",
-        result: "R",
-        tags: ["leadership"]
-      }
-    });
-    expect(created.statusCode).toBe(201);
-    const storyId = created.json().id as string;
-
-    const score = await app.inject({
-      method: "POST",
-      url: `/api/interview/stories/${storyId}/scores`,
-      payload: {
-        scores: Object.fromEntries(starRubricCriteria.map((key) => [key, 2])),
-        note: "Trenger strammere STAR"
-      }
-    });
-    expect(score.statusCode).toBe(201);
-
-    const partialScore = await app.inject({
-      method: "POST",
-      url: `/api/interview/stories/${storyId}/scores`,
-      payload: { scores: { action: 2 }, note: "" }
-    });
-    expect(partialScore.statusCode).toBe(400);
-
-    const weakest = await app.inject({ method: "GET", url: "/api/interview/stories/weakest" });
-    expect(weakest.json()[0]?.id).toBe(storyId);
-
-    const csv = await app.inject({ method: "GET", url: "/api/interview/stories/export/anki.csv" });
-    expect(csv.headers["content-type"]).toContain("text/csv");
-    expect(csv.body).toContain("Ledet prosjekt");
-
     const attempt = await app.inject({
       method: "POST",
       url: "/api/interview/ability/attempts",
@@ -325,6 +339,7 @@ describe("interview prep routes", () => {
     const app = await buildServer({
       repository: mainRepo,
       authDisabled: true,
+      skipJobRecovery: true,
       llmClient: new FakeLlmClient({
         structuredResult: { title: "Alpha", prompt: "prompten", interviewerInfo: "", solution: "løsningen" }
       }),
@@ -349,6 +364,167 @@ describe("interview prep routes", () => {
     expect(finished?.message).toMatch(/caseutkast/);
     const state = JSON.parse(finished?.resultJson ?? "{}") as { chunks: Array<{ pageStart: number; status: string }> };
     expect(state.chunks[0]).toMatchObject({ pageStart: 1, status: "done" });
+    await app.close();
+  });
+
+  it("starts a practice session from a ready plan and rejects non-ready plans", async () => {
+    const main = new MemoryRepository();
+    const interviewRepo = new InterviewPrepMemoryRepository();
+    const app = await buildServer({
+      repository: main,
+      authDisabled: true,
+      llmClient: new FakeLlmClient({ configured: true }),
+      interviewPrepRepository: interviewRepo
+    });
+    await app.ready();
+    await app.inject({ method: "GET", url: "/api/interview/status" });
+    const user = await main.findUserByName("__test__");
+    expect(user).toBeTruthy();
+
+    const plan = await interviewRepo.createPrepPlan(user!.id, {
+      companyName: "DNB",
+      roleTitle: "Analyst",
+      format: "interview"
+    });
+    await interviewRepo.setPrepPlanCurated(user!.id, plan.id, {
+      questions: [
+        {
+          text: "Why DNB?",
+          category: "motivation",
+          target: "interview",
+          source: "custom"
+        }
+      ],
+      tasks: []
+    });
+    await interviewRepo.updatePrepPlanStatus(user!.id, plan.id, "ready");
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/interview/sessions",
+      payload: { mode: "behavioral_mock", prepPlanId: plan.id }
+    });
+    expect(created.statusCode).toBe(201);
+    const session = created.json() as { id: string };
+    const messages = await app.inject({
+      method: "GET",
+      url: `/api/interview/sessions/${session.id}/messages`
+    });
+    const system = (messages.json() as Array<{ role: string; content: string }>).find((m) => m.role === "system");
+    expect(system?.content).toContain("Why DNB?");
+    expect(system?.content).toContain("øvingsplan");
+
+    const draftPlan = await interviewRepo.createPrepPlan(user!.id, {
+      companyName: "X",
+      roleTitle: "Y",
+      format: "interview"
+    });
+    const notReady = await app.inject({
+      method: "POST",
+      url: "/api/interview/sessions",
+      payload: { mode: "behavioral_mock", prepPlanId: draftPlan.id }
+    });
+    expect(notReady.statusCode).toBe(409);
+
+    const voice = await app.inject({
+      method: "POST",
+      url: "/api/interview/voice/session",
+      payload: { sessionId: session.id }
+    });
+    expect(voice.statusCode).toBe(200);
+    expect(voice.json()).toMatchObject({ mock: true });
+    await app.close();
+  });
+
+  it("edits plan questions and rejects incomplete reorder", async () => {
+    const main = new MemoryRepository();
+    const repo = new InterviewPrepMemoryRepository();
+    const app = await buildServer({
+      repository: main,
+      authDisabled: true,
+      llmClient: new FakeLlmClient({ configured: true }),
+      interviewPrepRepository: repo
+    });
+    await app.ready();
+    await app.inject({ method: "GET", url: "/api/interview/status" });
+    const user = await main.findUserByName("__test__");
+    expect(user).toBeTruthy();
+
+    const plan = await repo.createPrepPlan(user!.id, {
+      companyName: "DNB",
+      roleTitle: "Analyst",
+      format: "interview"
+    });
+    await repo.setPrepPlanCurated(user!.id, plan.id, {
+      questions: [
+        { text: "A?", category: "behavioral", target: "interview", source: "generated" },
+        { text: "B?", category: "behavioral", target: "interview", source: "generated" }
+      ],
+      tasks: []
+    });
+    const ready = await repo.getPrepPlan(user!.id, plan.id);
+    const [q1, q2] = ready!.questions;
+
+    const patched = await app.inject({
+      method: "PATCH",
+      url: `/api/interview/plans/${plan.id}/questions/${q1!.id}`,
+      payload: { text: "A edited?", notes: "STAR", included: false }
+    });
+    expect(patched.statusCode).toBe(200);
+    expect(patched.json().questions.find((q: { id: string }) => q.id === q1!.id)).toMatchObject({
+      text: "A edited?",
+      notes: "STAR",
+      included: false,
+      source: "edited"
+    });
+
+    const badOrder = await app.inject({
+      method: "PUT",
+      url: `/api/interview/plans/${plan.id}/questions/order`,
+      payload: { orderedIds: [q1!.id] }
+    });
+    expect(badOrder.statusCode).toBe(400);
+
+    const reordered = await app.inject({
+      method: "PUT",
+      url: `/api/interview/plans/${plan.id}/questions/order`,
+      payload: { orderedIds: [q2!.id, q1!.id] }
+    });
+    expect(reordered.statusCode).toBe(200);
+    expect(reordered.json().questions.map((q: { id: string }) => q.id)).toEqual([q2!.id, q1!.id]);
+    await app.close();
+  });
+
+  it("recovers interrupted import jobs on server start", async () => {
+    const mainRepo = new MemoryRepository();
+    const repo = new InterviewPrepMemoryRepository();
+    const user = await mainRepo.createUser("__test__", "x");
+    const doc = await repo.createKnowledgeDoc(user.id, {
+      kind: "case",
+      title: "Stuck",
+      content: "x",
+      contentHash: sha256Content("stuck")
+    });
+    const job = await repo.createImportJob(user.id, { knowledgeDocId: doc.id });
+    await repo.updateImportJob(user.id, job.id, { status: "running", message: "pågår" });
+    const plan = await repo.createPrepPlan(user.id, {
+      companyName: "Y",
+      roleTitle: "Z",
+      format: "interview"
+    });
+    await repo.updatePrepPlanStatus(user.id, plan.id, "researching");
+
+    const app = await buildServer({
+      repository: mainRepo,
+      authDisabled: true,
+      interviewPrepRepository: repo,
+      llmClient: new FakeLlmClient()
+    });
+    await app.ready();
+
+    expect((await repo.getImportJob(user.id, job.id))?.status).toBe("failed");
+    expect((await repo.getImportJob(user.id, job.id))?.message).toMatch(/omstart/i);
+    expect((await repo.getPrepPlan(user.id, plan.id))?.status).toBe("failed");
     await app.close();
   });
 });

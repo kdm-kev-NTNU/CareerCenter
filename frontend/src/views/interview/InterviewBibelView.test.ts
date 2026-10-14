@@ -57,6 +57,7 @@ describe("InterviewBibelView", () => {
       {
         id: "job-1",
         knowledgeDocId: "doc-1",
+        kind: "cases",
         status: "running",
         progress: 40,
         message: "Chunk 2 av 5: Market entry (side 12–18). 3 gjenstår.",

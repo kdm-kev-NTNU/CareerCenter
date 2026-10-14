@@ -7,8 +7,7 @@ const tabs = [
   { to: "/interview/plan/ny", label: "Ny plan" },
   { to: "/interview/simulator", label: "Simulator" },
   { to: "/interview/video", label: "Video" },
-  { to: "/interview/evnetester", label: "Evnetester" },
-  { to: "/interview/struktur", label: "Struktur" }
+  { to: "/interview/evnetester", label: "Evnetester" }
 ];
 </script>
 

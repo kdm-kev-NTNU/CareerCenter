@@ -360,7 +360,8 @@ export {
   caseStyles,
   prepQuestionSources,
   caseApprovalStatuses,
-  importJobStatuses
+  importJobStatuses,
+  importJobKinds
 } from "./interviewPrep.js";
 export type {
   InterviewMode,
@@ -375,7 +376,8 @@ export type {
   CaseStyle,
   PrepQuestionSource,
   CaseApprovalStatus,
-  ImportJobStatus
+  ImportJobStatus,
+  ImportJobKind
 } from "./interviewPrep.js";
 
 export { inferKnowledgeKind, classifyCaseSource } from "./interviewKnowledge.js";
@@ -401,7 +403,11 @@ export type {
 export {
   extractBankQuestions,
   rankBankQuestions,
-  findRepeatedStories
+  findRepeatedStories,
+  joinSoftWrappedLines,
+  splitQuestionSentences,
+  needsLlmQuestionExtraction,
+  QUESTION_DENSITY_CHARS
 } from "./questionBank.js";
 export type {
   ExtractableKnowledgeDoc,
@@ -429,6 +435,7 @@ export { CLX_SHAPE_COLOR } from "./scalesClx.js";
 export {
   transitionPrepPlan,
   canStartSimulators,
+  canCancelPrepPlan,
   prepPlanPipelineSteps,
   parsePrepPlanPipelineStep,
   prepPlanStepVisual,
@@ -452,18 +459,7 @@ export {
   defaultVideoSimulatorSettings
 } from "./videoSimulatorSettings.js";
 export type { VideoSimulatorSettings } from "./videoSimulatorSettings.js";
-export {
-  weakestStoryQueue,
-  averageStarSum,
-  storyToAnkiRow,
-  storiesToAnkiCsv,
-  emptyStarScores
-} from "./storyBank.js";
-export type { StoryScoreSnapshot, StoryWithScores, AnkiStoryRow } from "./storyBank.js";
 export type {
-  InterviewStoryBankEntryDto,
-  InterviewStoryScoreDto,
-  InterviewCaseRepertoireLogDto,
   InterviewAbilityTestAttemptDto,
   InterviewVideoSettingsDto,
   InterviewVideoRunDto,

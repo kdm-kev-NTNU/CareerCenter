@@ -2,6 +2,7 @@ import {
   MAX_CLARIFICATION_ROUNDS,
   MAX_CURATED_QUESTIONS,
   MIN_CURATED_QUESTIONS,
+  canCancelPrepPlan,
   rankBankQuestions,
   rankCasesForCompany,
   transitionPrepPlan,
@@ -10,6 +11,10 @@ import {
 } from "@careercenter/shared";
 import type { LlmClient } from "../ai/llmClient.js";
 import type { InterviewPrepRepository } from "../interviewPrepRepository.js";
+import {
+  JobCancellationRegistry,
+  USER_CANCEL_MESSAGE
+} from "./jobCancellationRegistry.js";
 import {
   clarificationListSchema,
   companyProfileSchema,
@@ -21,17 +26,42 @@ import {
   buildResearchSystemPrompt
 } from "./prompts.js";
 
+function isAbortError(error: unknown): boolean {
+  return (
+    (error instanceof Error && error.name === "AbortError") ||
+    (typeof error === "object" &&
+      error !== null &&
+      "name" in error &&
+      (error as { name: string }).name === "AbortError")
+  );
+}
+
+function throwIfAborted(signal: AbortSignal): void {
+  if (signal.aborted) {
+    const error = new Error(USER_CANCEL_MESSAGE);
+    error.name = "AbortError";
+    throw error;
+  }
+}
+
 export class PrepResearchService {
   private readonly running = new Set<string>();
 
   constructor(
     private readonly llmClient: LlmClient,
-    private readonly repository: InterviewPrepRepository
+    private readonly repository: InterviewPrepRepository,
+    private readonly cancellationRegistry: JobCancellationRegistry
   ) {}
 
   async startResearch(userId: string, planId: string): Promise<void> {
     await this.prepareResearch(userId, planId);
-    await this.runResearch(userId, planId);
+    const key = JobCancellationRegistry.researchKey(planId);
+    const signal = this.cancellationRegistry.begin(key);
+    try {
+      await this.runResearch(userId, planId, signal);
+    } finally {
+      this.cancellationRegistry.end(key);
+    }
   }
 
   /**
@@ -40,8 +70,8 @@ export class PrepResearchService {
    * A second call while the same plan is running returns the current plan.
    */
   async enqueueResearch(userId: string, planId: string) {
-    return this.enqueue(userId, planId, "research", () => this.prepareResearch(userId, planId), () =>
-      this.runResearch(userId, planId)
+    return this.enqueue(userId, planId, "research", () => this.prepareResearch(userId, planId), (signal) =>
+      this.runResearch(userId, planId, signal)
     );
   }
 
@@ -56,8 +86,24 @@ export class PrepResearchService {
       planId,
       "curate",
       () => this.prepareClarifications(userId, planId),
-      () => this.submitClarificationsAndCurate(userId, planId, answers, skip)
+      (signal) => this.submitClarificationsAndCurate(userId, planId, answers, skip, signal)
     );
+  }
+
+  async cancel(userId: string, planId: string): Promise<{ ok: true } | { ok: false; status: number; message: string }> {
+    const plan = await this.repository.getPrepPlan(userId, planId);
+    if (!plan) return { ok: false, status: 404, message: "Plan ikke funnet." };
+    if (!canCancelPrepPlan(plan.status)) {
+      return { ok: false, status: 409, message: "Planen kan bare stoppes under research eller kuratering." };
+    }
+    const researchKey = JobCancellationRegistry.researchKey(planId);
+    const curateKey = JobCancellationRegistry.curateKey(planId);
+    const aborted =
+      this.cancellationRegistry.abort(researchKey) || this.cancellationRegistry.abort(curateKey);
+    if (!aborted) {
+      await this.repository.updatePrepPlanStatus(userId, planId, "cancelled", USER_CANCEL_MESSAGE);
+    }
+    return { ok: true };
   }
 
   private async enqueue(
@@ -65,7 +111,7 @@ export class PrepResearchService {
     planId: string,
     kind: "research" | "curate",
     prepare: () => Promise<NonNullable<Awaited<ReturnType<InterviewPrepRepository["getPrepPlan"]>>>>,
-    work: () => Promise<void>
+    work: (signal: AbortSignal) => Promise<void>
   ) {
     const key = `${kind}:${planId}`;
     if (this.running.has(key)) {
@@ -74,17 +120,30 @@ export class PrepResearchService {
       return current;
     }
     this.running.add(key);
+    const cancelKey =
+      kind === "research"
+        ? JobCancellationRegistry.researchKey(planId)
+        : JobCancellationRegistry.curateKey(planId);
+    const signal = this.cancellationRegistry.begin(cancelKey);
     try {
       const plan = await prepare();
-      void work()
+      void work(signal)
         .catch(async (error: unknown) => {
+          if (isAbortError(error) || signal.aborted) {
+            await this.repository.updatePrepPlanStatus(userId, planId, "cancelled", USER_CANCEL_MESSAGE);
+            return;
+          }
           const message = error instanceof Error ? error.message : "Plan-steg feilet.";
           await this.repository.updatePrepPlanStatus(userId, planId, "failed", message);
         })
-        .finally(() => this.running.delete(key));
+        .finally(() => {
+          this.running.delete(key);
+          this.cancellationRegistry.end(cancelKey);
+        });
       return plan;
     } catch (error) {
       this.running.delete(key);
+      this.cancellationRegistry.end(cancelKey);
       throw error;
     }
   }
@@ -114,17 +173,23 @@ export class PrepResearchService {
     return updated;
   }
 
-  private async runResearch(userId: string, planId: string): Promise<void> {
+  private async runResearch(userId: string, planId: string, signal: AbortSignal): Promise<void> {
     const plan = await this.repository.getPrepPlan(userId, planId);
     if (!plan) throw new Error("Plan ikke funnet.");
 
     try {
+      throwIfAborted(signal);
       const searchSnippet = this.llmClient.webSearch
-        ? await this.llmClient.webSearch(`${plan.companyName} ${plan.roleTitle} interview process culture`)
+        ? await this.llmClient.webSearch(
+            `${plan.companyName} ${plan.roleTitle} interview process culture`,
+            signal
+          )
         : "";
 
+      throwIfAborted(signal);
       await this.repository.setPrepPlanPipeline(userId, planId, { pipelineStep: "research_notes" });
       const researchNotes = await this.llmClient.complete({
+        signal,
         messages: [
           { role: "system", content: buildResearchSystemPrompt(plan.companyName, plan.roleTitle) },
           {
@@ -134,12 +199,14 @@ export class PrepResearchService {
         ]
       });
 
+      throwIfAborted(signal);
       await this.repository.setPrepPlanPipeline(userId, planId, {
         pipelineStep: "company_profile",
         researchNotes
       });
       const profile = await this.llmClient.completeStructured(
         {
+          signal,
           messages: [
             { role: "system", content: buildResearchSystemPrompt(plan.companyName, plan.roleTitle) },
             {
@@ -151,12 +218,14 @@ export class PrepResearchService {
         companyProfileSchema
       );
 
+      throwIfAborted(signal);
       await this.repository.setPrepPlanPipeline(userId, planId, {
         pipelineStep: "clarifications",
         companyProfileJson: JSON.stringify(profile)
       });
       const clarificationPayload = await this.llmClient.completeStructured(
         {
+          signal,
           messages: [
             { role: "system", content: buildClarificationSystemPrompt(plan.companyName, plan.roleTitle) },
             {
@@ -168,6 +237,7 @@ export class PrepResearchService {
         clarificationListSchema
       );
 
+      throwIfAborted(signal);
       await this.repository.setPrepPlanResearch(userId, planId, {
         researchNotes,
         companyProfileJson: JSON.stringify(profile),
@@ -182,6 +252,10 @@ export class PrepResearchService {
       await this.repository.setPrepPlanPipeline(userId, planId, { pipelineStep: "awaiting_answers" });
       await this.repository.updatePrepPlanStatus(userId, planId, awaiting);
     } catch (error) {
+      if (isAbortError(error) || signal.aborted) {
+        await this.repository.updatePrepPlanStatus(userId, planId, "cancelled", USER_CANCEL_MESSAGE);
+        throw Object.assign(new Error(USER_CANCEL_MESSAGE), { name: "AbortError" });
+      }
       const message = error instanceof Error ? error.message : "Research feilet.";
       await this.repository.updatePrepPlanStatus(userId, planId, "failed", message);
       throw error;
@@ -192,7 +266,8 @@ export class PrepResearchService {
     userId: string,
     planId: string,
     answers: Array<{ id: string; answer: string }>,
-    skip = false
+    skip = false,
+    signal: AbortSignal = new AbortController().signal
   ): Promise<void> {
     const plan = await this.repository.getPrepPlan(userId, planId);
     if (!plan || plan.status !== "awaiting_answers") {
@@ -210,7 +285,7 @@ export class PrepResearchService {
     });
 
     if (!skip && unanswered.length && plan.clarificationRound < MAX_CLARIFICATION_ROUNDS) {
-      await this.requestAnotherClarificationRound(userId, planId);
+      await this.requestAnotherClarificationRound(userId, planId, signal);
       return;
     }
 
@@ -218,10 +293,14 @@ export class PrepResearchService {
       type: skip ? "clarifications_skipped" : "answers_submitted"
     });
     await this.repository.updatePrepPlanStatus(userId, planId, next);
-    await this.curate(userId, planId);
+    await this.curate(userId, planId, signal);
   }
 
-  private async requestAnotherClarificationRound(userId: string, planId: string): Promise<void> {
+  private async requestAnotherClarificationRound(
+    userId: string,
+    planId: string,
+    signal: AbortSignal
+  ): Promise<void> {
     const plan = await this.repository.getPrepPlan(userId, planId);
     if (!plan) throw new Error("Plan ikke funnet.");
     const nextRound = plan.clarificationRound + 1;
@@ -229,8 +308,10 @@ export class PrepResearchService {
       throw new Error("Maks antall avklaringsrunder er nådd.");
     }
 
+    throwIfAborted(signal);
     const payload = await this.llmClient.completeStructured(
       {
+        signal,
         messages: [
           { role: "system", content: buildClarificationSystemPrompt(plan.companyName, plan.roleTitle) },
           {
@@ -254,11 +335,12 @@ export class PrepResearchService {
     transitionPrepPlan("awaiting_answers", { type: "more_clarifications" });
   }
 
-  private async curate(userId: string, planId: string): Promise<void> {
+  private async curate(userId: string, planId: string, signal: AbortSignal): Promise<void> {
     const plan = await this.repository.getPrepPlan(userId, planId);
     if (!plan) throw new Error("Plan ikke funnet.");
 
     try {
+      throwIfAborted(signal);
       await this.repository.setPrepPlanPipeline(userId, planId, { pipelineStep: "curating_questions" });
       const profile = safeParseProfile(plan.companyProfileJson);
       const bank = await this.repository.listBankQuestions(userId);
@@ -274,8 +356,10 @@ export class PrepResearchService {
         120
       );
 
+      throwIfAborted(signal);
       const selection = await this.llmClient.completeStructured(
         {
+          signal,
           messages: [
             { role: "system", content: buildCurationSystemPrompt(plan.companyName, plan.roleTitle) },
             {
@@ -333,6 +417,7 @@ export class PrepResearchService {
         });
       }
 
+      throwIfAborted(signal);
       await this.repository.setPrepPlanPipeline(userId, planId, { pipelineStep: "curating_cases" });
       const cases = await this.repository.searchCaseEntries(userId, { approvalStatus: "approved" });
       const ranked = rankCasesForCompany(
@@ -359,6 +444,10 @@ export class PrepResearchService {
       await this.repository.setPrepPlanPipeline(userId, planId, { pipelineStep: "ready" });
       await this.repository.updatePrepPlanStatus(userId, planId, ready);
     } catch (error) {
+      if (isAbortError(error) || signal.aborted) {
+        await this.repository.updatePrepPlanStatus(userId, planId, "cancelled", USER_CANCEL_MESSAGE);
+        throw Object.assign(new Error(USER_CANCEL_MESSAGE), { name: "AbortError" });
+      }
       const message = error instanceof Error ? error.message : "Kuratering feilet.";
       await this.repository.updatePrepPlanStatus(userId, planId, "failed", message);
       throw error;

@@ -28,6 +28,15 @@ describe("extractBankQuestions", () => {
       "Why do you want this role?"
     ]);
   });
+
+  it("joins soft-wrapped PDF lines into one question", () => {
+    const extracted = extractBankQuestions({
+      kind: "star",
+      title: "Wrapped",
+      content: ["Tell me about a time you", "led a team through change?"].join("\n")
+    });
+    expect(extracted.map((q) => q.text)).toEqual(["Tell me about a time you led a team through change?"]);
+  });
 });
 
 describe("rankBankQuestions", () => {

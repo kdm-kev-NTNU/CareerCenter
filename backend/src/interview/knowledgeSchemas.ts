@@ -110,6 +110,40 @@ export const caseSpanExtractSchema = z.object({
   solution: z.string().default("")
 });
 
+export const bankQuestionExtractSchema = z.object({
+  questions: z
+    .array(
+      z.object({
+        text: z.string().min(1),
+        category: z.enum(questionCategories).optional()
+      })
+    )
+    .default([])
+});
+
+export const patchPlanQuestionSchema = z.object({
+  text: z.string().min(1).optional(),
+  category: z.enum(questionCategories).optional(),
+  notes: z.string().optional(),
+  included: z.boolean().optional()
+});
+
+export const addPlanQuestionSchema = z.object({
+  text: z.string().min(1),
+  category: z.enum(questionCategories),
+  target: z.enum(questionTargets).optional(),
+  notes: z.string().optional(),
+  included: z.boolean().optional()
+});
+
+export const reorderPlanQuestionsSchema = z.object({
+  orderedIds: z.array(z.string().min(1)).min(1)
+});
+
+export const voiceSessionBodySchema = z.object({
+  sessionId: z.string().min(1)
+});
+
 export const casebookSegmentSchema = z.object({
   cases: z.array(
     z.object({

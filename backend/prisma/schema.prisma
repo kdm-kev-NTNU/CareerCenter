@@ -38,8 +38,6 @@ model User {
   interviewPrepPlans                 InterviewPrepPlan[]
   interviewSimulatorSettings         InterviewSimulatorSettings[]
   interviewSessions                  InterviewSession[]
-  interviewStoryBankEntries          InterviewStoryBankEntry[]
-  interviewCaseRepertoireLogs        InterviewCaseRepertoireLog[]
   interviewAbilityTestAttempts       InterviewAbilityTestAttempt[]
   interviewVideoSettings             InterviewVideoSettings?
   interviewVideoRuns                 InterviewVideoRun[]
@@ -437,6 +435,8 @@ model InterviewPrepQuestion {
   bankQuestionId  String?
   storyId         String?
   gapReason       String?
+  included        Boolean                @default(true)
+  notes           String                 @default("")
   plan            InterviewPrepPlan      @relation(fields: [planId], references: [id], onDelete: Cascade)
   bankQuestion    InterviewBankQuestion? @relation(fields: [bankQuestionId], references: [id], onDelete: SetNull)
 
@@ -459,6 +459,7 @@ model InterviewImportJob {
   id             String                @id @default(cuid())
   userId         String
   knowledgeDocId String
+  kind           String                @default("cases")
   status         String                @default("queued")
   progress       Int                   @default(0)
   message        String                @default("")
@@ -470,6 +471,7 @@ model InterviewImportJob {
 
   @@index([userId, status])
   @@index([knowledgeDocId])
+  @@index([knowledgeDocId, kind, status])
 }
 
 model InterviewPrepTask {
@@ -527,52 +529,6 @@ model InterviewMessage {
   session   InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId, createdAt])
-}
-
-model InterviewStoryBankEntry {
-  id        String                @id @default(cuid())
-  userId    String
-  title     String
-  situation String                @default("")
-  task      String                @default("")
-  action    String                @default("")
-  result    String                @default("")
-  tags      String[]
-  createdAt DateTime              @default(now())
-  updatedAt DateTime              @updatedAt
-  user      User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  scores    InterviewStoryScore[]
-
-  @@index([userId, updatedAt])
-}
-
-model InterviewStoryScore {
-  id         String                  @id @default(cuid())
-  storyId    String
-  scoresJson String
-  sum        Int
-  note       String                  @default("")
-  createdAt  DateTime                @default(now())
-  story      InterviewStoryBankEntry @relation(fields: [storyId], references: [id], onDelete: Cascade)
-
-  @@index([storyId, createdAt])
-}
-
-model InterviewCaseRepertoireLog {
-  id          String   @id @default(cuid())
-  userId      String
-  caseEntryId String?
-  title       String
-  company     String   @default("")
-  format      String   @default("")
-  tested      String   @default("")
-  improvement String   @default("")
-  outcome     String   @default("")
-  notes       String   @default("")
-  practicedAt DateTime @default(now())
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, practicedAt])
 }
 
 model InterviewAbilityTestAttempt {

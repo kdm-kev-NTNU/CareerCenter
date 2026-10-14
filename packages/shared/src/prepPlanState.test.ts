@@ -31,6 +31,14 @@ describe("transitionPrepPlan", () => {
     expect(transitionPrepPlan("researching", { type: "fail" })).toBe("failed");
   });
 
+  it("cancels researching and curating, and can restart from cancelled", () => {
+    expect(transitionPrepPlan("researching", { type: "cancel" })).toBe("cancelled");
+    expect(transitionPrepPlan("curating", { type: "cancel" })).toBe("cancelled");
+    expect(transitionPrepPlan("awaiting_answers", { type: "cancel" })).toBe("awaiting_answers");
+    expect(transitionPrepPlan("cancelled", { type: "start_research" })).toBe("researching");
+    expect(isPrepPlanPipelineActive("searching", "cancelled")).toBe(false);
+  });
+
   it("marks earlier pipeline steps done and later steps pending", () => {
     expect(prepPlanStepVisual("created", "research_notes", "researching")).toBe("done");
     expect(prepPlanStepVisual("research_notes", "research_notes", "researching")).toBe("active");

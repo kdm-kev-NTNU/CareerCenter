@@ -2,17 +2,22 @@ import { describe, expect, it } from "vitest";
 import { FakeLlmClient } from "../ai/fakeLlmClient.js";
 import { InterviewPrepMemoryRepository } from "../interviewPrepMemoryRepository.js";
 import { sha256Content } from "./contentHash.js";
-import { enqueueImportJob, processImportJob } from "./importJobService.js";
+import { cancelImportJob, processImportJob } from "./importJobService.js";
+import { JobCancellationRegistry } from "./jobCancellationRegistry.js";
+
+function deps(llmClient: FakeLlmClient, repository: InterviewPrepMemoryRepository) {
+  return {
+    llmClient,
+    repository,
+    cancellationRegistry: new JobCancellationRegistry()
+  };
+}
 
 describe("importJobService", () => {
-  it("enqueueImportJob drains without throwing", () => {
-    expect(() => enqueueImportJob("u1", "job-1")).not.toThrow();
-  });
-
   it("returns early when import job is missing", async () => {
     const repository = new InterviewPrepMemoryRepository();
     const llmClient = new FakeLlmClient();
-    await processImportJob({ llmClient, repository }, "u1", "missing");
+    await processImportJob(deps(llmClient, repository), "u1", "missing");
     expect(llmClient.structuredCalls).toHaveLength(0);
   });
 
@@ -21,7 +26,7 @@ describe("importJobService", () => {
     const job = await repository.createImportJob("u1", { knowledgeDocId: "missing-doc" });
     const llmClient = new FakeLlmClient();
 
-    await processImportJob({ llmClient, repository }, "u1", job.id);
+    await processImportJob(deps(llmClient, repository), "u1", job.id);
 
     const updated = await repository.getImportJob("u1", job.id);
     expect(updated?.status).toBe("failed");
@@ -52,7 +57,7 @@ describe("importJobService", () => {
       ]
     });
 
-    await processImportJob({ llmClient, repository }, "u1", job.id);
+    await processImportJob(deps(llmClient, repository), "u1", job.id);
 
     const updated = await repository.getImportJob("u1", job.id);
     expect(updated?.status).toBe("done");
@@ -105,7 +110,7 @@ describe("importJobService", () => {
       }
     });
 
-    await processImportJob({ llmClient, repository }, "u1", job.id);
+    await processImportJob(deps(llmClient, repository), "u1", job.id);
 
     const cases = await repository.listCaseEntries("u1");
     expect(cases).toHaveLength(1);
@@ -131,7 +136,7 @@ describe("importJobService", () => {
       }
     });
 
-    await processImportJob({ llmClient, repository }, "u1", job.id);
+    await processImportJob(deps(llmClient, repository), "u1", job.id);
 
     const updated = await repository.getImportJob("u1", job.id);
     expect(updated?.status).toBe("review");
@@ -155,7 +160,7 @@ describe("importJobService", () => {
       throw new Error("boom");
     };
 
-    await processImportJob({ llmClient, repository }, "u1", job.id);
+    await processImportJob(deps(llmClient, repository), "u1", job.id);
 
     expect((await repository.getImportJob("u1", job.id))?.status).toBe("failed");
     expect((await repository.getImportJob("u1", job.id))?.message).toMatch(/boom/);
@@ -188,18 +193,27 @@ describe("importJobService", () => {
       return schema.parse({ title: "Alpha", prompt: "første", interviewerInfo: "", solution: "en" });
     };
 
-    await processImportJob({ llmClient: failing, repository }, "u1", job.id);
+    await processImportJob(deps(failing, repository), "u1", job.id);
     expect((await repository.getImportJob("u1", job.id))?.status).toBe("failed");
     expect(await repository.listCaseEntries("u1")).toHaveLength(1);
 
     const retry = new FakeLlmClient({
       structuredResult: { title: "Beta", prompt: "andre", interviewerInfo: "hint", solution: "to" }
     });
-    await processImportJob({ llmClient: retry, repository }, "u1", job.id);
+    await processImportJob(deps(retry, repository), "u1", job.id);
 
     expect(retry.structuredCalls).toHaveLength(1);
     expect((await repository.getImportJob("u1", job.id))?.status).toBe("done");
     const cases = await repository.listCaseEntries("u1");
     expect(cases.map((entry) => entry.title).sort()).toEqual(["Alpha", "Beta"]);
+  });
+
+  it("cancels a queued job without a live runner", async () => {
+    const repository = new InterviewPrepMemoryRepository();
+    const job = await repository.createImportJob("u1", { knowledgeDocId: "doc" });
+    const registry = new JobCancellationRegistry();
+    const result = await cancelImportJob({ repository, cancellationRegistry: registry }, "u1", job.id);
+    expect(result.ok).toBe(true);
+    expect((await repository.getImportJob("u1", job.id))?.status).toBe("cancelled");
   });
 });

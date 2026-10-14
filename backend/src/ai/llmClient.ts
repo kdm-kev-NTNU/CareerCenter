@@ -10,6 +10,8 @@ export interface LlmMessage {
 export interface LlmCompleteOptions {
   messages: LlmMessage[];
   temperature?: number;
+  /** Optional abort signal for cancellable long-running calls. */
+  signal?: AbortSignal;
 }
 
 export interface LlmTranscribeOptions {
@@ -25,6 +27,6 @@ export interface LlmClient {
     options: LlmCompleteOptions,
     schema: T
   ): Promise<z.infer<T>>;
-  webSearch?(query: string): Promise<string>;
+  webSearch?(query: string, signal?: AbortSignal): Promise<string>;
   transcribe?(options: LlmTranscribeOptions): Promise<string>;
 }

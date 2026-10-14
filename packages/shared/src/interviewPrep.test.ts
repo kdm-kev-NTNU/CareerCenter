@@ -24,6 +24,8 @@ describe("interview prep constants", () => {
     for (const criterion of starRubricCriteria) {
       expect(starRubricCriterionLabels[criterion].length).toBeGreaterThan(0);
     }
+    expect(starRubricCriterionLabels.openingAndStructure).toBe("Åpning og struktur");
+    expect(starRubricCriterionLabels.learning).toBe("Lærdom");
   });
 
   it("defines case framework steps", () => {

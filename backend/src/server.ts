@@ -24,6 +24,8 @@ import type { LlmClient } from "./ai/llmClient.js";
 import { OpenAiLlmClient } from "./ai/openaiLlmClient.js";
 import type { InterviewPrepRepository } from "./interviewPrepRepository.js";
 import { InterviewPrepMemoryRepository } from "./interviewPrepMemoryRepository.js";
+import { JobCancellationRegistry } from "./interview/jobCancellationRegistry.js";
+import { recoverInterruptedJobs } from "./interview/recoverInterruptedJobs.js";
 const TEST_AUTH_USER_NAME = "__test__";
 const TEST_AUTH_USER_PIN = "0000";
 const INTERVIEW_MEDIA_PERMISSIONS_POLICY = "camera=(self), microphone=(self)";
@@ -35,6 +37,9 @@ export interface ServerOptions {
   authRateLimitMax?: number;
   llmClient?: LlmClient;
   interviewPrepRepository?: InterviewPrepRepository;
+  jobCancellationRegistry?: JobCancellationRegistry;
+  /** Skip restart recovery (tests that seed running jobs). */
+  skipJobRecovery?: boolean;
 }
 
 function isPublicApiPath(url: string): boolean {
@@ -52,6 +57,11 @@ export async function buildServer(options: ServerOptions) {
   const authDisabled = options.authDisabled ?? env.AUTH_DISABLED;
   const llmClient = options.llmClient ?? new OpenAiLlmClient(env);
   const interviewPrepRepository = options.interviewPrepRepository ?? new InterviewPrepMemoryRepository();
+  const jobCancellationRegistry = options.jobCancellationRegistry ?? new JobCancellationRegistry();
+
+  if (!options.skipJobRecovery) {
+    await recoverInterruptedJobs(interviewPrepRepository);
+  }
 
   registerErrorHandler(app);
   await registerAuthPlugins(app);
@@ -110,7 +120,13 @@ export async function buildServer(options: ServerOptions) {
   app.register((instance) => thesisCompaniesRoutes(instance, repository));
   app.register((instance) => educationRoutes(instance, repository));
   app.register((instance) => bachelorStorageRoutes(instance, repository));
-  app.register((instance) => interviewPrepRoutes(instance, { llmClient, interviewPrepRepository }));
+  app.register((instance) =>
+    interviewPrepRoutes(instance, {
+      llmClient,
+      interviewPrepRepository,
+      jobCancellationRegistry
+    })
+  );
 
   return app;
 }

@@ -4,6 +4,7 @@ import type {
   CaseApprovalStatus,
   CaseSourceKind,
   CaseStyle,
+  ImportJobKind,
   ImportJobStatus,
   InterviewMode,
   KnowledgeDocKind,
@@ -12,13 +13,11 @@ import type {
   PrepQuestionSource,
   QuestionCategory,
   QuestionTarget,
-  StarRubricCriterion,
   VideoSimState,
   VideoSimulatorSettings
 } from "@careercenter/shared";
 import { defaultVideoSimulatorSettings, parsePrepPlanPipelineStep } from "@careercenter/shared";
 import { ensureInterviewBibleCatalog } from "./interview/bibleCatalog.js";
-import { parseStarScores } from "./interview/meccaMappers.js";
 import type {
   AbilityAttemptInput,
   CaseEntryInput,
@@ -27,7 +26,6 @@ import type {
   InterviewAbilityTestAttemptRecord,
   InterviewBankQuestionRecord,
   InterviewCaseEntryRecord,
-  InterviewCaseRepertoireLogRecord,
   InterviewImportJobRecord,
   InterviewKnowledgeDoc,
   InterviewMessageRecord,
@@ -35,14 +33,12 @@ import type {
   InterviewPrepRepository,
   InterviewSessionRecord,
   InterviewSimulatorSettingsRecord,
-  InterviewStoryBankEntryRecord,
-  InterviewStoryScoreRecord,
   InterviewVideoRunRecord,
   InterviewVideoSettingsRecord,
   KnowledgeDocInput,
+  PlanQuestionCreateInput,
+  PlanQuestionPatchInput,
   PrepPlanCreateInput,
-  RepertoireLogInput,
-  StoryBankInput,
   VideoRunInput
 } from "./interviewPrepRepository.js";
 import type { InterviewFeedbackRubric } from "./interview/feedbackRubric.js";
@@ -131,6 +127,32 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
           ]
         : [])
     ]);
+  }
+
+  async upsertBankQuestionsForDoc(
+    userId: string,
+    knowledgeDocId: string,
+    questions: Array<{ text: string; category: QuestionCategory; tags: string[]; contentHash: string }>
+  ): Promise<number> {
+    if (questions.length === 0) return 0;
+    const existing = await this.prisma.interviewBankQuestion.findMany({
+      where: { userId, knowledgeDocId },
+      select: { contentHash: true }
+    });
+    const hashes = new Set(existing.map((row) => row.contentHash));
+    const toInsert = questions.filter((item) => !hashes.has(item.contentHash));
+    if (toInsert.length === 0) return 0;
+    await this.prisma.interviewBankQuestion.createMany({
+      data: toInsert.map((item) => ({
+        userId,
+        knowledgeDocId,
+        text: item.text,
+        category: item.category,
+        tags: item.tags,
+        contentHash: item.contentHash
+      }))
+    });
+    return toInsert.length;
   }
 
   async listBankQuestions(
@@ -509,6 +531,115 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
     return this.getPrepPlan(userId, planId);
   }
 
+  async patchPlanQuestion(
+    userId: string,
+    planId: string,
+    questionId: string,
+    patch: PlanQuestionPatchInput
+  ): Promise<InterviewPrepPlanRecord | null> {
+    const plan = await this.getPrepPlan(userId, planId);
+    if (!plan) return null;
+    const existing = plan.questions.find((q) => q.id === questionId);
+    if (!existing) return null;
+    const textChanged = patch.text !== undefined && patch.text !== existing.text;
+    await this.prisma.interviewPrepQuestion.updateMany({
+      where: { id: questionId, planId },
+      data: {
+        ...(patch.text !== undefined ? { text: patch.text } : {}),
+        ...(patch.category !== undefined ? { category: patch.category } : {}),
+        ...(patch.notes !== undefined ? { notes: patch.notes } : {}),
+        ...(patch.included !== undefined ? { included: patch.included } : {}),
+        ...(patch.source !== undefined ? { source: patch.source } : {}),
+        ...(textChanged ? { gapReason: null } : {})
+      }
+    });
+    await this.prisma.interviewPrepPlan.update({
+      where: { id: planId },
+      data: { updatedAt: new Date() }
+    });
+    return this.getPrepPlan(userId, planId);
+  }
+
+  async addPlanQuestion(
+    userId: string,
+    planId: string,
+    input: PlanQuestionCreateInput
+  ): Promise<InterviewPrepPlanRecord | null> {
+    const plan = await this.getPrepPlan(userId, planId);
+    if (!plan) return null;
+    const maxOrder = plan.questions.reduce((max, q) => Math.max(max, q.sortOrder), -1);
+    await this.prisma.interviewPrepQuestion.create({
+      data: {
+        planId,
+        text: input.text,
+        category: input.category,
+        target: input.target ?? "interview",
+        sortOrder: maxOrder + 1,
+        source: "custom",
+        included: input.included ?? true,
+        notes: input.notes ?? ""
+      }
+    });
+    await this.prisma.interviewPrepPlan.update({
+      where: { id: planId },
+      data: { updatedAt: new Date() }
+    });
+    return this.getPrepPlan(userId, planId);
+  }
+
+  async deletePlanQuestion(
+    userId: string,
+    planId: string,
+    questionId: string
+  ): Promise<InterviewPrepPlanRecord | null> {
+    const plan = await this.getPrepPlan(userId, planId);
+    if (!plan) return null;
+    if (!plan.questions.some((q) => q.id === questionId)) return null;
+    await this.prisma.interviewPrepQuestion.deleteMany({ where: { id: questionId, planId } });
+    const remaining = plan.questions
+      .filter((q) => q.id !== questionId)
+      .map((q, index) => ({ id: q.id, sortOrder: index }));
+    await Promise.all(
+      remaining.map((item) =>
+        this.prisma.interviewPrepQuestion.update({
+          where: { id: item.id },
+          data: { sortOrder: item.sortOrder }
+        })
+      )
+    );
+    await this.prisma.interviewPrepPlan.update({
+      where: { id: planId },
+      data: { updatedAt: new Date() }
+    });
+    return this.getPrepPlan(userId, planId);
+  }
+
+  async reorderPlanQuestions(
+    userId: string,
+    planId: string,
+    orderedIds: string[]
+  ): Promise<InterviewPrepPlanRecord | null> {
+    const plan = await this.getPrepPlan(userId, planId);
+    if (!plan) return null;
+    const existingIds = new Set(plan.questions.map((q) => q.id));
+    if (orderedIds.length !== plan.questions.length) return null;
+    if (new Set(orderedIds).size !== orderedIds.length) return null;
+    if (!orderedIds.every((id) => existingIds.has(id))) return null;
+    await this.prisma.$transaction(
+      orderedIds.map((id, index) =>
+        this.prisma.interviewPrepQuestion.update({
+          where: { id },
+          data: { sortOrder: index }
+        })
+      )
+    );
+    await this.prisma.interviewPrepPlan.update({
+      where: { id: planId },
+      data: { updatedAt: new Date() }
+    });
+    return this.getPrepPlan(userId, planId);
+  }
+
   async setPlanQuestionStory(
     userId: string,
     planId: string,
@@ -639,105 +770,6 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
     return row ? this.mapSession(row) : null;
   }
 
-  async listStoryBankEntries(userId: string): Promise<InterviewStoryBankEntryRecord[]> {
-    const rows = await this.prisma.interviewStoryBankEntry.findMany({
-      where: { userId },
-      orderBy: { updatedAt: "desc" }
-    });
-    return rows.map((row) => this.mapStory(row));
-  }
-
-  async getStoryBankEntry(userId: string, id: string): Promise<InterviewStoryBankEntryRecord | null> {
-    const row = await this.prisma.interviewStoryBankEntry.findFirst({ where: { id, userId } });
-    return row ? this.mapStory(row) : null;
-  }
-
-  async createStoryBankEntry(userId: string, input: StoryBankInput): Promise<InterviewStoryBankEntryRecord> {
-    const row = await this.prisma.interviewStoryBankEntry.create({
-      data: { userId, ...input }
-    });
-    return this.mapStory(row);
-  }
-
-  async updateStoryBankEntry(
-    userId: string,
-    id: string,
-    input: Partial<StoryBankInput>
-  ): Promise<InterviewStoryBankEntryRecord | null> {
-    const existing = await this.getStoryBankEntry(userId, id);
-    if (!existing) return null;
-    const row = await this.prisma.interviewStoryBankEntry.update({
-      where: { id },
-      data: input
-    });
-    return this.mapStory(row);
-  }
-
-  async deleteStoryBankEntry(userId: string, id: string): Promise<boolean> {
-    const existing = await this.getStoryBankEntry(userId, id);
-    if (!existing) return false;
-    await this.prisma.interviewStoryBankEntry.delete({ where: { id } });
-    return true;
-  }
-
-  async listStoryScores(userId: string, storyId: string): Promise<InterviewStoryScoreRecord[]> {
-    const story = await this.getStoryBankEntry(userId, storyId);
-    if (!story) return [];
-    const rows = await this.prisma.interviewStoryScore.findMany({
-      where: { storyId },
-      orderBy: { createdAt: "desc" }
-    });
-    return rows.map((row) => this.mapStoryScore(row));
-  }
-
-  async addStoryScore(
-    userId: string,
-    storyId: string,
-    input: { scores: Record<StarRubricCriterion, number>; sum: number; note: string }
-  ): Promise<InterviewStoryScoreRecord | null> {
-    const story = await this.getStoryBankEntry(userId, storyId);
-    if (!story) return null;
-    const row = await this.prisma.interviewStoryScore.create({
-      data: {
-        storyId,
-        scoresJson: JSON.stringify(input.scores),
-        sum: input.sum,
-        note: input.note
-      }
-    });
-    await this.prisma.interviewStoryBankEntry.update({
-      where: { id: storyId },
-      data: { updatedAt: new Date() }
-    });
-    return this.mapStoryScore(row);
-  }
-
-  async listRepertoireLogs(userId: string): Promise<InterviewCaseRepertoireLogRecord[]> {
-    const rows = await this.prisma.interviewCaseRepertoireLog.findMany({
-      where: { userId },
-      orderBy: { practicedAt: "desc" }
-    });
-    return rows.map((row) => this.mapRepertoire(row));
-  }
-
-  async createRepertoireLog(userId: string, input: RepertoireLogInput): Promise<InterviewCaseRepertoireLogRecord> {
-    const row = await this.prisma.interviewCaseRepertoireLog.create({
-      data: {
-        userId,
-        caseEntryId: input.caseEntryId,
-        title: input.title,
-        company: input.company ?? "",
-        format: input.format ?? "",
-        tested: input.tested ?? "",
-        improvement: input.improvement ?? "",
-        outcome: input.outcome,
-        notes: input.notes,
-        practicedAt: input.practicedAt ? new Date(input.practicedAt) : undefined
-      }
-    });
-    return this.mapRepertoire(row);
-  }
-
   async listAbilityAttempts(userId: string, limit = 50): Promise<InterviewAbilityTestAttemptRecord[]> {
     const rows = await this.prisma.interviewAbilityTestAttempt.findMany({
       where: { userId },
@@ -804,7 +836,8 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
     const row = await this.prisma.interviewImportJob.create({
       data: {
         userId,
-        knowledgeDocId: input.knowledgeDocId
+        knowledgeDocId: input.knowledgeDocId,
+        kind: input.kind ?? "cases"
       }
     });
     return this.mapImportJob(row);
@@ -818,6 +851,18 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
   async listImportJobs(userId: string): Promise<InterviewImportJobRecord[]> {
     const rows = await this.prisma.interviewImportJob.findMany({
       where: { userId },
+      orderBy: { updatedAt: "desc" }
+    });
+    return rows.map((row) => this.mapImportJob(row));
+  }
+
+  async listImportJobsForDoc(
+    userId: string,
+    knowledgeDocId: string,
+    kind?: ImportJobKind
+  ): Promise<InterviewImportJobRecord[]> {
+    const rows = await this.prisma.interviewImportJob.findMany({
+      where: { userId, knowledgeDocId, ...(kind ? { kind } : {}) },
       orderBy: { updatedAt: "desc" }
     });
     return rows.map((row) => this.mapImportJob(row));
@@ -840,6 +885,22 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       }
     });
     return this.mapImportJob(row);
+  }
+
+  async failInterruptedImportJobs(message: string): Promise<number> {
+    const result = await this.prisma.interviewImportJob.updateMany({
+      where: { status: { in: ["queued", "running"] } },
+      data: { status: "failed", message, progress: 100 }
+    });
+    return result.count;
+  }
+
+  async failInterruptedPrepPlans(message: string): Promise<number> {
+    const result = await this.prisma.interviewPrepPlan.updateMany({
+      where: { status: { in: ["researching", "curating"] } },
+      data: { status: "failed", failureReason: message }
+    });
+    return result.count;
   }
 
   private mapKnowledge(row: {
@@ -958,7 +1019,9 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
           source: (item.source as PrepQuestionSource | null) ?? "generated",
           bankQuestionId: item.bankQuestionId ?? undefined,
           storyId: item.storyId ?? undefined,
-          gapReason: item.gapReason ?? undefined
+          gapReason: item.gapReason ?? undefined,
+          included: item.included,
+          notes: item.notes
         })),
       recommendedCases: row.recommendedCases
         .sort((a, b) => a.sortOrder - b.sortOrder)
@@ -1044,82 +1107,11 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
     };
   }
 
-  private mapStory(row: {
-    id: string;
-    userId: string;
-    title: string;
-    situation: string;
-    task: string;
-    action: string;
-    result: string;
-    tags: string[];
-    createdAt: Date;
-    updatedAt: Date;
-  }): InterviewStoryBankEntryRecord {
-    return {
-      id: row.id,
-      userId: row.userId,
-      title: row.title,
-      situation: row.situation,
-      task: row.task,
-      action: row.action,
-      result: row.result,
-      tags: row.tags,
-      createdAt: row.createdAt.toISOString(),
-      updatedAt: row.updatedAt.toISOString()
-    };
-  }
-
-  private mapStoryScore(row: {
-    id: string;
-    storyId: string;
-    scoresJson: string;
-    sum: number;
-    note: string;
-    createdAt: Date;
-  }): InterviewStoryScoreRecord {
-    return {
-      id: row.id,
-      storyId: row.storyId,
-      scores: parseStarScores(row.scoresJson),
-      sum: row.sum,
-      note: row.note,
-      createdAt: row.createdAt.toISOString()
-    };
-  }
-
-  private mapRepertoire(row: {
-    id: string;
-    userId: string;
-    caseEntryId: string | null;
-    title: string;
-    company: string;
-    format: string;
-    tested: string;
-    improvement: string;
-    outcome: string;
-    notes: string;
-    practicedAt: Date;
-  }): InterviewCaseRepertoireLogRecord {
-    return {
-      id: row.id,
-      userId: row.userId,
-      caseEntryId: row.caseEntryId ?? undefined,
-      title: row.title,
-      company: row.company,
-      format: row.format,
-      tested: row.tested,
-      improvement: row.improvement,
-      outcome: row.outcome,
-      notes: row.notes,
-      practicedAt: row.practicedAt.toISOString()
-    };
-  }
-
   private mapImportJob(row: {
     id: string;
     userId: string;
     knowledgeDocId: string;
+    kind?: string;
     status: string;
     progress: number;
     message: string;
@@ -1131,6 +1123,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       id: row.id,
       userId: row.userId,
       knowledgeDocId: row.knowledgeDocId,
+      kind: ((row.kind ?? "cases") as ImportJobKind),
       status: row.status as ImportJobStatus,
       progress: row.progress,
       message: row.message,
@@ -1237,6 +1230,8 @@ type PlanRow = {
     bankQuestionId: string | null;
     storyId: string | null;
     gapReason: string | null;
+    included: boolean;
+    notes: string;
   }>;
   recommendedCases: Array<{
     id: string;

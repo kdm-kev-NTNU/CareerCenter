@@ -68,7 +68,7 @@ describe("interviewPrepApi", () => {
     await interviewPrepApi.plan("p1");
     await interviewPrepApi.submitClarifications("p1", [], true);
     await interviewPrepApi.replacePlanQuestion("p1", "q1", { text: "Alt?" });
-    await interviewPrepApi.createVoiceSession();
+    await interviewPrepApi.createVoiceSession("s1");
     await interviewPrepApi.transcribeVideo({ transcript: "hi" } as never);
 
     expect(mockedRequest).toHaveBeenCalledWith(
@@ -84,7 +84,10 @@ describe("interviewPrepApi", () => {
       "/api/interview/plans/p1/questions/q1",
       expect.objectContaining({ method: "PUT" })
     );
-    expect(mockedRequest).toHaveBeenCalledWith("/api/interview/voice/session", { method: "POST" });
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/api/interview/voice/session",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ sessionId: "s1" }) })
+    );
     expect(mockedRequest).toHaveBeenCalledWith(
       "/api/interview/video/transcribe",
       expect.objectContaining({ method: "POST" })
