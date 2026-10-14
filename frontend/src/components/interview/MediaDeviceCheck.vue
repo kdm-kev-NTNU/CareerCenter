@@ -29,10 +29,6 @@ let audioCtx: AudioContext | null = null;
 let analyser: AnalyserNode | null = null;
 let raf = 0;
 
-function releaseTracks() {
-  /* Parent owns the MediaStream; nothing to stop here. */
-}
-
 function stopMicMeter() {
   if (raf) cancelAnimationFrame(raf);
   raf = 0;
