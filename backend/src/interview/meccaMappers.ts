@@ -59,6 +59,10 @@ export function toRepertoireDto(row: InterviewCaseRepertoireLogRecord): Intervie
     id: row.id,
     caseEntryId: row.caseEntryId,
     title: row.title,
+    company: row.company,
+    format: row.format,
+    tested: row.tested,
+    improvement: row.improvement,
     outcome: row.outcome,
     notes: row.notes,
     practicedAt: row.practicedAt

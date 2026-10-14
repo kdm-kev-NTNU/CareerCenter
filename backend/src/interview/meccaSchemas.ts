@@ -30,6 +30,10 @@ export const storyScoreInputSchema = z.object({
 export const repertoireLogInputSchema = z.object({
   caseEntryId: z.string().optional(),
   title: z.string().min(1),
+  company: z.string().default(""),
+  format: z.string().default(""),
+  tested: z.string().default(""),
+  improvement: z.string().min(1),
   outcome: z.string().default(""),
   notes: z.string().default(""),
   practicedAt: z.string().datetime().optional()
@@ -57,5 +61,10 @@ export const transcriptMessageSchema = z.object({
 
 export const videoTranscribeStubSchema = z.object({
   blobKey: z.string().optional(),
-  note: z.string().default("")
+  note: z.string().default(""),
+  audioBase64: z.string().optional(),
+  filename: z.string().optional(),
+  mimeType: z.string().optional(),
+  durationMs: z.number().int().min(0).optional(),
+  withRubric: z.boolean().optional().default(false)
 });

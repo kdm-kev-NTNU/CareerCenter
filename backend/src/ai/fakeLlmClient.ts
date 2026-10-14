@@ -1,28 +1,35 @@
 import type { z } from "zod";
-import type { LlmClient, LlmCompleteOptions } from "./llmClient.js";
+import type { LlmClient, LlmCompleteOptions, LlmTranscribeOptions } from "./llmClient.js";
 
 export interface FakeLlmClientOptions {
   configured?: boolean;
   completeResult?: string;
   structuredResult?: unknown;
+  structuredResults?: unknown[];
   webSearchResult?: string;
+  transcribeResult?: string;
 }
 
 export class FakeLlmClient implements LlmClient {
   readonly completeCalls: LlmCompleteOptions[] = [];
   readonly structuredCalls: Array<{ options: LlmCompleteOptions; schema: z.ZodType }> = [];
   readonly webSearchCalls: string[] = [];
+  readonly transcribeCalls: LlmTranscribeOptions[] = [];
 
   private configured: boolean;
   private completeResult: string;
   private structuredResult: unknown;
+  private structuredResults: unknown[];
   private webSearchResult: string;
+  private transcribeResult: string;
 
   constructor(options: FakeLlmClientOptions = {}) {
     this.configured = options.configured ?? true;
     this.completeResult = options.completeResult ?? "fake completion";
     this.structuredResult = options.structuredResult ?? { ok: true };
+    this.structuredResults = options.structuredResults ?? [];
     this.webSearchResult = options.webSearchResult ?? "fake search result";
+    this.transcribeResult = options.transcribeResult ?? "fake transcript";
   }
 
   isConfigured(): boolean {
@@ -39,11 +46,17 @@ export class FakeLlmClient implements LlmClient {
     schema: T
   ): Promise<z.infer<T>> {
     this.structuredCalls.push({ options, schema });
-    return schema.parse(this.structuredResult);
+    const next = this.structuredResults.shift() ?? this.structuredResult;
+    return schema.parse(next);
   }
 
   async webSearch(query: string): Promise<string> {
     this.webSearchCalls.push(query);
     return this.webSearchResult;
+  }
+
+  async transcribe(options: LlmTranscribeOptions): Promise<string> {
+    this.transcribeCalls.push(options);
+    return this.transcribeResult;
   }
 }

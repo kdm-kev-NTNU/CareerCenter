@@ -1,30 +1,41 @@
 import {
+  answerStats,
   classifyCaseSource,
   defaultVideoSimulatorSettings,
   inferKnowledgeKind,
-  rankCasesForCompany,
   starRubricCriteria,
   storiesToAnkiCsv,
   storyToAnkiRow,
   videoSimulatorSettingsSchema,
-  weakestStoryQueue,
-  type CaseRankProfile
+  weakestStoryQueue
 } from "@careercenter/shared";
 import type { FastifyInstance } from "fastify";
+import { nanoid } from "nanoid";
 import type { LlmClient } from "../ai/llmClient.js";
 import { env } from "../config/env.js";
 import { toFullCaseDto, toPublicCaseDto } from "../interview/caseDto.js";
 import { parseCaseSections } from "../interview/caseSections.js";
 import { sha256Content } from "../interview/contentHash.js";
-import { toKnowledgeDocDto, toMessageDto, toPrepPlanDto, toSessionDto, toSimulatorSettingsDto } from "../interview/dtoMappers.js";
+import {
+  toBankQuestionDto,
+  toImportJobDto,
+  toKnowledgeDocDto,
+  toMessageDto,
+  toPrepPlanDto,
+  toSessionDto,
+  toSimulatorSettingsDto
+} from "../interview/dtoMappers.js";
 import { interviewFeedbackRubricSchema, sumRubricScores } from "../interview/feedbackRubric.js";
 import { importDocumentText } from "../interview/importDocumentText.js";
+import { processImportJob } from "../interview/importJobService.js";
+import { buildInterviewStoragePath, writeInterviewFile } from "../interview/interviewFileStorage.js";
 import {
   caseEntryInputSchema,
   clarificationAnswersSchema,
   createSessionSchema,
   knowledgeDocInputSchema,
   prepPlanIntakeSchema,
+  replacePlanQuestionSchema,
   sessionMessageSchema,
   simulatorSettingsSchema
 } from "../interview/knowledgeSchemas.js";
@@ -46,6 +57,7 @@ import {
   videoTranscribeStubSchema
 } from "../interview/meccaSchemas.js";
 import { PrepResearchService } from "../interview/prepResearchService.js";
+import { reindexAllBankQuestions, reindexBankQuestionsForDoc } from "../interview/reindexBankQuestions.js";
 import { buildFinishRubricPrompt, buildSimulatorSystemPrompt } from "../interview/prompts.js";
 import { createVoiceSession } from "../interview/voiceSession.js";
 import type { InterviewPrepRepository } from "../interviewPrepRepository.js";
@@ -80,6 +92,7 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
       content: body.content,
       contentHash
     });
+    await reindexBankQuestionsForDoc(deps.interviewPrepRepository, request.user.id, doc.id);
     return reply.code(201).send({ doc: toKnowledgeDocDto(doc), deduplicated: false });
   });
 
@@ -97,6 +110,7 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
       }
     );
     if (!doc) return reply.code(404).send({ message: "Dokument ikke funnet." });
+    await reindexBankQuestionsForDoc(deps.interviewPrepRepository, request.user.id, doc.id);
     return toKnowledgeDocDto(doc);
   });
 
@@ -125,6 +139,11 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
     const kind = inferKnowledgeKind({ filename, title, content: imported.text });
     const contentHash = sha256Content(imported.text);
     const existingDoc = await deps.interviewPrepRepository.findKnowledgeByHash(request.user.id, contentHash);
+    let originalFileKey: string | undefined;
+    if (!existingDoc && filename.toLowerCase().endsWith(".pdf")) {
+      originalFileKey = buildInterviewStoragePath(request.user.id, nanoid(), filename);
+      await writeInterviewFile(originalFileKey, buffer);
+    }
     const doc =
       existingDoc ??
       (await deps.interviewPrepRepository.createKnowledgeDoc(request.user.id, {
@@ -132,11 +151,21 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
         title,
         content: imported.text,
         sourceFilename: filename,
-        contentHash
+        contentHash,
+        originalFileKey
       }));
 
+    await reindexBankQuestionsForDoc(deps.interviewPrepRepository, request.user.id, doc.id);
+
     let caseEntry = null;
-    if (kind === "case" || kind === "practice") {
+    const sourceKind = classifyCaseSource({
+      filename,
+      title,
+      content: imported.text,
+      entryCount: imported.entryCount
+    });
+
+    if ((kind === "case" || kind === "practice") && sourceKind !== "casebook" && sourceKind !== "exhibit_pack") {
       const sections = parseCaseSections(imported.text);
       const caseHash = sha256Content(`${title}:${sections.prompt}:${sections.solution}`);
       const existingCase = await deps.interviewPrepRepository.findCaseByHash(request.user.id, caseHash);
@@ -148,29 +177,87 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
               prompt: sections.prompt || imported.text.slice(0, 4000),
               interviewerInfo: sections.interviewerInfo,
               solution: sections.solution,
-              sourceKind: classifyCaseSource({
-                filename,
-                title,
-                content: imported.text,
-                entryCount: imported.entryCount
-              }),
+              sourceKind,
               companyTags: [],
               knowledgeDocId: doc.id,
-              contentHash: caseHash
+              contentHash: caseHash,
+              originalFileKey: doc.originalFileKey
             })
           );
+    }
+
+    let importJob = null;
+    if (!existingDoc && (sourceKind === "casebook" || sourceKind === "exhibit_pack")) {
+      importJob = await deps.interviewPrepRepository.createImportJob(request.user.id, {
+        knowledgeDocId: doc.id
+      });
+      void processImportJob(
+        { llmClient: deps.llmClient, repository: deps.interviewPrepRepository },
+        request.user.id,
+        importJob.id
+      );
     }
 
     return reply.code(existingDoc ? 200 : 201).send({
       doc: toKnowledgeDocDto(doc),
       caseEntry,
+      importJob: importJob ? toImportJobDto(importJob) : null,
       deduplicated: Boolean(existingDoc)
     });
   });
 
+  app.get("/api/interview/questions", async (request) => {
+    const query = request.query as { q?: string; category?: string; tag?: string };
+    const rows = await deps.interviewPrepRepository.listBankQuestions(request.user.id, query);
+    return rows.map(toBankQuestionDto);
+  });
+
+  app.post("/api/interview/questions/reindex", async (request) => {
+    const count = await reindexAllBankQuestions(deps.interviewPrepRepository, request.user.id);
+    return { indexed: count };
+  });
+
   app.get("/api/interview/cases", async (request) => {
-    const entries = await deps.interviewPrepRepository.listCaseEntries(request.user.id);
+    const query = request.query as {
+      q?: string;
+      sourceKind?: string;
+      style?: string;
+      approvalStatus?: string;
+    };
+    const entries = await deps.interviewPrepRepository.searchCaseEntries(request.user.id, query);
     return entries.map(toPublicCaseDto);
+  });
+
+  app.post("/api/interview/cases/:id/approve", async (request, reply) => {
+    const updated = await deps.interviewPrepRepository.approveCaseEntry(
+      request.user.id,
+      (request.params as { id: string }).id
+    );
+    if (!updated) return reply.code(404).send({ message: "Case ikke funnet." });
+    return toPublicCaseDto(updated);
+  });
+
+  app.post("/api/interview/cases/:id/reject", async (request, reply) => {
+    const updated = await deps.interviewPrepRepository.rejectCaseEntry(
+      request.user.id,
+      (request.params as { id: string }).id
+    );
+    if (!updated) return reply.code(404).send({ message: "Case ikke funnet." });
+    return toPublicCaseDto(updated);
+  });
+
+  app.get("/api/interview/import-jobs", async (request) => {
+    const jobs = await deps.interviewPrepRepository.listImportJobs(request.user.id);
+    return jobs.map(toImportJobDto);
+  });
+
+  app.get("/api/interview/import-jobs/:id", async (request, reply) => {
+    const job = await deps.interviewPrepRepository.getImportJob(
+      request.user.id,
+      (request.params as { id: string }).id
+    );
+    if (!job) return reply.code(404).send({ message: "Jobb ikke funnet." });
+    return toImportJobDto(job);
   });
 
   app.get("/api/interview/cases/:id", async (request, reply) => {
@@ -226,20 +313,64 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
       (request.params as { id: string }).id
     );
     if (!plan) return reply.code(404).send({ message: "Plan ikke funnet." });
-    const profile: CaseRankProfile = {
-      industries: [plan.companyName, ...plan.companyName.split(/\s+/).filter((part) => part.length > 2)],
-      caseTypes: ["case", "profitability", "market_entry"]
-    };
-    const rankedCases = rankCasesForCompany(
-      profile,
-      (await deps.interviewPrepRepository.listCaseEntries(request.user.id)).map((entry) => ({
-        id: entry.id,
-        industry: entry.companyTags[0] ?? null,
-        caseType: entry.sourceKind,
-        style: entry.caseStyle ?? null
-      }))
+    return { plan: toPrepPlanDto(plan), rankedCases: plan.recommendedCases };
+  });
+
+  app.put("/api/interview/plans/:id/questions/:questionId", async (request, reply) => {
+    const body = replacePlanQuestionSchema.parse(request.body);
+    const planId = (request.params as { id: string }).id;
+    const questionId = (request.params as { questionId: string }).questionId;
+
+    if (body.storyId !== undefined) {
+      const updated = await deps.interviewPrepRepository.setPlanQuestionStory(
+        request.user.id,
+        planId,
+        questionId,
+        body.storyId
+      );
+      if (!updated) return reply.code(404).send({ message: "Spørsmål ikke funnet." });
+      return toPrepPlanDto(updated);
+    }
+
+    if (body.bankQuestionId) {
+      const [bankQuestion] = await deps.interviewPrepRepository.getBankQuestionsByIds(request.user.id, [
+        body.bankQuestionId
+      ]);
+      if (!bankQuestion) return reply.code(400).send({ message: "Bankspørsmål ikke funnet." });
+      const updated = await deps.interviewPrepRepository.replacePlanQuestion(
+        request.user.id,
+        planId,
+        questionId,
+        {
+          text: bankQuestion.text,
+          category: bankQuestion.category,
+          target: body.target ?? "interview",
+          source: "bank",
+          bankQuestionId: bankQuestion.id,
+          storyId: body.storyId ?? undefined
+        }
+      );
+      if (!updated) return reply.code(404).send({ message: "Spørsmål ikke funnet." });
+      return toPrepPlanDto(updated);
+    }
+
+    if (!body.text || !body.category || !body.target) {
+      return reply.code(400).send({ message: "Mangler tekst/kategori/mål for erstatning." });
+    }
+    const updated = await deps.interviewPrepRepository.replacePlanQuestion(
+      request.user.id,
+      planId,
+      questionId,
+      {
+        text: body.text,
+        category: body.category,
+        target: body.target,
+        source: "generated",
+        storyId: body.storyId ?? undefined
+      }
     );
-    return { plan: toPrepPlanDto(plan), rankedCases };
+    if (!updated) return reply.code(404).send({ message: "Spørsmål ikke funnet." });
+    return toPrepPlanDto(updated);
   });
 
   app.post("/api/interview/plans", async (request, reply) => {
@@ -274,7 +405,8 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
       await researchService.submitClarificationsAndCurate(
         request.user.id,
         (request.params as { id: string }).id,
-        body.answers
+        body.answers,
+        body.skip
       );
       const plan = await deps.interviewPrepRepository.getPrepPlan(
         request.user.id,
@@ -329,17 +461,37 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
         language: "nb",
         essentialsSheet: ""
       };
+
+    let casePrompt: string | undefined;
+    let interviewerInfo: string | undefined;
+    let solution: string | undefined;
+    let caseStyle: "interviewer_led" | "candidate_led" | undefined;
+    if (body.caseEntryId) {
+      const cases = await deps.interviewPrepRepository.listCaseEntries(request.user.id);
+      const entry = cases.find((item) => item.id === body.caseEntryId);
+      if (!entry) return reply.code(404).send({ message: "Case ikke funnet." });
+      casePrompt = entry.prompt;
+      interviewerInfo = entry.interviewerInfo;
+      solution = entry.solution;
+      caseStyle = entry.caseStyle;
+    }
+
     const systemPrompt = buildSimulatorSystemPrompt({
       mode: body.mode,
       companyName: settings.companyName,
       tone: settings.tone,
       language: settings.language,
-      essentialsSheet: settings.essentialsSheet
+      essentialsSheet: settings.essentialsSheet,
+      caseStyle,
+      casePrompt,
+      interviewerInfo,
+      solution
     });
     const session = await deps.interviewPrepRepository.createSession(request.user.id, {
       mode: body.mode,
       title: body.title || `${body.mode} simulering`,
       prepPlanId: body.prepPlanId,
+      caseEntryId: body.caseEntryId,
       systemPrompt
     });
     return reply.code(201).send(toSessionDto(session));
@@ -390,6 +542,7 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
     const sessionId = (request.params as { id: string }).id;
     const session = await deps.interviewPrepRepository.getSession(request.user.id, sessionId);
     if (!session) return reply.code(404).send({ message: "Sesjon ikke funnet." });
+    if (session.finishedAt) return reply.code(409).send({ message: "Sesjonen er allerede avsluttet." });
 
     const history = await deps.interviewPrepRepository.listSessionMessages(request.user.id, sessionId);
     const lastUser = [...history].reverse().find((message) => message.role === "user");
@@ -414,7 +567,8 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
 
     const feedback = interviewFeedbackRubricSchema.parse(structured);
     const finished = await deps.interviewPrepRepository.finishSession(request.user.id, sessionId, feedback);
-    return toSessionDto(finished!);
+    if (!finished) return reply.code(409).send({ message: "Sesjonen er allerede avsluttet." });
+    return toSessionDto(finished);
   });
 
   app.post("/api/interview/voice/session", async () => createVoiceSession(env));
@@ -459,13 +613,48 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
     return reply.code(201).send(toVideoRunDto(run));
   });
 
-  app.post("/api/interview/video/transcribe", async (request) => {
+  app.post("/api/interview/video/transcribe", async (request, reply) => {
     const body = videoTranscribeStubSchema.parse(request.body ?? {});
-    return {
-      mock: true,
-      transcript: body.note.trim() || "(stub transkripsjon — ingen lyd behandlet)",
-      blobKey: body.blobKey
-    };
+    if (body.note.trim()) {
+      const stats = answerStats(body.note, body.durationMs ?? 60_000);
+      return { mock: true, transcript: body.note.trim(), blobKey: body.blobKey, stats };
+    }
+    if (!body.audioBase64) {
+      return reply.code(400).send({ message: "Mangler lyd for transkripsjon." });
+    }
+    if (!deps.llmClient.transcribe || !deps.llmClient.isConfigured()) {
+      return reply.code(503).send({ message: "AI er ikke konfigurert." });
+    }
+    const buffer = Buffer.from(body.audioBase64, "base64");
+    const transcript = await deps.llmClient.transcribe({
+      buffer,
+      filename: body.filename ?? "answer.webm",
+      mimeType: body.mimeType
+    });
+    const stats = answerStats(transcript, body.durationMs ?? 60_000);
+    let feedback = null;
+    if (body.withRubric) {
+      const defaultScores = Object.fromEntries(starRubricCriteria.map((key) => [key, 3])) as Record<
+        (typeof starRubricCriteria)[number],
+        number
+      >;
+      feedback = await deps.llmClient
+        .completeStructured(
+          {
+            messages: [
+              { role: "system", content: buildFinishRubricPrompt() },
+              { role: "user", content: transcript }
+            ]
+          },
+          interviewFeedbackRubricSchema
+        )
+        .catch(() => ({
+          scores: defaultScores,
+          sum: sumRubricScores(defaultScores),
+          improvement: "Stram inn strukturen og reduser fyllord."
+        }));
+    }
+    return { mock: false, transcript, blobKey: body.blobKey, stats, feedback };
   });
 
   app.get("/api/interview/ability/attempts", async (request) => {
