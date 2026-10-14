@@ -10,6 +10,8 @@ export function toPublicCaseDto(entry: InterviewCaseEntryRecord): InterviewCaseP
     caseStyle: entry.caseStyle,
     companyTags: entry.companyTags,
     knowledgeDocId: entry.knowledgeDocId,
+    approvalStatus: entry.approvalStatus,
+    originalFileKey: entry.originalFileKey,
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt
   };

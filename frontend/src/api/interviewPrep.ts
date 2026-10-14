@@ -1,10 +1,13 @@
 import type {
   InterviewAbilityTestAttemptDto,
+  InterviewBankQuestionDto,
   InterviewCaseEntryDto,
   InterviewCasePublicDto,
   InterviewCaseRepertoireLogDto,
+  InterviewImportJobDto,
   InterviewKnowledgeDocDto,
   InterviewMessageDto,
+  InterviewPrepPlanCaseDto,
   InterviewPrepPlanDto,
   InterviewSessionDto,
   InterviewSimulatorSettingsDto,
@@ -14,9 +17,10 @@ import type {
   InterviewVideoSettingsDto,
   InterviewMode,
   PrepFormat,
-  RankableCase,
   VideoSimulatorSettings,
-  VoiceSessionDto
+  VoiceSessionDto,
+  AnswerStats,
+  InterviewSessionFeedbackDto
 } from "@careercenter/shared";
 import { request, uploadRequest } from "./client.js";
 
@@ -27,12 +31,13 @@ export interface InterviewAiStatus {
 export interface KnowledgeImportResult {
   doc: InterviewKnowledgeDocDto;
   caseEntry: InterviewCasePublicDto | null;
+  importJob: InterviewImportJobDto | null;
   deduplicated: boolean;
 }
 
 export interface PrepPlanDetail {
   plan: InterviewPrepPlanDto;
-  rankedCases: RankableCase[];
+  rankedCases: InterviewPrepPlanCaseDto[];
 }
 
 export const interviewPrepApi = {
@@ -56,7 +61,26 @@ export const interviewPrepApi = {
     return uploadRequest<KnowledgeImportResult>("/api/interview/knowledge/import", formData);
   },
 
-  cases: () => request<InterviewCasePublicDto[]>("/api/interview/cases"),
+  searchQuestions: (params: { q?: string; category?: string; tag?: string } = {}) => {
+    const query = new URLSearchParams();
+    if (params.q) query.set("q", params.q);
+    if (params.category) query.set("category", params.category);
+    if (params.tag) query.set("tag", params.tag);
+    const suffix = query.toString() ? `?${query}` : "";
+    return request<InterviewBankQuestionDto[]>(`/api/interview/questions${suffix}`);
+  },
+  reindexQuestions: () =>
+    request<{ indexed: number }>("/api/interview/questions/reindex", { method: "POST" }),
+
+  cases: (params: { q?: string; sourceKind?: string; style?: string; approvalStatus?: string } = {}) => {
+    const query = new URLSearchParams();
+    if (params.q) query.set("q", params.q);
+    if (params.sourceKind) query.set("sourceKind", params.sourceKind);
+    if (params.style) query.set("style", params.style);
+    if (params.approvalStatus) query.set("approvalStatus", params.approvalStatus);
+    const suffix = query.toString() ? `?${query}` : "";
+    return request<InterviewCasePublicDto[]>(`/api/interview/cases${suffix}`);
+  },
   case: (id: string) => request<InterviewCaseEntryDto>(`/api/interview/cases/${id}`),
   createCase: (payload: Omit<InterviewCaseEntryDto, "id" | "createdAt" | "updatedAt">) =>
     request<{ case: InterviewCaseEntryDto; deduplicated: boolean }>("/api/interview/cases", {
@@ -64,6 +88,13 @@ export const interviewPrepApi = {
       body: JSON.stringify(payload)
     }),
   deleteCase: (id: string) => request<void>(`/api/interview/cases/${id}`, { method: "DELETE" }),
+  approveCase: (id: string) =>
+    request<InterviewCasePublicDto>(`/api/interview/cases/${id}/approve`, { method: "POST" }),
+  rejectCase: (id: string) =>
+    request<InterviewCasePublicDto>(`/api/interview/cases/${id}/reject`, { method: "POST" }),
+
+  importJobs: () => request<InterviewImportJobDto[]>("/api/interview/import-jobs"),
+  importJob: (id: string) => request<InterviewImportJobDto>(`/api/interview/import-jobs/${id}`),
 
   plans: () => request<InterviewPrepPlanDto[]>("/api/interview/plans"),
   plan: (id: string) => request<PrepPlanDetail>(`/api/interview/plans/${id}`),
@@ -71,10 +102,23 @@ export const interviewPrepApi = {
     request<InterviewPrepPlanDto>("/api/interview/plans", { method: "POST", body: JSON.stringify(payload) }),
   startPlanResearch: (id: string) =>
     request<InterviewPrepPlanDto>(`/api/interview/plans/${id}/research`, { method: "POST" }),
-  submitClarifications: (id: string, answers: Array<{ id: string; answer: string }>) =>
+  submitClarifications: (
+    id: string,
+    answers: Array<{ id: string; answer: string }>,
+    skip = false
+  ) =>
     request<InterviewPrepPlanDto>(`/api/interview/plans/${id}/clarifications`, {
       method: "POST",
-      body: JSON.stringify({ answers })
+      body: JSON.stringify({ answers, skip })
+    }),
+  replacePlanQuestion: (
+    planId: string,
+    questionId: string,
+    payload: { bankQuestionId?: string; text?: string; category?: string; target?: string; storyId?: string | null }
+  ) =>
+    request<InterviewPrepPlanDto>(`/api/interview/plans/${planId}/questions/${questionId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
     }),
 
   simulatorSettings: (mode: InterviewMode) =>
@@ -87,7 +131,7 @@ export const interviewPrepApi = {
 
   sessions: (mode?: InterviewMode) =>
     request<InterviewSessionDto[]>(mode ? `/api/interview/sessions?mode=${mode}` : "/api/interview/sessions"),
-  createSession: (payload: { mode: InterviewMode; title?: string; prepPlanId?: string }) =>
+  createSession: (payload: { mode: InterviewMode; title?: string; prepPlanId?: string; caseEntryId?: string }) =>
     request<InterviewSessionDto>("/api/interview/sessions", { method: "POST", body: JSON.stringify(payload) }),
   sessionMessages: (sessionId: string) =>
     request<InterviewMessageDto[]>(`/api/interview/sessions/${sessionId}/messages`),
@@ -124,8 +168,22 @@ export const interviewPrepApi = {
       method: "POST",
       body: JSON.stringify(payload)
     }),
-  transcribeVideoStub: (payload: { blobKey?: string; note?: string }) =>
-    request<{ mock: boolean; transcript: string }>("/api/interview/video/transcribe", {
+  transcribeVideo: (payload: {
+    blobKey?: string;
+    note?: string;
+    audioBase64?: string;
+    filename?: string;
+    mimeType?: string;
+    durationMs?: number;
+    withRubric?: boolean;
+  }) =>
+    request<{
+      mock: boolean;
+      transcript: string;
+      blobKey?: string;
+      stats?: AnswerStats;
+      feedback?: InterviewSessionFeedbackDto | null;
+    }>("/api/interview/video/transcribe", {
       method: "POST",
       body: JSON.stringify(payload)
     }),
@@ -164,6 +222,10 @@ export const interviewPrepApi = {
   createRepertoireLog: (payload: {
     caseEntryId?: string;
     title: string;
+    company?: string;
+    format?: string;
+    tested?: string;
+    improvement: string;
     outcome?: string;
     notes?: string;
     practicedAt?: string;

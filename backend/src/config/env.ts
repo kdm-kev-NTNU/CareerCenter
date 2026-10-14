@@ -13,9 +13,15 @@ const envSchema = z.object({
     .default("false")
     .transform((value) => value === "true"),
   OPENAI_API_KEY: z.string().optional(),
-  OPENAI_TEXT_MODEL: z.string().default("gpt-4.1-mini"),
+  OPENAI_TEXT_MODEL: z.string().default("gpt-6-astra"),
   OPENAI_VOICE_MODEL: z.string().default("gpt-live-1"),
-  OPENAI_TRANSCRIBE_MODEL: z.string().default("whisper-1")
+  OPENAI_TRANSCRIBE_MODEL: z.string().default("gpt-transcribe"),
+  OPENAI_REASONING_EFFORT: z.enum(["low", "medium", "high"]).default("high"),
+  OPENAI_FAST_MODE: z
+    .enum(["true", "false"])
+    .optional()
+    .default("false")
+    .transform((value) => value === "true")
 });
 
 export type Env = z.infer<typeof envSchema>;

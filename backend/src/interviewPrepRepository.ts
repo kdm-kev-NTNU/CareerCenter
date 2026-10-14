@@ -1,11 +1,14 @@
 import type {
   AbilityTestKind,
+  CaseApprovalStatus,
   CaseSourceKind,
   CaseStyle,
+  ImportJobStatus,
   InterviewMode,
   KnowledgeDocKind,
   PrepFormat,
   PrepPlanStatus,
+  PrepQuestionSource,
   QuestionCategory,
   QuestionTarget,
   StarRubricCriterion,
@@ -21,6 +24,7 @@ export interface InterviewKnowledgeDoc {
   title: string;
   content: string;
   sourceFilename?: string;
+  originalFileKey?: string;
   contentHash: string;
   createdAt: string;
   updatedAt: string;
@@ -38,8 +42,21 @@ export interface InterviewCaseEntryRecord {
   caseStyle?: CaseStyle;
   companyTags: string[];
   contentHash: string;
+  approvalStatus: CaseApprovalStatus;
+  originalFileKey?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface InterviewBankQuestionRecord {
+  id: string;
+  userId: string;
+  knowledgeDocId: string;
+  text: string;
+  category: QuestionCategory;
+  tags: string[];
+  contentHash: string;
+  createdAt: string;
 }
 
 export interface InterviewPrepClarificationRecord {
@@ -54,6 +71,19 @@ export interface InterviewPrepQuestionRecord {
   text: string;
   category: QuestionCategory;
   target: QuestionTarget;
+  sortOrder: number;
+  source: PrepQuestionSource;
+  bankQuestionId?: string;
+  storyId?: string;
+  gapReason?: string;
+}
+
+export interface InterviewPrepPlanCaseRecord {
+  id: string;
+  caseEntryId: string;
+  title: string;
+  prompt: string;
+  sourceKind: CaseSourceKind;
   sortOrder: number;
 }
 
@@ -73,10 +103,25 @@ export interface InterviewPrepPlanRecord {
   format: PrepFormat;
   status: PrepPlanStatus;
   researchNotes: string;
+  companyProfileJson: string;
+  clarificationRound: number;
   failureReason?: string;
   clarifications: InterviewPrepClarificationRecord[];
   questions: InterviewPrepQuestionRecord[];
   tasks: InterviewPrepTaskRecord[];
+  recommendedCases: InterviewPrepPlanCaseRecord[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InterviewImportJobRecord {
+  id: string;
+  userId: string;
+  knowledgeDocId: string;
+  status: ImportJobStatus;
+  progress: number;
+  message: string;
+  resultJson: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -96,6 +141,7 @@ export interface InterviewSessionRecord {
   mode: InterviewMode;
   title: string;
   prepPlanId?: string;
+  caseEntryId?: string;
   feedback?: InterviewFeedbackRubric;
   finishedAt?: string;
   createdAt: string;
@@ -146,6 +192,10 @@ export interface InterviewCaseRepertoireLogRecord {
   userId: string;
   caseEntryId?: string;
   title: string;
+  company: string;
+  format: string;
+  tested: string;
+  improvement: string;
   outcome: string;
   notes: string;
   practicedAt: string;
@@ -154,6 +204,10 @@ export interface InterviewCaseRepertoireLogRecord {
 export interface RepertoireLogInput {
   caseEntryId?: string;
   title: string;
+  company?: string;
+  format?: string;
+  tested?: string;
+  improvement?: string;
   outcome: string;
   notes: string;
   practicedAt?: string;
@@ -209,6 +263,7 @@ export interface KnowledgeDocInput {
   title: string;
   content: string;
   sourceFilename?: string;
+  originalFileKey?: string;
   contentHash: string;
 }
 
@@ -222,12 +277,25 @@ export interface CaseEntryInput {
   companyTags: string[];
   knowledgeDocId?: string;
   contentHash: string;
+  approvalStatus?: CaseApprovalStatus;
+  originalFileKey?: string;
 }
 
 export interface PrepPlanCreateInput {
   companyName: string;
   roleTitle: string;
   format: PrepFormat;
+}
+
+export interface ImportJobCreateInput {
+  knowledgeDocId: string;
+}
+
+export interface ImportJobUpdateInput {
+  status?: ImportJobStatus;
+  progress?: number;
+  message?: string;
+  resultJson?: string;
 }
 
 export interface InterviewPrepRepository {
@@ -241,7 +309,22 @@ export interface InterviewPrepRepository {
   ): Promise<InterviewKnowledgeDoc | null>;
   deleteKnowledgeDoc(userId: string, id: string): Promise<boolean>;
 
+  replaceBankQuestionsForDoc(
+    userId: string,
+    knowledgeDocId: string,
+    questions: Array<{ text: string; category: QuestionCategory; tags: string[]; contentHash: string }>
+  ): Promise<void>;
+  listBankQuestions(
+    userId: string,
+    filter?: { q?: string; category?: string; tag?: string }
+  ): Promise<InterviewBankQuestionRecord[]>;
+  getBankQuestionsByIds(userId: string, ids: string[]): Promise<InterviewBankQuestionRecord[]>;
+
   listCaseEntries(userId: string): Promise<InterviewCaseEntryRecord[]>;
+  searchCaseEntries(
+    userId: string,
+    filter?: { q?: string; sourceKind?: string; style?: string; approvalStatus?: string }
+  ): Promise<InterviewCaseEntryRecord[]>;
   findCaseByHash(userId: string, contentHash: string): Promise<InterviewCaseEntryRecord | null>;
   createCaseEntry(userId: string, input: CaseEntryInput): Promise<InterviewCaseEntryRecord>;
   updateCaseEntry(
@@ -250,6 +333,8 @@ export interface InterviewPrepRepository {
     input: Partial<CaseEntryInput>
   ): Promise<InterviewCaseEntryRecord | null>;
   deleteCaseEntry(userId: string, id: string): Promise<boolean>;
+  approveCaseEntry(userId: string, id: string): Promise<InterviewCaseEntryRecord | null>;
+  rejectCaseEntry(userId: string, id: string): Promise<InterviewCaseEntryRecord | null>;
 
   listPrepPlans(userId: string): Promise<InterviewPrepPlanRecord[]>;
   getPrepPlan(userId: string, id: string): Promise<InterviewPrepPlanRecord | null>;
@@ -263,7 +348,18 @@ export interface InterviewPrepRepository {
   setPrepPlanResearch(
     userId: string,
     id: string,
-    input: { researchNotes: string; clarifications: Array<{ question: string; sortOrder: number }> }
+    input: {
+      researchNotes: string;
+      clarifications: Array<{ question: string; sortOrder: number }>;
+      companyProfileJson?: string;
+      clarificationRound?: number;
+    }
+  ): Promise<InterviewPrepPlanRecord | null>;
+  appendClarificationRound(
+    userId: string,
+    planId: string,
+    clarifications: Array<{ question: string; sortOrder: number }>,
+    round: number
   ): Promise<InterviewPrepPlanRecord | null>;
   saveClarificationAnswers(
     userId: string,
@@ -274,9 +370,37 @@ export interface InterviewPrepRepository {
     userId: string,
     id: string,
     input: {
-      questions: Array<{ text: string; category: QuestionCategory; target: QuestionTarget }>;
+      questions: Array<{
+        text: string;
+        category: QuestionCategory;
+        target: QuestionTarget;
+        source?: PrepQuestionSource;
+        bankQuestionId?: string;
+        storyId?: string;
+        gapReason?: string;
+      }>;
       tasks: Array<{ title: string; description: string }>;
+      recommendedCaseIds?: string[];
     }
+  ): Promise<InterviewPrepPlanRecord | null>;
+  replacePlanQuestion(
+    userId: string,
+    planId: string,
+    questionId: string,
+    replacement: {
+      text: string;
+      category: QuestionCategory;
+      target: QuestionTarget;
+      source: PrepQuestionSource;
+      bankQuestionId?: string;
+      storyId?: string;
+    }
+  ): Promise<InterviewPrepPlanRecord | null>;
+  setPlanQuestionStory(
+    userId: string,
+    planId: string,
+    questionId: string,
+    storyId: string | null
   ): Promise<InterviewPrepPlanRecord | null>;
 
   getSimulatorSettings(userId: string, mode: InterviewMode): Promise<InterviewSimulatorSettingsRecord | null>;
@@ -289,7 +413,7 @@ export interface InterviewPrepRepository {
   getSession(userId: string, id: string): Promise<InterviewSessionRecord | null>;
   createSession(
     userId: string,
-    input: { mode: InterviewMode; title: string; prepPlanId?: string; systemPrompt: string }
+    input: { mode: InterviewMode; title: string; prepPlanId?: string; caseEntryId?: string; systemPrompt: string }
   ): Promise<InterviewSessionRecord>;
   listSessionMessages(userId: string, sessionId: string): Promise<InterviewMessageRecord[]>;
   appendSessionMessage(
@@ -330,4 +454,13 @@ export interface InterviewPrepRepository {
   upsertVideoSettings(userId: string, settings: VideoSimulatorSettings): Promise<InterviewVideoSettingsRecord>;
   listVideoRuns(userId: string, limit?: number): Promise<InterviewVideoRunRecord[]>;
   createVideoRun(userId: string, input: VideoRunInput): Promise<InterviewVideoRunRecord>;
+
+  createImportJob(userId: string, input: ImportJobCreateInput): Promise<InterviewImportJobRecord>;
+  getImportJob(userId: string, id: string): Promise<InterviewImportJobRecord | null>;
+  listImportJobs(userId: string): Promise<InterviewImportJobRecord[]>;
+  updateImportJob(
+    userId: string,
+    id: string,
+    input: ImportJobUpdateInput
+  ): Promise<InterviewImportJobRecord | null>;
 }

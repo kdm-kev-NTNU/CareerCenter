@@ -30,6 +30,10 @@ export interface InterviewCaseRepertoireLogDto {
   id: string;
   caseEntryId?: string;
   title: string;
+  company: string;
+  format: string;
+  tested: string;
+  improvement: string;
   outcome: string;
   notes: string;
   practicedAt: string;
@@ -64,4 +68,5 @@ export interface VoiceSessionDto {
   model: string;
   clientSecret: string;
   expiresAt: string;
+  tools: Array<{ name: string; description: string }>;
 }

@@ -29,7 +29,15 @@ const form = ref({
 });
 const scoreStoryId = ref<string | null>(null);
 const scoreDraft = ref({ scores: emptyStarScores(), note: "" });
-const logForm = ref({ title: "", outcome: "", notes: "" });
+const logForm = ref({
+  title: "",
+  company: "",
+  format: "",
+  tested: "",
+  improvement: "",
+  outcome: "",
+  notes: ""
+});
 const error = ref<string | null>(null);
 const loading = ref(false);
 const deleteConfirmId = ref<string | null>(null);
@@ -110,13 +118,25 @@ async function submitScore() {
 }
 
 async function addLog() {
-  if (!logForm.value.title.trim()) return;
+  if (!logForm.value.title.trim() || !logForm.value.improvement.trim()) return;
   await interviewPrepApi.createRepertoireLog({
     title: logForm.value.title.trim(),
+    company: logForm.value.company,
+    format: logForm.value.format,
+    tested: logForm.value.tested,
+    improvement: logForm.value.improvement,
     outcome: logForm.value.outcome,
     notes: logForm.value.notes
   });
-  logForm.value = { title: "", outcome: "", notes: "" };
+  logForm.value = {
+    title: "",
+    company: "",
+    format: "",
+    tested: "",
+    improvement: "",
+    outcome: "",
+    notes: ""
+  };
   await loadAll();
 }
 
@@ -186,6 +206,10 @@ async function downloadAnki() {
       <article class="panel stack">
         <h3>Logg case-øving</h3>
         <label>Tittel <input v-model="logForm.title" /></label>
+        <label>Selskap <input v-model="logForm.company" /></label>
+        <label>Format <input v-model="logForm.format" placeholder="f.eks. interviewer-led" /></label>
+        <label>Hva ble testet <input v-model="logForm.tested" /></label>
+        <label>Ett forbedringspunkt <input v-model="logForm.improvement" required /></label>
         <label>Utfall <input v-model="logForm.outcome" placeholder="f.eks. solid struktur" /></label>
         <label>Notater <textarea v-model="logForm.notes" rows="3" /></label>
         <AppButton @click="addLog">Lagre logg</AppButton>
@@ -195,8 +219,9 @@ async function downloadAnki() {
         <StateView v-if="!logs.length" state="empty" message="Ingen logger ennå." />
         <ul v-else class="plain-list">
           <li v-for="log in logs" :key="log.id">
-            <strong>{{ log.title }}</strong> — {{ log.outcome }}
-            <p class="field-hint">{{ log.notes }}</p>
+            <strong>{{ log.title }}</strong> — {{ log.company }} / {{ log.format }}
+            <p class="field-hint">Testet: {{ log.tested }} · Forbedring: {{ log.improvement }}</p>
+            <p class="field-hint">{{ log.outcome }} — {{ log.notes }}</p>
           </li>
         </ul>
       </article>

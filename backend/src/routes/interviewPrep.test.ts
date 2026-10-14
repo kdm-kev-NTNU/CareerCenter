@@ -1,32 +1,60 @@
 import { starRubricCriteria } from "@careercenter/shared";
 import { describe, expect, it } from "vitest";
 import { FakeLlmClient } from "../ai/fakeLlmClient.js";
+import { sha256Content } from "../interview/contentHash.js";
 import { MemoryRepository } from "../memoryRepository.js";
 import { InterviewPrepMemoryRepository } from "../interviewPrepMemoryRepository.js";
 import { buildServer } from "../server.js";
 
 describe("interview prep routes", () => {
-  async function buildInterviewApp(structuredResult?: unknown) {
+  async function seedBank(repo: InterviewPrepMemoryRepository, userId = "__test__") {
+    const doc = await repo.createKnowledgeDoc(userId, {
+      kind: "star",
+      title: "Bank",
+      content: "seed",
+      contentHash: sha256Content(`seed-${Math.random()}`)
+    });
+    await repo.replaceBankQuestionsForDoc(
+      userId,
+      doc.id,
+      Array.from({ length: 30 }, (_, i) => ({
+        text: `Seeded question ${i}?`,
+        category: "behavioral" as const,
+        tags: ["seed"],
+        contentHash: sha256Content(`seed-q-${doc.id}-${i}`)
+      }))
+    );
+    return repo.listBankQuestions(userId);
+  }
+
+  async function buildInterviewApp(options: {
+    structuredResult?: unknown;
+    structuredResults?: unknown[];
+    repo?: InterviewPrepMemoryRepository;
+  } = {}) {
+    const interviewPrepRepository = options.repo ?? new InterviewPrepMemoryRepository();
     const llmClient = new FakeLlmClient({
       configured: true,
-      structuredResult: structuredResult ?? {
+      structuredResult: options.structuredResult ?? {
         clarifications: [{ question: "Hvilken rolle?" }],
-        questions: [{ text: "Hvorfor dette selskapet?", category: "motivation", target: "interview" }],
-        tasks: [{ title: "Les careers page", description: "" }]
-      }
+        scores: Object.fromEntries(starRubricCriteria.map((key) => [key, 3])),
+        sum: 24,
+        improvement: "ok"
+      },
+      structuredResults: options.structuredResults
     });
     const app = await buildServer({
       repository: new MemoryRepository(),
       authDisabled: true,
       llmClient,
-      interviewPrepRepository: new InterviewPrepMemoryRepository()
+      interviewPrepRepository
     });
     await app.ready();
-    return app;
+    return { app, interviewPrepRepository };
   }
 
   it("returns AI configuration status", async () => {
-    const app = await buildInterviewApp();
+    const { app } = await buildInterviewApp();
     const response = await app.inject({ method: "GET", url: "/api/interview/status" });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ aiConfigured: true });
@@ -34,7 +62,7 @@ describe("interview prep routes", () => {
   });
 
   it("creates knowledge and hides case secrets in list", async () => {
-    const app = await buildInterviewApp();
+    const { app } = await buildInterviewApp();
     const knowledge = await app.inject({
       method: "POST",
       url: "/api/interview/knowledge",
@@ -67,7 +95,7 @@ describe("interview prep routes", () => {
   });
 
   it("deduplicates knowledge by content hash", async () => {
-    const app = await buildInterviewApp();
+    const { app } = await buildInterviewApp();
     const first = await app.inject({
       method: "POST",
       url: "/api/interview/knowledge",
@@ -84,14 +112,46 @@ describe("interview prep routes", () => {
   });
 
   it("runs prep plan research and finish session rubric", async () => {
-    const app = await buildInterviewApp({
-      clarifications: [{ question: "Hvilken rolle?" }],
-      questions: [{ text: "Hvorfor DNB?", category: "motivation", target: "interview" }],
-      tasks: [{ title: "Les årsrapport", description: "" }],
-      scores: Object.fromEntries(starRubricCriteria.map((key) => [key, 4])),
-      sum: 32,
-      improvement: "Fortsett slik."
+    const mainRepo = new MemoryRepository();
+    const interviewPrepRepository = new InterviewPrepMemoryRepository();
+    // Ensure auth-disabled user exists so we can seed the bank under the real id.
+    const pinHash = "x";
+    const user = await mainRepo.createUser("__test__", pinHash);
+    await mainRepo.initializeNewUser(user.id);
+    const bank = await seedBank(interviewPrepRepository, user.id);
+
+    const llmClient = new FakeLlmClient({
+      configured: true,
+      structuredResult: {
+        scores: Object.fromEntries(starRubricCriteria.map((key) => [key, 4])),
+        sum: 32,
+        improvement: "Fortsett slik."
+      },
+      structuredResults: [
+        {
+          industries: ["banking"],
+          businessAreas: [],
+          interviewFormats: ["behavioral"],
+          caseTypes: [],
+          values: [],
+          themes: ["leadership"],
+          summary: "profile"
+        },
+        { clarifications: [{ question: "Hvilken rolle?" }] },
+        {
+          selectedQuestionIds: bank.map((q) => q.id),
+          generatedQuestions: [],
+          tasks: [{ title: "Les årsrapport", description: "" }]
+        }
+      ]
     });
+    const app = await buildServer({
+      repository: mainRepo,
+      authDisabled: true,
+      llmClient,
+      interviewPrepRepository
+    });
+    await app.ready();
 
     const planRes = await app.inject({
       method: "POST",
@@ -110,7 +170,9 @@ describe("interview prep routes", () => {
       url: `/api/interview/plans/${planId}/clarifications`,
       payload: { answers: [{ id: clarifications[0]!.id, answer: "Tech" }] }
     });
+    expect(curated.statusCode).toBe(200);
     expect(curated.json().status).toBe("ready");
+    expect(curated.json().questions.length).toBeGreaterThanOrEqual(30);
 
     const session = await app.inject({
       method: "POST",
@@ -132,10 +194,11 @@ describe("interview prep routes", () => {
   });
 
   it("exposes voice session mock and saves transcript messages", async () => {
-    const app = await buildInterviewApp();
+    const { app } = await buildInterviewApp();
     const voice = await app.inject({ method: "POST", url: "/api/interview/voice/session" });
     expect(voice.statusCode).toBe(200);
     expect(voice.json().mock).toBe(true);
+    expect(JSON.stringify(voice.json())).not.toContain("sk-");
 
     const session = await app.inject({
       method: "POST",
@@ -162,7 +225,7 @@ describe("interview prep routes", () => {
   });
 
   it("manages story bank, anki export, and ability attempts", async () => {
-    const app = await buildInterviewApp();
+    const { app } = await buildInterviewApp();
     const created = await app.inject({
       method: "POST",
       url: "/api/interview/stories",

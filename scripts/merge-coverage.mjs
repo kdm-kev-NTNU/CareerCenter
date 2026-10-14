@@ -86,9 +86,15 @@ function shouldIncludeSourcePath(coveragePath, coverageMode) {
   if (/\/[^/]*MemoryRepositoryImpl\.ts$/.test(normalized)) return false;
   if (normalized.endsWith("/memoryRepository.ts")) return false;
   if (normalized.endsWith("/prismaRepository.ts")) return false;
+  // Prisma interview prep repo is integration-tested; unit gate uses the memory impl.
+  if (normalized.endsWith("/interviewPrepPrismaRepository.ts")) return false;
   if (/\/[^/]*(graduateProgram|internship)Catalog\.ts$/.test(normalized)) return false;
   if (normalized.endsWith("/auth/bootstrapUser.ts")) return false;
-  if (/\/(seedData|boardGraphSeed|internshipSeedData|graduateProgramSeedData|bachelorFileStorage)\.ts$/.test(normalized)) {
+  if (
+    /\/(seedData|boardGraphSeed|internshipSeedData|graduateProgramSeedData|bachelorFileStorage|interviewFileStorage)\.ts$/.test(
+      normalized
+    )
+  ) {
     return false;
   }
   return normalized.includes("/backend/src/") || normalized.includes("/frontend/src/");

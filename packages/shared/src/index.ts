@@ -357,7 +357,10 @@ export {
   questionTargets,
   questionCategories,
   caseSourceKinds,
-  caseStyles
+  caseStyles,
+  prepQuestionSources,
+  caseApprovalStatuses,
+  importJobStatuses
 } from "./interviewPrep.js";
 export type {
   InterviewMode,
@@ -369,7 +372,10 @@ export type {
   QuestionTarget,
   QuestionCategory,
   CaseSourceKind,
-  CaseStyle
+  CaseStyle,
+  PrepQuestionSource,
+  CaseApprovalStatus,
+  ImportJobStatus
 } from "./interviewPrep.js";
 
 export { inferKnowledgeKind, classifyCaseSource } from "./interviewKnowledge.js";
@@ -379,15 +385,34 @@ export type {
   InterviewKnowledgeDocDto,
   InterviewCasePublicDto,
   InterviewCaseEntryDto,
+  InterviewBankQuestionDto,
   InterviewPrepClarificationDto,
   InterviewPrepQuestionDto,
+  InterviewPrepPlanCaseDto,
   InterviewPrepTaskDto,
   InterviewPrepPlanDto,
+  InterviewImportJobDto,
   InterviewSimulatorSettingsDto,
   InterviewSessionDto,
   InterviewMessageDto,
   InterviewSessionFeedbackDto
 } from "./interviewPrepDtos.js";
+
+export {
+  extractBankQuestions,
+  rankBankQuestions,
+  findRepeatedStories
+} from "./questionBank.js";
+export type {
+  ExtractableKnowledgeDoc,
+  ExtractedBankQuestion,
+  RankableBankQuestion,
+  BankQuestionRankProfile
+} from "./questionBank.js";
+export { answerStats } from "./answerStats.js";
+export type { AnswerStats } from "./answerStats.js";
+export { emptyCompanyProfile } from "./companyProfile.js";
+export type { CompanyProfile } from "./companyProfile.js";
 
 export { abilityTestKinds } from "./abilityTests.js";
 export type { AbilityTestKind } from "./abilityTests.js";
@@ -401,9 +426,22 @@ export type { SwitchChallengePuzzle, SwitchOperator, SwitchSymbol } from "./swit
 export { generateScalesClx, isCorrectClxSelection } from "./scalesClx.js";
 export type { ClxCell, ClxColor, ClxGrid, ClxShape, ScalesClxPuzzle } from "./scalesClx.js";
 export { CLX_SHAPE_COLOR } from "./scalesClx.js";
-export { transitionPrepPlan, canStartSimulators } from "./prepPlanState.js";
+export {
+  transitionPrepPlan,
+  canStartSimulators,
+  MAX_CLARIFICATION_ROUNDS,
+  MAX_CLARIFICATIONS_PER_ROUND,
+  MIN_CURATED_QUESTIONS,
+  MAX_CURATED_QUESTIONS
+} from "./prepPlanState.js";
 export type { PrepPlanEvent } from "./prepPlanState.js";
-export { transitionVideoSim, canStartRecording, videoSimStates } from "./videoSimState.js";
+export {
+  transitionVideoSim,
+  canStartRecording,
+  phaseNeedsCamera,
+  phaseRevealsPrompt,
+  videoSimStates
+} from "./videoSimState.js";
 export type { VideoSimState, VideoSimEvent } from "./videoSimState.js";
 export {
   videoSimulatorSettingsSchema,

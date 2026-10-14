@@ -1,10 +1,14 @@
+import type { CompanyProfile } from "./companyProfile.js";
 import type {
+  CaseApprovalStatus,
   CaseSourceKind,
   CaseStyle,
+  ImportJobStatus,
   InterviewMode,
   KnowledgeDocKind,
   PrepFormat,
   PrepPlanStatus,
+  PrepQuestionSource,
   QuestionCategory,
   QuestionTarget,
   StarRubricCriterion
@@ -29,8 +33,20 @@ export interface InterviewCasePublicDto {
   caseStyle?: CaseStyle;
   companyTags: string[];
   knowledgeDocId?: string;
+  approvalStatus?: CaseApprovalStatus;
+  originalFileKey?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface InterviewBankQuestionDto {
+  id: string;
+  knowledgeDocId: string;
+  text: string;
+  category: QuestionCategory;
+  tags: string[];
+  contentHash: string;
+  createdAt: string;
 }
 
 export interface InterviewCaseEntryDto extends InterviewCasePublicDto {
@@ -51,6 +67,19 @@ export interface InterviewPrepQuestionDto {
   category: QuestionCategory;
   target: QuestionTarget;
   sortOrder: number;
+  source: PrepQuestionSource;
+  bankQuestionId?: string;
+  storyId?: string;
+  gapReason?: string;
+}
+
+export interface InterviewPrepPlanCaseDto {
+  id: string;
+  caseEntryId: string;
+  title: string;
+  prompt: string;
+  sourceKind: CaseSourceKind;
+  sortOrder: number;
 }
 
 export interface InterviewPrepTaskDto {
@@ -68,10 +97,24 @@ export interface InterviewPrepPlanDto {
   format: PrepFormat;
   status: PrepPlanStatus;
   researchNotes: string;
+  companyProfile?: CompanyProfile;
+  clarificationRound: number;
   failureReason?: string;
   clarifications: InterviewPrepClarificationDto[];
   questions: InterviewPrepQuestionDto[];
   tasks: InterviewPrepTaskDto[];
+  recommendedCases: InterviewPrepPlanCaseDto[];
+  repeatedStoryIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InterviewImportJobDto {
+  id: string;
+  knowledgeDocId: string;
+  status: ImportJobStatus;
+  progress: number;
+  message: string;
   createdAt: string;
   updatedAt: string;
 }
