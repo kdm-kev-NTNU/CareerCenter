@@ -53,6 +53,7 @@ export function toPrepPlanDto(plan: InterviewPrepPlanRecord): InterviewPrepPlanD
     roleTitle: plan.roleTitle,
     format: plan.format,
     status: plan.status,
+    pipelineStep: plan.pipelineStep,
     researchNotes: plan.researchNotes,
     companyProfile: parseCompanyProfile(plan.companyProfileJson),
     clarificationRound: plan.clarificationRound,

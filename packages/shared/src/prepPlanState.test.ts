@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { canStartSimulators, transitionPrepPlan } from "./prepPlanState.js";
+import {
+  canStartSimulators,
+  isPrepPlanPipelineActive,
+  prepPlanStepVisual,
+  transitionPrepPlan
+} from "./prepPlanState.js";
 import { rankCasesForCompany } from "./rankCases.js";
 import { transitionVideoSim, canStartRecording } from "./videoSimState.js";
 
@@ -24,6 +29,19 @@ describe("transitionPrepPlan", () => {
 
   it("fails from running states", () => {
     expect(transitionPrepPlan("researching", { type: "fail" })).toBe("failed");
+  });
+
+  it("marks earlier pipeline steps done and later steps pending", () => {
+    expect(prepPlanStepVisual("created", "research_notes", "researching")).toBe("done");
+    expect(prepPlanStepVisual("research_notes", "research_notes", "researching")).toBe("active");
+    expect(prepPlanStepVisual("company_profile", "research_notes", "researching")).toBe("pending");
+    expect(prepPlanStepVisual("searching", "searching", "failed")).toBe("failed");
+    expect(prepPlanStepVisual("created", "ready", "ready")).toBe("done");
+    expect(prepPlanStepVisual("ready", "ready", "ready")).toBe("done");
+    expect(isPrepPlanPipelineActive("searching", "researching")).toBe(true);
+    expect(isPrepPlanPipelineActive("awaiting_answers", "awaiting_answers")).toBe(false);
+    expect(isPrepPlanPipelineActive("clarifications", "awaiting_answers")).toBe(true);
+    expect(isPrepPlanPipelineActive("ready", "ready")).toBe(false);
   });
 });
 

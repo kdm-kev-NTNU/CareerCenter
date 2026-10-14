@@ -7,6 +7,7 @@ import type {
   InterviewMode,
   KnowledgeDocKind,
   PrepFormat,
+  PrepPlanPipelineStep,
   PrepPlanStatus,
   PrepQuestionSource,
   QuestionCategory,
@@ -102,6 +103,7 @@ export interface InterviewPrepPlanRecord {
   roleTitle: string;
   format: PrepFormat;
   status: PrepPlanStatus;
+  pipelineStep: PrepPlanPipelineStep;
   researchNotes: string;
   companyProfileJson: string;
   clarificationRound: number;
@@ -344,6 +346,15 @@ export interface InterviewPrepRepository {
     id: string,
     status: PrepPlanStatus,
     failureReason?: string
+  ): Promise<InterviewPrepPlanRecord | null>;
+  setPrepPlanPipeline(
+    userId: string,
+    id: string,
+    input: {
+      pipelineStep: PrepPlanPipelineStep;
+      researchNotes?: string;
+      companyProfileJson?: string;
+    }
   ): Promise<InterviewPrepPlanRecord | null>;
   setPrepPlanResearch(
     userId: string,

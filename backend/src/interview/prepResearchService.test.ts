@@ -54,9 +54,24 @@ describe("PrepResearchService", () => {
       format: "interview"
     });
 
+    const steps: string[] = [];
+    const original = repository.setPrepPlanPipeline.bind(repository);
+    repository.setPrepPlanPipeline = async (userId, id, input) => {
+      steps.push(input.pipelineStep);
+      return original(userId, id, input);
+    };
+
     await service.startResearch("u1", plan.id);
     let updated = await repository.getPrepPlan("u1", plan.id);
     expect(updated?.status).toBe("awaiting_answers");
+    expect(updated?.pipelineStep).toBe("awaiting_answers");
+    expect(steps).toEqual([
+      "searching",
+      "research_notes",
+      "company_profile",
+      "clarifications",
+      "awaiting_answers"
+    ]);
     expect(updated?.clarifications).toHaveLength(1);
     expect(updated?.companyProfileJson).toContain("banking");
 

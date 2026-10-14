@@ -6,6 +6,35 @@ import { MemoryRepository } from "../memoryRepository.js";
 import { InterviewPrepMemoryRepository } from "../interviewPrepMemoryRepository.js";
 import { buildServer } from "../server.js";
 
+async function waitForPlanStatus(
+  app: {
+    inject: (opts: { method: string; url: string }) => Promise<{
+      json: () => {
+        plan: {
+          status: string;
+          pipelineStep: string;
+          failureReason?: string;
+          clarifications: Array<{ id: string }>;
+          questions: unknown[];
+        };
+      };
+    }>;
+  },
+  planId: string,
+  status: string
+) {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const response = await app.inject({ method: "GET", url: `/api/interview/plans/${planId}` });
+    const plan = response.json().plan;
+    if (plan.status === status) return plan;
+    if (plan.status === "failed") {
+      throw new Error(plan.failureReason ?? "Plan feilet.");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(`Tidsavbrudd mens planen skulle bli ${status}.`);
+}
+
 describe("interview prep routes", () => {
   async function seedBank(repo: InterviewPrepMemoryRepository, userId = "__test__") {
     const doc = await repo.createKnowledgeDoc(userId, {
@@ -161,18 +190,24 @@ describe("interview prep routes", () => {
     const planId = planRes.json().id as string;
 
     const research = await app.inject({ method: "POST", url: `/api/interview/plans/${planId}/research` });
-    expect(research.statusCode).toBe(200);
-    expect(research.json().status).toBe("awaiting_answers");
+    expect(research.statusCode).toBe(202);
+    const researched =
+      research.json().status === "awaiting_answers"
+        ? research.json()
+        : await waitForPlanStatus(app, planId, "awaiting_answers");
+    expect(researched.pipelineStep).toBe("awaiting_answers");
 
-    const clarifications = research.json().clarifications as Array<{ id: string }>;
+    const clarifications = researched.clarifications as Array<{ id: string }>;
     const curated = await app.inject({
       method: "POST",
       url: `/api/interview/plans/${planId}/clarifications`,
       payload: { answers: [{ id: clarifications[0]!.id, answer: "Tech" }] }
     });
-    expect(curated.statusCode).toBe(200);
-    expect(curated.json().status).toBe("ready");
-    expect(curated.json().questions.length).toBeGreaterThanOrEqual(30);
+    expect(curated.statusCode).toBe(202);
+    const ready =
+      curated.json().status === "ready" ? curated.json() : await waitForPlanStatus(app, planId, "ready");
+    expect(ready.questions.length).toBeGreaterThanOrEqual(30);
+    expect(ready.pipelineStep).toBe("ready");
 
     const session = await app.inject({
       method: "POST",

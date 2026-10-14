@@ -22,29 +22,108 @@ import {
 } from "./prompts.js";
 
 export class PrepResearchService {
+  private readonly running = new Set<string>();
+
   constructor(
     private readonly llmClient: LlmClient,
     private readonly repository: InterviewPrepRepository
   ) {}
 
   async startResearch(userId: string, planId: string): Promise<void> {
+    await this.prepareResearch(userId, planId);
+    await this.runResearch(userId, planId);
+  }
+
+  /**
+   * Accepts research and returns the plan in the searching step.
+   * The LLM pipeline continues after the HTTP response.
+   * A second call while the same plan is running returns the current plan.
+   */
+  async enqueueResearch(userId: string, planId: string) {
+    return this.enqueue(userId, planId, "research", () => this.prepareResearch(userId, planId), () =>
+      this.runResearch(userId, planId)
+    );
+  }
+
+  async enqueueClarifications(
+    userId: string,
+    planId: string,
+    answers: Array<{ id: string; answer: string }>,
+    skip = false
+  ) {
+    return this.enqueue(
+      userId,
+      planId,
+      "curate",
+      () => this.prepareClarifications(userId, planId),
+      () => this.submitClarificationsAndCurate(userId, planId, answers, skip)
+    );
+  }
+
+  private async enqueue(
+    userId: string,
+    planId: string,
+    kind: "research" | "curate",
+    prepare: () => Promise<NonNullable<Awaited<ReturnType<InterviewPrepRepository["getPrepPlan"]>>>>,
+    work: () => Promise<void>
+  ) {
+    const key = `${kind}:${planId}`;
+    if (this.running.has(key)) {
+      const current = await this.repository.getPrepPlan(userId, planId);
+      if (!current) throw new Error("Plan ikke funnet.");
+      return current;
+    }
+    this.running.add(key);
+    try {
+      const plan = await prepare();
+      void work()
+        .catch(async (error: unknown) => {
+          const message = error instanceof Error ? error.message : "Plan-steg feilet.";
+          await this.repository.updatePrepPlanStatus(userId, planId, "failed", message);
+        })
+        .finally(() => this.running.delete(key));
+      return plan;
+    } catch (error) {
+      this.running.delete(key);
+      throw error;
+    }
+  }
+
+  private async prepareResearch(userId: string, planId: string) {
     const plan = await this.repository.getPrepPlan(userId, planId);
     if (!plan) throw new Error("Plan ikke funnet.");
-    if (plan.status !== "draft" && plan.status !== "failed") {
-      throw new Error("Plan kan ikke starte research i denne statusen.");
+    if (plan.status !== "researching") {
+      const researching = transitionPrepPlan(plan.status, { type: "start_research" });
+      if (researching === plan.status) {
+        throw new Error("Plan kan ikke starte research i denne statusen.");
+      }
+      await this.repository.updatePrepPlanStatus(userId, planId, researching);
     }
+    const updated = await this.repository.setPrepPlanPipeline(userId, planId, { pipelineStep: "searching" });
+    if (!updated) throw new Error("Plan ikke funnet.");
+    return updated;
+  }
 
-    const researching = transitionPrepPlan(plan.status, { type: "start_research" });
-    if (researching === plan.status) {
-      throw new Error("Plan kan ikke starte research i denne statusen.");
+  private async prepareClarifications(userId: string, planId: string) {
+    const plan = await this.repository.getPrepPlan(userId, planId);
+    if (!plan || plan.status !== "awaiting_answers") {
+      throw new Error("Plan venter ikke på svar.");
     }
-    await this.repository.updatePrepPlanStatus(userId, planId, researching);
+    const updated = await this.repository.setPrepPlanPipeline(userId, planId, { pipelineStep: "clarifications" });
+    if (!updated) throw new Error("Plan ikke funnet.");
+    return updated;
+  }
+
+  private async runResearch(userId: string, planId: string): Promise<void> {
+    const plan = await this.repository.getPrepPlan(userId, planId);
+    if (!plan) throw new Error("Plan ikke funnet.");
 
     try {
       const searchSnippet = this.llmClient.webSearch
         ? await this.llmClient.webSearch(`${plan.companyName} ${plan.roleTitle} interview process culture`)
         : "";
 
+      await this.repository.setPrepPlanPipeline(userId, planId, { pipelineStep: "research_notes" });
       const researchNotes = await this.llmClient.complete({
         messages: [
           { role: "system", content: buildResearchSystemPrompt(plan.companyName, plan.roleTitle) },
@@ -55,6 +134,10 @@ export class PrepResearchService {
         ]
       });
 
+      await this.repository.setPrepPlanPipeline(userId, planId, {
+        pipelineStep: "company_profile",
+        researchNotes
+      });
       const profile = await this.llmClient.completeStructured(
         {
           messages: [
@@ -68,6 +151,10 @@ export class PrepResearchService {
         companyProfileSchema
       );
 
+      await this.repository.setPrepPlanPipeline(userId, planId, {
+        pipelineStep: "clarifications",
+        companyProfileJson: JSON.stringify(profile)
+      });
       const clarificationPayload = await this.llmClient.completeStructured(
         {
           messages: [
@@ -92,6 +179,7 @@ export class PrepResearchService {
       });
 
       const awaiting = transitionPrepPlan("researching", { type: "research_needs_answers" });
+      await this.repository.setPrepPlanPipeline(userId, planId, { pipelineStep: "awaiting_answers" });
       await this.repository.updatePrepPlanStatus(userId, planId, awaiting);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Research feilet.";
@@ -162,6 +250,7 @@ export class PrepResearchService {
       payload.clarifications.map((item, index) => ({ question: item.question, sortOrder: index })),
       nextRound
     );
+    await this.repository.setPrepPlanPipeline(userId, planId, { pipelineStep: "awaiting_answers" });
     transitionPrepPlan("awaiting_answers", { type: "more_clarifications" });
   }
 
@@ -170,6 +259,7 @@ export class PrepResearchService {
     if (!plan) throw new Error("Plan ikke funnet.");
 
     try {
+      await this.repository.setPrepPlanPipeline(userId, planId, { pipelineStep: "curating_questions" });
       const profile = safeParseProfile(plan.companyProfileJson);
       const bank = await this.repository.listBankQuestions(userId);
       const candidates = rankBankQuestions(
@@ -243,6 +333,7 @@ export class PrepResearchService {
         });
       }
 
+      await this.repository.setPrepPlanPipeline(userId, planId, { pipelineStep: "curating_cases" });
       const cases = await this.repository.searchCaseEntries(userId, { approvalStatus: "approved" });
       const ranked = rankCasesForCompany(
         {
@@ -265,6 +356,7 @@ export class PrepResearchService {
         recommendedCaseIds
       });
       const ready = transitionPrepPlan("curating", { type: "curation_done" });
+      await this.repository.setPrepPlanPipeline(userId, planId, { pipelineStep: "ready" });
       await this.repository.updatePrepPlanStatus(userId, planId, ready);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Kuratering feilet.";

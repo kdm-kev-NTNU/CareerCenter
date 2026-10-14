@@ -384,12 +384,11 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
       return reply.code(503).send({ message: "AI er ikke konfigurert." });
     }
     try {
-      await researchService.startResearch(request.user.id, (request.params as { id: string }).id);
-      const plan = await deps.interviewPrepRepository.getPrepPlan(
+      const plan = await researchService.enqueueResearch(
         request.user.id,
         (request.params as { id: string }).id
       );
-      return toPrepPlanDto(plan!);
+      return reply.code(202).send(toPrepPlanDto(plan));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Research feilet.";
       return reply.code(400).send({ message });
@@ -402,17 +401,13 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
     }
     const body = clarificationAnswersSchema.parse(request.body);
     try {
-      await researchService.submitClarificationsAndCurate(
+      const plan = await researchService.enqueueClarifications(
         request.user.id,
         (request.params as { id: string }).id,
         body.answers,
         body.skip
       );
-      const plan = await deps.interviewPrepRepository.getPrepPlan(
-        request.user.id,
-        (request.params as { id: string }).id
-      );
-      return toPrepPlanDto(plan!);
+      return reply.code(202).send(toPrepPlanDto(plan));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Kuratering feilet.";
       return reply.code(400).send({ message });

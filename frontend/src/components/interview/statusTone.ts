@@ -1,5 +1,5 @@
-import type { PrepPlanStatus, VideoSimState } from "@careercenter/shared";
-import { prepPlanStatuses, videoSimStates } from "@careercenter/shared";
+import type { PrepPlanPipelineStep, PrepPlanStatus, VideoSimState } from "@careercenter/shared";
+import { prepPlanPipelineSteps, prepPlanStatuses, videoSimStates } from "@careercenter/shared";
 
 export type BadgeVariant = "accent" | "muted" | "blue" | "danger";
 
@@ -22,6 +22,20 @@ void (prepPlanStatuses satisfies readonly (keyof typeof prepPlanStatusTone)[]);
 export function toneForPrepPlanStatus(status: PrepPlanStatus): StatusTone {
   return prepPlanStatusTone[status];
 }
+
+export const prepPlanPipelineStepLabel = {
+  created: "Bedrift og rolle",
+  searching: "Nett-søk",
+  research_notes: "Research-notater",
+  company_profile: "Bedriftsprofil",
+  clarifications: "Oppklaringsspørsmål",
+  awaiting_answers: "Dine svar",
+  curating_questions: "Spørsmål fra banken",
+  curating_cases: "Case og oppgaver",
+  ready: "Planen er klar"
+} as const satisfies Record<PrepPlanPipelineStep, string>;
+
+void (prepPlanPipelineSteps satisfies readonly (keyof typeof prepPlanPipelineStepLabel)[]);
 
 export const videoPhaseTone = {
   setup: { label: "Oppsett", variant: "muted" },

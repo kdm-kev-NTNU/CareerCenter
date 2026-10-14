@@ -11,6 +11,61 @@ export type PrepPlanEvent =
   | { type: "curation_failed"; reason?: string }
   | { type: "fail"; reason?: string };
 
+export const prepPlanPipelineSteps = [
+  "created",
+  "searching",
+  "research_notes",
+  "company_profile",
+  "clarifications",
+  "awaiting_answers",
+  "curating_questions",
+  "curating_cases",
+  "ready"
+] as const;
+export type PrepPlanPipelineStep = (typeof prepPlanPipelineSteps)[number];
+
+export type PrepPlanStepVisual = "done" | "active" | "pending" | "failed";
+
+export function parsePrepPlanPipelineStep(value: string | null | undefined): PrepPlanPipelineStep {
+  if (value && (prepPlanPipelineSteps as readonly string[]).includes(value)) {
+    return value as PrepPlanPipelineStep;
+  }
+  return "created";
+}
+
+/**
+ * Visual state of one pipeline step relative to the persisted current step.
+ * Invariant: a later step is never "done" while an earlier step is still current,
+ * and "ready" marks every step done.
+ */
+export function prepPlanStepVisual(
+  step: PrepPlanPipelineStep,
+  current: PrepPlanPipelineStep,
+  status: PrepPlanStatus
+): PrepPlanStepVisual {
+  if (status === "ready") return "done";
+  if (status === "failed" && step === current) return "failed";
+  const stepIndex = prepPlanPipelineSteps.indexOf(step);
+  const currentIndex = prepPlanPipelineSteps.indexOf(current);
+  if (stepIndex < currentIndex) return "done";
+  if (stepIndex === currentIndex) return "active";
+  return "pending";
+}
+
+/** True while the server is still producing the next persisted plan state. */
+export function isPrepPlanPipelineActive(step: PrepPlanPipelineStep, status: PrepPlanStatus): boolean {
+  if (status === "failed" || status === "ready" || status === "draft") return false;
+  if (status === "researching" || status === "curating") return true;
+  return (
+    step === "searching" ||
+    step === "research_notes" ||
+    step === "company_profile" ||
+    step === "clarifications" ||
+    step === "curating_questions" ||
+    step === "curating_cases"
+  );
+}
+
 export const MAX_CLARIFICATION_ROUNDS = 2;
 export const MAX_CLARIFICATIONS_PER_ROUND = 5;
 export const MIN_CURATED_QUESTIONS = 30;
