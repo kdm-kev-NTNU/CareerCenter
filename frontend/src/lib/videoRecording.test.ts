@@ -16,7 +16,7 @@ describe("videoRecording helpers", () => {
   it("creates a MediaRecorder that forwards non-empty chunks", () => {
     const chunks: Blob[] = [];
     class FakeMediaRecorder {
-      ondataavailable: ((event: { data: Blob }) => void) | null = null;
+      ondataavailable: ((event: BlobEvent) => void) | null = null;
       constructor(
         public stream: MediaStream,
         public options: { mimeType: string }
@@ -27,10 +27,12 @@ describe("videoRecording helpers", () => {
     }
     vi.stubGlobal("MediaRecorder", FakeMediaRecorder);
 
-    const recorder = createVideoRecorder({} as MediaStream, (blob) => chunks.push(blob));
+    const recorder = createVideoRecorder({} as MediaStream, (blob) => chunks.push(blob)) as MediaRecorder & {
+      options: { mimeType: string };
+    };
     expect(recorder.options.mimeType).toContain("vp8");
-    recorder.ondataavailable?.({ data: new Blob(["x"], { type: "video/webm" }) });
-    recorder.ondataavailable?.({ data: new Blob([], { type: "video/webm" }) });
+    recorder.ondataavailable?.({ data: new Blob(["x"], { type: "video/webm" }) } as BlobEvent);
+    recorder.ondataavailable?.({ data: new Blob([], { type: "video/webm" }) } as BlobEvent);
     expect(chunks).toHaveLength(1);
   });
 

@@ -10,8 +10,13 @@ describe("connectRealtimeVoice", () => {
   it("connects over WebRTC and handles transcript/tool events", async () => {
     const closeDc = vi.fn();
     const closePc = vi.fn();
-    let onmessage: ((event: MessageEvent) => void) | null = null;
-    let ontrack: ((event: { streams: MediaStream[] }) => void) | null = null;
+    const handlers: {
+      onmessage: ((event: MessageEvent) => void) | null;
+      ontrack: ((event: RTCTrackEvent) => void) | null;
+    } = {
+      onmessage: null,
+      ontrack: null
+    };
 
     class FakeRTCPeerConnection {
       addTrack = vi.fn();
@@ -21,18 +26,18 @@ describe("connectRealtimeVoice", () => {
       close = closePc;
       createDataChannel = vi.fn(() => ({
         get onmessage() {
-          return onmessage;
+          return handlers.onmessage;
         },
         set onmessage(fn: ((event: MessageEvent) => void) | null) {
-          onmessage = fn;
+          handlers.onmessage = fn;
         },
         close: closeDc
       }));
-      set ontrack(fn: ((event: { streams: MediaStream[] }) => void) | null) {
-        ontrack = fn;
+      set ontrack(fn: ((event: RTCTrackEvent) => void) | null) {
+        handlers.ontrack = fn;
       }
       get ontrack() {
-        return ontrack;
+        return handlers.ontrack;
       }
     }
 
@@ -73,20 +78,20 @@ describe("connectRealtimeVoice", () => {
       })
     );
 
-    ontrack?.({ streams: [stream] });
-    onmessage?.({
+    handlers.ontrack?.({ streams: [stream] } as unknown as RTCTrackEvent);
+    handlers.onmessage?.({
       data: JSON.stringify({ type: "response.audio_transcript.done", transcript: "assistant hi" })
     } as MessageEvent);
-    onmessage?.({
+    handlers.onmessage?.({
       data: JSON.stringify({
         type: "conversation.item.input_audio_transcription.completed",
         transcript: "user hi"
       })
     } as MessageEvent);
-    onmessage?.({
+    handlers.onmessage?.({
       data: JSON.stringify({ type: "response.function_call_arguments.done", name: "next_question" })
     } as MessageEvent);
-    onmessage?.({ data: "not-json" } as MessageEvent);
+    handlers.onmessage?.({ data: "not-json" } as MessageEvent);
 
     expect(transcripts).toEqual([
       { role: "assistant", text: "assistant hi" },
