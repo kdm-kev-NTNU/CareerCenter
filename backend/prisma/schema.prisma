@@ -32,6 +32,8 @@ model User {
   graduateProgramRequirementTypes  GraduateProgramRequirementType[]
   graduatePrograms                   GraduateProgram[]
   thesisCompanies                    ThesisCompany[]
+  interviewKnowledgeDocs             InterviewKnowledgeDoc[]
+  interviewSessions                  InterviewSession[]
 }
 
 model CoursePlan {
@@ -312,4 +314,41 @@ model ThesisCompany {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model InterviewKnowledgeDoc {
+  id        String   @id @default(cuid())
+  userId    String
+  kind      String
+  title     String
+  content   String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, kind])
+}
+
+model InterviewSession {
+  id        String             @id @default(cuid())
+  userId    String
+  mode      String
+  title     String             @default("")
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  InterviewMessage[]
+
+  @@index([userId, mode])
+}
+
+model InterviewMessage {
+  id        String           @id @default(cuid())
+  sessionId String
+  role      String
+  content   String           @default("")
+  createdAt DateTime         @default(now())
+  session   InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
 }

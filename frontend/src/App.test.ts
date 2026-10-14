@@ -164,6 +164,7 @@ describe("App", () => {
     mockInitialData();
     await mountApp();
     const routes = [
+      ["/interview", "interview-overview"],
       ["/soknader", "applications"],
       ["/internships", "applications"],
       ["/graduate", "applications"],

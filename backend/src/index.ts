@@ -1,14 +1,20 @@
+import { PrismaClient } from "@prisma/client";
 import { env } from "./config/env.js";
 import { MemoryRepository } from "./memoryRepository.js";
 import { PrismaRepository } from "./prismaRepository.js";
+import { InterviewPrepMemoryRepository } from "./interviewPrepMemoryRepository.js";
+import { InterviewPrepPrismaRepository } from "./interviewPrepPrismaRepository.js";
 import { buildServer } from "./server.js";
 
-const repository =
-  process.env.CAREERCENTER_REPOSITORY === "memory" || env.CAREERCENTER_REPOSITORY === "memory"
-    ? new MemoryRepository()
-    : new PrismaRepository();
+const useMemoryRepository =
+  process.env.CAREERCENTER_REPOSITORY === "memory" || env.CAREERCENTER_REPOSITORY === "memory";
 
-const app = await buildServer({ repository });
+const repository = useMemoryRepository ? new MemoryRepository() : new PrismaRepository();
+const interviewPrepRepository = useMemoryRepository
+  ? new InterviewPrepMemoryRepository()
+  : new InterviewPrepPrismaRepository(new PrismaClient());
+
+const app = await buildServer({ repository, interviewPrepRepository });
 
 async function shutdown(signal: string) {
   app.log.info(`Mottok ${signal}, avslutter...`);

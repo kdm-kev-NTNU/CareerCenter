@@ -2,6 +2,7 @@ import { getActivePinia } from "pinia";
 import { createRouter, createWebHistory } from "vue-router";
 import { useAppStore } from "../stores/app.js";
 import EducationLayout from "../components/education/EducationLayout.vue";
+import InterviewLayout from "../components/interview/InterviewLayout.vue";
 import AppShell from "../components/layout/AppShell.vue";
 import DashboardView from "../views/DashboardView.vue";
 import EducationAiResourcesView from "../views/education/EducationAiResourcesView.vue";
@@ -9,6 +10,7 @@ import EducationBachelorView from "../views/education/EducationBachelorView.vue"
 import EducationBooksView from "../views/education/EducationBooksView.vue";
 import EducationCoursesView from "../views/education/EducationCoursesView.vue";
 import EducationOverviewView from "../views/education/EducationOverviewView.vue";
+import InterviewOverviewView from "../views/interview/InterviewOverviewView.vue";
 import EducationPlatformsView from "../views/education/EducationPlatformsView.vue";
 import LoginView from "../views/LoginView.vue";
 import ApplicationsView from "../views/ApplicationsView.vue";
@@ -106,6 +108,19 @@ const router = createRouter({
               name: "education-ai-resources",
               component: EducationAiResourcesView,
               meta: { title: "AI-ressurser" }
+            }
+          ]
+        },
+        {
+          path: "interview",
+          component: InterviewLayout,
+          meta: { title: "Intervju" },
+          children: [
+            {
+              path: "",
+              name: "interview-overview",
+              component: InterviewOverviewView,
+              meta: { title: "Intervju" }
             }
           ]
         }

@@ -344,6 +344,36 @@ export {
   internshipTemplateStageIds
 } from "./internshipStatus.js";
 export type { InternshipStatusKind, InternshipStatusOption } from "./internshipStatus.js";
+
+export {
+  interviewModes,
+  knowledgeDocKinds,
+  starRubricCriteria,
+  starRubricCriterionLabels,
+  caseFrameworkSteps,
+  caseFrameworkStepLabels,
+  prepPlanStatuses,
+  prepFormats,
+  questionTargets,
+  questionCategories,
+  caseSourceKinds,
+  caseStyles
+} from "./interviewPrep.js";
+export type {
+  InterviewMode,
+  KnowledgeDocKind,
+  StarRubricCriterion,
+  CaseFrameworkStep,
+  PrepPlanStatus,
+  PrepFormat,
+  QuestionTarget,
+  QuestionCategory,
+  CaseSourceKind,
+  CaseStyle
+} from "./interviewPrep.js";
+
+export { abilityTestKinds } from "./abilityTests.js";
+export type { AbilityTestKind } from "./abilityTests.js";
 import type { InternshipStatusOption } from "./internshipStatus.js";
 
 export interface InternshipLocationOption {

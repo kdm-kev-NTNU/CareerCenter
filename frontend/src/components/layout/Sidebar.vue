@@ -8,6 +8,7 @@ const authStore = useAuthStore();
 const navItems = [
   { to: "/", label: "Dashboard" },
   { to: "/education", label: "Utdanning" },
+  { to: "/interview", label: "Intervju" },
   { to: "/soknader", label: "Søknader" },
   { to: "/master-thesis", label: "Masteroppgave" },
   { to: "/competitions", label: "Hackathons & konkurranser" }
