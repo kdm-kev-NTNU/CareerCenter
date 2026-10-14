@@ -10,6 +10,10 @@ import {
   type ScalesClxPuzzle,
   type SwitchChallengePuzzle
 } from "@careercenter/shared";
+import ScalesClxBoard from "../../components/interview/ability/ScalesClxBoard.vue";
+import SwitchChallengeBoard from "../../components/interview/ability/SwitchChallengeBoard.vue";
+import AppButton from "../../components/ui/AppButton.vue";
+import PageHeader from "../../components/ui/PageHeader.vue";
 
 const mode = ref<"menu" | "switch" | "clx">("menu");
 const seed = ref(Math.floor(Math.random() * 1_000_000));
@@ -17,7 +21,8 @@ const switchPuzzle = ref<SwitchChallengePuzzle | null>(null);
 const clxPuzzle = ref<ScalesClxPuzzle | null>(null);
 const selectedSwitch = ref<number | null>(null);
 const selectedClx = ref<number[]>([]);
-const feedback = ref<string | null>(null);
+const revealed = ref(false);
+const lastCorrect = ref<boolean | null>(null);
 const history = ref<InterviewAbilityTestAttemptDto[]>([]);
 const startedAt = ref(0);
 const loadingHistory = ref(true);
@@ -40,32 +45,42 @@ async function persistAttempt(kind: "switch_challenge" | "scales_clx", correct: 
   history.value.unshift(attempt);
 }
 
-function startSwitch() {
+function resetRound() {
   seed.value = Math.floor(Math.random() * 1_000_000);
+  revealed.value = false;
+  lastCorrect.value = null;
+  startedAt.value = Date.now();
+}
+
+function startSwitch() {
+  resetRound();
   switchPuzzle.value = generateSwitchChallenge(seed.value);
   selectedSwitch.value = null;
-  feedback.value = null;
-  startedAt.value = Date.now();
   mode.value = "switch";
 }
 
 function startClx() {
-  seed.value = Math.floor(Math.random() * 1_000_000);
+  resetRound();
   clxPuzzle.value = generateScalesClx(seed.value);
   selectedClx.value = [];
-  feedback.value = null;
-  startedAt.value = Date.now();
   mode.value = "clx";
+}
+
+function selectSwitch(i: number) {
+  if (revealed.value) return;
+  selectedSwitch.value = i;
 }
 
 function submitSwitch() {
   if (!switchPuzzle.value || selectedSwitch.value == null) return;
   const correct = isCorrectSwitchAnswer(switchPuzzle.value, selectedSwitch.value);
-  feedback.value = correct ? "Riktig" : "Feil — riktig var " + switchPuzzle.value.options[switchPuzzle.value.correctIndex];
+  revealed.value = true;
+  lastCorrect.value = correct;
   void persistAttempt("switch_challenge", correct);
 }
 
 function toggleClx(i: number) {
+  if (revealed.value) return;
   if (selectedClx.value.includes(i)) {
     selectedClx.value = selectedClx.value.filter((x) => x !== i);
   } else if (selectedClx.value.length < 2) {
@@ -76,7 +91,8 @@ function toggleClx(i: number) {
 function submitClx() {
   if (!clxPuzzle.value) return;
   const correct = isCorrectClxSelection(clxPuzzle.value, selectedClx.value);
-  feedback.value = correct ? "Riktig" : "Feil — velg de to rutene som følger regelen";
+  revealed.value = true;
+  lastCorrect.value = correct;
   void persistAttempt("scales_clx", correct);
 }
 
@@ -89,54 +105,69 @@ const accuracy = computed(() => {
 
 <template>
   <section class="stack">
-    <header>
-      <h1>Evnetester</h1>
-      <p class="lead">Switch Challenge og Scales CLX — lokal, seeded, uten lag.</p>
-      <p v-if="loadingHistory" class="field-hint">Laster historikk …</p>
-      <p v-else-if="accuracy != null" class="field-hint">Treffrate: {{ accuracy }}% ({{ history.length }} forsøk)</p>
-    </header>
+    <PageHeader
+      title="Evnetester"
+      lead="Switch Challenge og Scales CLX, satt opp som i Aon-øvingsoppgavene."
+    >
+      <template #meta>
+        <p v-if="loadingHistory" class="field-hint">Laster historikk …</p>
+        <p v-else-if="accuracy != null" class="field-hint">Treffrate: {{ accuracy }}% ({{ history.length }} forsøk)</p>
+      </template>
+    </PageHeader>
 
-    <div v-if="mode === 'menu'" class="panel form-grid">
-      <button type="button" @click="startSwitch">Start Switch Challenge</button>
-      <button type="button" class="ghost" @click="startClx">Start Scales CLX</button>
+    <div v-if="mode === 'menu'" class="module-grid">
+      <article class="module-card">
+        <strong>Switch Challenge</strong>
+        <span>Deduktiv: finn koden som gjør input om til output.</span>
+        <AppButton @click="startSwitch">Start</AppButton>
+      </article>
+      <article class="module-card">
+        <strong>Scales CLX</strong>
+        <span>Induktiv: finn regelen og velg de to rutenettene som følger den.</span>
+        <AppButton variant="secondary" @click="startClx">Start</AppButton>
+      </article>
     </div>
 
-    <div v-else-if="mode === 'switch' && switchPuzzle" class="panel stack">
-      <button type="button" class="ghost" @click="mode = 'menu'">Tilbake</button>
-      <h2>Switch Challenge</h2>
-      <p>Input: {{ switchPuzzle.input.join(" · ") }}</p>
-      <p>Output: {{ switchPuzzle.output.join(" · ") }}</p>
-      <div class="form-grid">
-        <button
-          v-for="(opt, i) in switchPuzzle.options"
-          :key="opt"
-          type="button"
-          :class="{ active: selectedSwitch === i }"
-          @click="selectedSwitch = i"
-        >
-          {{ opt }}
-        </button>
+    <article v-else-if="mode === 'switch' && switchPuzzle" class="panel stack">
+      <div class="panel-heading-row">
+        <h3>Switch Challenge</h3>
+        <AppButton variant="ghost" @click="mode = 'menu'">Tilbake</AppButton>
       </div>
-      <button type="button" :disabled="selectedSwitch == null" @click="submitSwitch">Sjekk</button>
-      <p v-if="feedback">{{ feedback }}</p>
-      <button type="button" class="ghost" @click="startSwitch">Neste</button>
-    </div>
-
-    <div v-else-if="mode === 'clx' && clxPuzzle" class="panel stack">
-      <button type="button" class="ghost" @click="mode = 'menu'">Tilbake</button>
-      <h2>Scales CLX</h2>
-      <p>Disse to følger en regel. Velg to kandidater som følger samme regel.</p>
-      <div class="form-grid">
-        <div v-for="(grid, i) in clxPuzzle.candidates" :key="i">
-          <button type="button" :class="{ active: selectedClx.includes(i) }" @click="toggleClx(i)">
-            Kandidat {{ i + 1 }}
-            <small>{{ grid.map((c) => c.shape[0]).join("") }}</small>
-          </button>
-        </div>
+      <p class="field-hint">Velg koden som gjør figurene øverst om til figurene nederst. 1-2-3-4 betyr ingen endring.</p>
+      <SwitchChallengeBoard
+        :puzzle="switchPuzzle"
+        :selected-index="selectedSwitch"
+        :revealed="revealed"
+        @select="selectSwitch"
+      />
+      <p v-if="lastCorrect === true" class="success-text">Riktig</p>
+      <p v-else-if="lastCorrect === false" class="error-text">
+        Feil. Riktig kode var {{ switchPuzzle.options[switchPuzzle.correctIndex]?.split("").join("-") }}.
+      </p>
+      <div class="page-header-actions">
+        <AppButton v-if="!revealed" :disabled="selectedSwitch == null" @click="submitSwitch">Sjekk</AppButton>
+        <AppButton v-else @click="startSwitch">Neste oppgave</AppButton>
       </div>
-      <button type="button" :disabled="selectedClx.length !== 2" @click="submitClx">Sjekk</button>
-      <p v-if="feedback">{{ feedback }}</p>
-      <button type="button" class="ghost" @click="startClx">Neste</button>
-    </div>
+    </article>
+
+    <article v-else-if="mode === 'clx' && clxPuzzle" class="panel stack">
+      <div class="panel-heading-row">
+        <h3>Scales CLX</h3>
+        <AppButton variant="ghost" @click="mode = 'menu'">Tilbake</AppButton>
+      </div>
+      <p class="field-hint">Det er alltid nøyaktig to rutenett til høyre som følger regelen.</p>
+      <ScalesClxBoard
+        :puzzle="clxPuzzle"
+        :selected="selectedClx"
+        :revealed="revealed"
+        @toggle="toggleClx"
+      />
+      <p v-if="lastCorrect === true" class="success-text">Riktig</p>
+      <p v-else-if="lastCorrect === false" class="error-text">Feil. De riktige rutenettene er markert i grønt.</p>
+      <div class="page-header-actions">
+        <AppButton v-if="!revealed" :disabled="selectedClx.length !== 2" @click="submitClx">Sjekk</AppButton>
+        <AppButton v-else @click="startClx">Neste oppgave</AppButton>
+      </div>
+    </article>
   </section>
 </template>

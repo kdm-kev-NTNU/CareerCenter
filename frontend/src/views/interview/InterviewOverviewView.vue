@@ -2,10 +2,22 @@
 import { RouterLink } from "vue-router";
 import { onMounted, ref } from "vue";
 import { interviewPrepApi } from "../../api/interviewPrep.js";
+import PageHeader from "../../components/ui/PageHeader.vue";
+import StateView from "../../components/ui/StateView.vue";
+import StatusBadge from "../../components/listing/StatusBadge.vue";
 
 const loading = ref(true);
 const aiConfigured = ref(false);
 const error = ref<string | null>(null);
+
+const modules = [
+  { to: "/interview/plan/ny", title: "Ny prep-plan", desc: "Fyll inn bedrift + annonse. Agenten researcher og lager spørsmål." },
+  { to: "/interview/bibel", title: "Intervjubibel", desc: "Importer dokumenter og casebøker." },
+  { to: "/interview/simulator", title: "Intervjussimulator", desc: "Tekst eller stemme med STAR-scoring." },
+  { to: "/interview/video", title: "Videosøknad", desc: "Kort med betenkningstid og opptak." },
+  { to: "/interview/evnetester", title: "Evnetester", desc: "Switch Challenge og Scales CLX." },
+  { to: "/interview/struktur", title: "Historiebank", desc: "STAR-historier merket til spørsmål." }
+];
 
 onMounted(async () => {
   try {
@@ -21,29 +33,38 @@ onMounted(async () => {
 
 <template>
   <section class="stack">
-    <article class="panel strong">
-      <h2>Interview Mecca</h2>
-      <p>Forberedelse til intervjuer, case og evnetester – med egen kunnskapsbase og AI-støtte.</p>
-    </article>
+    <PageHeader
+      title="Intervju"
+      lead="Fra søknad til kuratert prep — simulatorer, casebibliotek og evnetester."
+    >
+      <template #meta>
+        <StateView v-if="loading" state="loading" message="Henter AI-status …" />
+        <StateView v-else-if="error" state="error" :message="error" />
+        <StatusBadge
+          v-else
+          :label="aiConfigured ? 'KI konfigurert · klar' : 'KI ikke konfigurert'"
+          :variant="aiConfigured ? 'accent' : 'danger'"
+        />
+      </template>
+    </PageHeader>
 
-    <article class="panel stack">
-      <h2>Moduler</h2>
-      <ul class="plain-list">
-        <li><RouterLink to="/interview/simulator">Simulator</RouterLink> — tekst eller stemme med enhetssjekk</li>
-        <li><RouterLink to="/interview/video">Videosøknad</RouterLink> — kortstokk, nedtelling og opptak</li>
-        <li><RouterLink to="/interview/evnetester">Evnetester</RouterLink> — Switch Challenge og Scales CLX</li>
-        <li><RouterLink to="/interview/struktur">Struktur</RouterLink> — STAR-bank, case-logg og Anki</li>
-      </ul>
-    </article>
-
-    <article class="panel">
-      <h2>AI-status</h2>
-      <p v-if="loading">Henter status …</p>
-      <p v-else-if="error">{{ error }}</p>
-      <p v-else-if="aiConfigured">OpenAI er konfigurert. Bibel, plan og simulator er tilgjengelige.</p>
-      <p v-else>
-        AI er ikke konfigurert. Sett <code>OPENAI_API_KEY</code> på backend for å aktivere.
+    <article v-if="!aiConfigured && !loading && !error" class="panel stack">
+      <h3>KI ikke konfigurert</h3>
+      <p class="error-text">
+        Sett <code>OPENAI_API_KEY</code> på backend. Import og evnetester fungerer fortsatt.
       </p>
     </article>
+
+    <div class="module-grid">
+      <RouterLink
+        v-for="item in modules"
+        :key="item.to"
+        :to="item.to"
+        class="module-card"
+      >
+        <strong>{{ item.title }}</strong>
+        <span>{{ item.desc }}</span>
+      </RouterLink>
+    </div>
   </section>
 </template>

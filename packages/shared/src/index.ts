@@ -400,6 +400,7 @@ export {
 export type { SwitchChallengePuzzle, SwitchOperator, SwitchSymbol } from "./switchChallenge.js";
 export { generateScalesClx, isCorrectClxSelection } from "./scalesClx.js";
 export type { ClxCell, ClxColor, ClxGrid, ClxShape, ScalesClxPuzzle } from "./scalesClx.js";
+export { CLX_SHAPE_COLOR } from "./scalesClx.js";
 export { transitionPrepPlan, canStartSimulators } from "./prepPlanState.js";
 export type { PrepPlanEvent } from "./prepPlanState.js";
 export { transitionVideoSim, canStartRecording, videoSimStates } from "./videoSimState.js";

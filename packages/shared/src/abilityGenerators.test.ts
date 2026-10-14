@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { generateScalesClx, isCorrectClxSelection } from "./scalesClx.js";
+import { CLX_SHAPE_COLOR, generateScalesClx, isCorrectClxSelection } from "./scalesClx.js";
 import { generateSwitchChallenge, isCorrectSwitchAnswer } from "./switchChallenge.js";
 
 describe("Switch Challenge generator", () => {
@@ -38,5 +38,16 @@ describe("Scales CLX generator", () => {
 
   it("is deterministic for the same seed", () => {
     expect(generateScalesClx(99)).toEqual(generateScalesClx(99));
+  });
+
+  it("gives every shape its one fixed color", () => {
+    for (let seed = 0; seed < 200; seed++) {
+      const puzzle = generateScalesClx(seed);
+      for (const grid of [...puzzle.examples, ...puzzle.candidates]) {
+        for (const item of grid) {
+          expect(item.color).toBe(CLX_SHAPE_COLOR[item.shape]);
+        }
+      }
+    }
   });
 });

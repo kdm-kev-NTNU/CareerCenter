@@ -10,6 +10,10 @@ import { interviewModes } from "@careercenter/shared";
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import { interviewPrepApi } from "../../api/interviewPrep.js";
 import MediaDeviceCheck from "../../components/interview/MediaDeviceCheck.vue";
+import AppButton from "../../components/ui/AppButton.vue";
+import ChatMessage from "../../components/ui/ChatMessage.vue";
+import PageHeader from "../../components/ui/PageHeader.vue";
+import StateView from "../../components/ui/StateView.vue";
 
 const channel = ref<"text" | "voice">("text");
 const mode = ref<InterviewMode>("behavioral_mock");
@@ -95,14 +99,18 @@ function onVoiceDevicesFailed(reason: string) {
   error.value = reason;
   voiceReady.value = false;
 }
+
+function chatRole(role: string): "user" | "assistant" {
+  return role === "user" ? "user" : "assistant";
+}
 </script>
 
 <template>
   <section class="stack">
-    <article class="panel strong">
-      <h2>Intervjusimulator</h2>
-      <p>Tekstchat eller stemme-stub med enhetssjekk og transkripsjon lagret som meldinger.</p>
-    </article>
+    <PageHeader
+      title="Intervjussimulator"
+      lead="Øv PEI og case med tekst eller stemme."
+    />
 
     <article class="panel stack">
       <div class="toolbar">
@@ -123,9 +131,9 @@ function onVoiceDevicesFailed(reason: string) {
           Essentials-ark
           <textarea v-model="settings.essentialsSheet" rows="4" placeholder="Nøkkelpunkter til intervjueren …" />
         </label>
-        <button type="button" class="secondary" @click="saveSettings">Lagre innstillinger</button>
+        <AppButton variant="secondary" @click="saveSettings">Lagre innstillinger</AppButton>
       </template>
-      <button type="button" :disabled="loading" @click="startSession">Start ny sesjon</button>
+      <AppButton :loading="loading" @click="startSession">Start ny sesjon</AppButton>
     </article>
 
     <MediaDeviceCheck
@@ -142,37 +150,40 @@ function onVoiceDevicesFailed(reason: string) {
         Modell {{ voiceSession.model }} · {{ voiceSession.mock ? "mock" : "live" }} · utløper
         {{ new Date(voiceSession.expiresAt).toLocaleTimeString("nb-NO") }}
       </p>
-      <p v-if="!voiceReady">Tillat mikrofon for å fortsette.</p>
+      <p v-if="!voiceReady" class="field-hint">Tillat mikrofon for å fortsette.</p>
       <template v-else>
         <p class="field-hint">Stub: skriv det som «ble sagt» og lagre som transkripsjon.</p>
         <textarea v-model="voiceDraft" rows="2" placeholder="Transkripsjonslinje …" />
         <div class="form-grid">
-          <button type="button" @click="appendVoiceLine('user')">Lagre som deg</button>
-          <button type="button" class="ghost" @click="appendVoiceLine('assistant')">Lagre som intervjuer</button>
+          <AppButton @click="appendVoiceLine('user')">Lagre som deg</AppButton>
+          <AppButton variant="ghost" @click="appendVoiceLine('assistant')">Lagre som intervjuer</AppButton>
         </div>
       </template>
     </article>
 
     <article v-if="session" class="panel stack">
       <h3>Samtale</h3>
-      <ul class="plain-list">
-        <li v-for="message in messages" :key="message.id">
-          <strong>{{ message.role }}:</strong> {{ message.content }}
-        </li>
-      </ul>
+      <div class="stack">
+        <ChatMessage
+          v-for="message in messages"
+          :key="message.id"
+          :role="chatRole(message.role)"
+          :content="message.content"
+        />
+      </div>
       <form v-if="channel === 'text'" class="stack" @submit.prevent="sendMessage">
         <textarea v-model="draft" rows="3" placeholder="Ditt svar …" />
-        <button type="submit" :disabled="loading">Send</button>
+        <AppButton type="submit" :loading="loading">Send</AppButton>
       </form>
-      <button type="button" class="secondary" :disabled="!!session.finishedAt" @click="finishSession">
+      <AppButton variant="secondary" :disabled="!!session.finishedAt" @click="finishSession">
         Avslutt og hent feedback
-      </button>
+      </AppButton>
       <div v-if="session.feedback" class="panel">
         <h4>Feedback (sum {{ session.feedback.sum }})</h4>
         <p>{{ session.feedback.improvement }}</p>
       </div>
     </article>
 
-    <p v-if="error">{{ error }}</p>
+    <StateView v-if="error" state="error" :message="error" />
   </section>
 </template>

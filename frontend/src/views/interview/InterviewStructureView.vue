@@ -9,6 +9,10 @@ import {
 import { onMounted, ref } from "vue";
 import { interviewPrepApi } from "../../api/interviewPrep.js";
 import { requestBlob } from "../../api/client.js";
+import AppModal from "../../components/listing/AppModal.vue";
+import AppButton from "../../components/ui/AppButton.vue";
+import PageHeader from "../../components/ui/PageHeader.vue";
+import StateView from "../../components/ui/StateView.vue";
 
 const tab = ref<"stories" | "repertoire">("stories");
 const stories = ref<InterviewStoryBankEntryDto[]>([]);
@@ -28,6 +32,7 @@ const scoreDraft = ref({ scores: emptyStarScores(), note: "" });
 const logForm = ref({ title: "", outcome: "", notes: "" });
 const error = ref<string | null>(null);
 const loading = ref(false);
+const deleteConfirmId = ref<string | null>(null);
 
 function resetForm() {
   editingId.value = null;
@@ -86,8 +91,10 @@ async function saveStory() {
   await loadAll();
 }
 
-async function removeStory(id: string) {
-  await interviewPrepApi.deleteStory(id);
+async function confirmRemoveStory() {
+  if (!deleteConfirmId.value) return;
+  await interviewPrepApi.deleteStory(deleteConfirmId.value);
+  deleteConfirmId.value = null;
   await loadAll();
 }
 
@@ -126,23 +133,26 @@ async function downloadAnki() {
 
 <template>
   <section class="stack">
-    <header class="panel strong">
-      <h2>Struktur</h2>
-      <p>STAR-historiebank, svakeste først, case-repertoire og Anki-eksport.</p>
-      <div class="toolbar">
-        <button type="button" :class="{ active: tab === 'stories' }" @click="tab = 'stories'">Historiebank</button>
-        <button type="button" :class="{ active: tab === 'repertoire' }" @click="tab = 'repertoire'">Case-logg</button>
-      </div>
-    </header>
+    <PageHeader
+      title="Historiebank"
+      lead="STAR-historier merket til spørsmålstyper, svakeste først og Anki-eksport."
+    >
+      <template #actions>
+        <div class="toolbar">
+          <button type="button" :class="{ active: tab === 'stories' }" @click="tab = 'stories'">Historiebank</button>
+          <button type="button" :class="{ active: tab === 'repertoire' }" @click="tab = 'repertoire'">Case-logg</button>
+        </div>
+      </template>
+    </PageHeader>
 
-    <p v-if="error">{{ error }}</p>
-    <p v-if="loading">Laster …</p>
+    <StateView v-if="error" state="error" :message="error" />
+    <StateView v-if="loading" state="loading" />
 
-    <template v-if="tab === 'stories'">
+    <template v-if="tab === 'stories' && !loading">
       <article class="panel stack">
         <div class="toolbar">
-          <button type="button" class="ghost" @click="resetForm">Ny historie</button>
-          <button type="button" class="secondary" @click="downloadAnki">Eksporter Anki CSV</button>
+          <AppButton variant="ghost" @click="resetForm">Ny historie</AppButton>
+          <AppButton variant="secondary" @click="downloadAnki">Eksporter Anki CSV</AppButton>
         </div>
         <label>Tittel <input v-model="form.title" /></label>
         <label>Situasjon <textarea v-model="form.situation" rows="2" /></label>
@@ -150,44 +160,40 @@ async function downloadAnki() {
         <label>Handling <textarea v-model="form.action" rows="2" /></label>
         <label>Resultat <textarea v-model="form.result" rows="2" /></label>
         <label>Tagger (kommaseparert) <input v-model="form.tags" /></label>
-        <button type="button" @click="saveStory">{{ editingId ? "Oppdater" : "Lagre" }}</button>
+        <AppButton @click="saveStory">{{ editingId ? "Oppdater" : "Lagre" }}</AppButton>
       </article>
 
       <article class="panel stack">
         <h3>Svakeste kø</h3>
-        <ul class="plain-list">
-          <li v-for="story in weakest" :key="story.id">
-            {{ story.title }}
-            <span class="field-hint">snitt {{ story.averageSum ?? "—" }}</span>
-            <button type="button" class="ghost" @click="scoreStoryId = story.id">Score</button>
-            <button type="button" class="ghost" @click="editStory(story)">Rediger</button>
-            <button type="button" class="ghost" @click="removeStory(story.id)">Slett</button>
+        <StateView v-if="!weakest.length" state="empty" message="Ingen historier ennå." />
+        <ul v-else class="plain-list">
+          <li v-for="story in weakest" :key="story.id" class="panel-heading-row">
+            <div>
+              <strong>{{ story.title }}</strong>
+              <span class="field-hint">snitt {{ story.averageSum ?? "—" }}</span>
+            </div>
+            <div class="page-header-actions">
+              <AppButton variant="ghost" class="mini-btn" @click="scoreStoryId = story.id">Score</AppButton>
+              <AppButton variant="ghost" class="mini-btn" @click="editStory(story)">Rediger</AppButton>
+              <AppButton variant="ghost" class="mini-btn" @click="deleteConfirmId = story.id">Slett</AppButton>
+            </div>
           </li>
         </ul>
       </article>
-
-      <article v-if="scoreStoryId" class="panel stack">
-        <h3>STAR-score</h3>
-        <label v-for="key in starRubricCriteria" :key="key">
-          {{ starRubricCriterionLabels[key] }}
-          <input v-model.number="scoreDraft.scores[key]" type="number" min="1" max="5" />
-        </label>
-        <label>Notat <input v-model="scoreDraft.note" /></label>
-        <button type="button" @click="submitScore">Lagre score</button>
-      </article>
     </template>
 
-    <template v-else>
+    <template v-else-if="!loading">
       <article class="panel stack">
         <h3>Logg case-øving</h3>
         <label>Tittel <input v-model="logForm.title" /></label>
         <label>Utfall <input v-model="logForm.outcome" placeholder="f.eks. solid struktur" /></label>
         <label>Notater <textarea v-model="logForm.notes" rows="3" /></label>
-        <button type="button" @click="addLog">Lagre logg</button>
+        <AppButton @click="addLog">Lagre logg</AppButton>
       </article>
       <article class="panel stack">
         <h3>Repertoire</h3>
-        <ul class="plain-list">
+        <StateView v-if="!logs.length" state="empty" message="Ingen logger ennå." />
+        <ul v-else class="plain-list">
           <li v-for="log in logs" :key="log.id">
             <strong>{{ log.title }}</strong> — {{ log.outcome }}
             <p class="field-hint">{{ log.notes }}</p>
@@ -195,5 +201,35 @@ async function downloadAnki() {
         </ul>
       </article>
     </template>
+
+    <AppModal
+      :open="!!scoreStoryId"
+      title="Score historie"
+      @close="scoreStoryId = null"
+    >
+      <form class="stack" @submit.prevent="submitScore">
+        <label v-for="key in starRubricCriteria" :key="key">
+          {{ starRubricCriterionLabels[key] }}
+          <input v-model.number="scoreDraft.scores[key]" type="number" min="1" max="5" />
+        </label>
+        <label>Notat <input v-model="scoreDraft.note" /></label>
+        <div class="page-header-actions">
+          <AppButton type="submit">Lagre score</AppButton>
+          <AppButton variant="secondary" type="button" @click="scoreStoryId = null">Avbryt</AppButton>
+        </div>
+      </form>
+    </AppModal>
+
+    <AppModal
+      :open="!!deleteConfirmId"
+      title="Slett historie"
+      @close="deleteConfirmId = null"
+    >
+      <p>Er du sikker på at du vil slette denne historien?</p>
+      <div class="page-header-actions">
+        <AppButton @click="confirmRemoveStory">Slett</AppButton>
+        <AppButton variant="secondary" @click="deleteConfirmId = null">Avbryt</AppButton>
+      </div>
+    </AppModal>
   </section>
 </template>

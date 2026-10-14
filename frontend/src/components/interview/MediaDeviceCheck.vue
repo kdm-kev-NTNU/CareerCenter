@@ -154,7 +154,7 @@ defineExpose({ releaseTracks, startPreview });
 .preview {
   width: min(320px, 100%);
   aspect-ratio: 16 / 9;
-  background: #111827;
+  background: var(--surface-strong);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -165,7 +165,7 @@ defineExpose({ releaseTracks, startPreview });
 }
 .mic-meter {
   height: 8px;
-  background: #e5e7eb;
+  background: var(--border);
   border-radius: 4px;
   margin-top: 6px;
   overflow: hidden;

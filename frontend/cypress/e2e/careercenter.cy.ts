@@ -179,4 +179,24 @@ describe("CareerCenter", () => {
     cy.contains("button", "Plattformer").click();
     cy.contains("button", "Bachelor-lærdom").click();
   });
+
+  it("smoke-tests interview module headers and primary actions", () => {
+    const routes: Array<{ path: string; title: string; primary?: string }> = [
+      { path: "/interview", title: "Intervju" },
+      { path: "/interview/plan/ny", title: "Ny prep-plan", primary: "Opprett og start research" },
+      { path: "/interview/bibel", title: "Intervjubibel", primary: "Lagre" },
+      { path: "/interview/simulator", title: "Intervjussimulator", primary: "Start ny sesjon" },
+      { path: "/interview/video", title: "Videosøknad", primary: "Bekreft og gå til enhetssjekk" },
+      { path: "/interview/struktur", title: "Historiebank", primary: "Lagre" },
+      { path: "/interview/evnetester", title: "Evnetester", primary: "Start" }
+    ];
+
+    for (const route of routes) {
+      cy.visit(route.path);
+      cy.contains(".page-header h2", route.title).should("be.visible");
+      if (route.primary) {
+        cy.contains("button.primary", route.primary).should("be.visible");
+      }
+    }
+  });
 });
