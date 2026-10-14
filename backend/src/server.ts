@@ -26,6 +26,7 @@ import type { InterviewPrepRepository } from "./interviewPrepRepository.js";
 import { InterviewPrepMemoryRepository } from "./interviewPrepMemoryRepository.js";
 const TEST_AUTH_USER_NAME = "__test__";
 const TEST_AUTH_USER_PIN = "0000";
+const INTERVIEW_MEDIA_PERMISSIONS_POLICY = "camera=(self), microphone=(self)";
 
 export interface ServerOptions {
   repository: Repository;
@@ -56,11 +57,10 @@ export async function buildServer(options: ServerOptions) {
   await registerAuthPlugins(app);
 
   await app.register(helmet, {
-    contentSecurityPolicy: env.NODE_ENV === "production" ? undefined : false,
-    permissionsPolicy: {
-      camera: ["self"],
-      microphone: ["self"]
-    }
+    contentSecurityPolicy: env.NODE_ENV === "production" ? undefined : false
+  });
+  app.addHook("onRequest", async (_request, reply) => {
+    reply.header("Permissions-Policy", INTERVIEW_MEDIA_PERMISSIONS_POLICY);
   });
 
   await app.register(cors, {

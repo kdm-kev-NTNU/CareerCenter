@@ -15,8 +15,9 @@ function decodeText(bytes: Uint8Array): string {
 
 async function extractPdfText(buffer: Buffer): Promise<string> {
   const pdf = await getDocumentProxy(new Uint8Array(buffer));
-  const { text } = await extractText(pdf, { mergePages: true });
-  return text.join("\n\n").trim();
+  const { text } = await extractText(pdf, { mergePages: false });
+  const pages = Array.isArray(text) ? text : [text];
+  return pages.join("\n\n").trim();
 }
 
 async function extractDocxText(buffer: Buffer): Promise<string> {

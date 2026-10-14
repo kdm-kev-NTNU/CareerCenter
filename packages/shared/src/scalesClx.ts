@@ -85,6 +85,13 @@ export function generateScalesClx(seed: number): ScalesClxPuzzle {
   const correctB = makeSevenPlusTwo(rng);
   const wrongA = makeNotSevenPlusTwo(rng);
   const wrongB = makeNotSevenPlusTwo(rng);
+  if (!examples.every(followsSevenPlusTwo) || !followsSevenPlusTwo(correctA) || !followsSevenPlusTwo(correctB)) {
+    throw new Error("CLX-rutenett som skal følge regelen gjør det ikke.");
+  }
+  if (followsSevenPlusTwo(wrongA) || followsSevenPlusTwo(wrongB)) {
+    throw new Error("CLX-distraktor følger regelen.");
+  }
+
   const candidates = [correctA, correctB, wrongA, wrongB];
   const order = [0, 1, 2, 3];
   shuffle(order, rng);

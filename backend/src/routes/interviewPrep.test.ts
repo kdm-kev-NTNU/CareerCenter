@@ -188,6 +188,13 @@ describe("interview prep routes", () => {
     });
     expect(score.statusCode).toBe(201);
 
+    const partialScore = await app.inject({
+      method: "POST",
+      url: `/api/interview/stories/${storyId}/scores`,
+      payload: { scores: { action: 2 }, note: "" }
+    });
+    expect(partialScore.statusCode).toBe(400);
+
     const weakest = await app.inject({ method: "GET", url: "/api/interview/stories/weakest" });
     expect(weakest.json()[0]?.id).toBe(storyId);
 

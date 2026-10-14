@@ -1,4 +1,10 @@
-import { abilityTestKinds, starRubricCriteria, videoSimStates, videoSimulatorSettingsSchema } from "@careercenter/shared";
+import {
+  abilityTestKinds,
+  starRubricCriteria,
+  videoSimStates,
+  videoSimulatorSettingsSchema,
+  type StarRubricCriterion
+} from "@careercenter/shared";
 import { z } from "zod";
 
 export const storyBankInputSchema = z.object({
@@ -10,8 +16,14 @@ export const storyBankInputSchema = z.object({
   tags: z.array(z.string()).default([])
 });
 
+const storyScoreValueSchema = z.number().int().min(1).max(5);
+
+const storyScoresShape = Object.fromEntries(
+  starRubricCriteria.map((key) => [key, storyScoreValueSchema])
+) as Record<StarRubricCriterion, typeof storyScoreValueSchema>;
+
 export const storyScoreInputSchema = z.object({
-  scores: z.record(z.enum(starRubricCriteria), z.number().int().min(1).max(5)),
+  scores: z.object(storyScoresShape),
   note: z.string().default("")
 });
 

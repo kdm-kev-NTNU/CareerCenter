@@ -287,7 +287,7 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
     }
   });
 
-  app.get("/api/interview/simulator/settings/:mode", async (request, reply) => {
+  app.get("/api/interview/simulator/settings/:mode", async (request, _reply) => {
     const mode = createSessionSchema.shape.mode.parse((request.params as { mode: string }).mode);
     const settings = await deps.interviewPrepRepository.getSimulatorSettings(request.user.id, mode);
     if (!settings) {

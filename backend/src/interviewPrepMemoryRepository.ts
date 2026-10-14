@@ -29,7 +29,6 @@ import type {
   QuestionTarget,
   VideoSimulatorSettings
 } from "@careercenter/shared";
-import { defaultVideoSimulatorSettings } from "@careercenter/shared";
 
 function nowIso(): string {
   return new Date().toISOString();
