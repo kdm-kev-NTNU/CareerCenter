@@ -1,6 +1,8 @@
 import mammoth from "mammoth";
 import { unzipSync } from "fflate";
-import { extractText, getDocumentProxy } from "unpdf";
+import { getDocumentProxy } from "unpdf";
+import { readArchive } from "./archiveEntries.js";
+import { formatPages, formatSkipped } from "./documentPages.js";
 
 const TEXT_EXTENSIONS = new Set([".txt", ".md", ".csv", ".json"]);
 
@@ -9,38 +11,38 @@ function extensionOf(filename: string): string {
   return dot >= 0 ? filename.slice(dot).toLowerCase() : "";
 }
 
-function decodeText(bytes: Uint8Array): string {
-  return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
-}
-
-async function extractPdfText(buffer: Buffer): Promise<string> {
-  const pdf = await getDocumentProxy(new Uint8Array(buffer));
-  const { text } = await extractText(pdf, { mergePages: false });
-  const pages = Array.isArray(text) ? text : [text];
-  return pages.join("\n\n").trim();
-}
-
 async function extractDocxText(buffer: Buffer): Promise<string> {
   const result = await mammoth.extractRawText({ buffer });
   return result.value.trim();
 }
 
-function extractZipTextEntries(buffer: Buffer): { texts: string[]; entryCount: number } {
-  const archive = unzipSync(new Uint8Array(buffer));
-  const texts: string[] = [];
-  for (const [name, data] of Object.entries(archive)) {
-    if (name.endsWith("/")) continue;
-    const ext = extensionOf(name);
-    if (!TEXT_EXTENSIONS.has(ext) && ext !== ".docx" && ext !== ".pdf") continue;
-    if (TEXT_EXTENSIONS.has(ext)) {
-      texts.push(decodeText(data));
-      continue;
-    }
-    if (ext === ".docx") {
-      texts.push(Buffer.from(data).toString("utf8"));
-    }
+async function extractPdfText(data: Uint8Array): Promise<string> {
+  const pdf = await getDocumentProxy(data);
+  const pages: string[] = [];
+  for (let number = 1; number <= pdf.numPages; number += 1) {
+    pages.push(await readPdfPage(pdf, number));
   }
-  return { texts: texts.filter(Boolean), entryCount: Object.keys(archive).length };
+  return formatPages(pages);
+}
+
+async function readPdfPage(pdf: Awaited<ReturnType<typeof getDocumentProxy>>, number: number): Promise<string> {
+  try {
+    const page = await pdf.getPage(number);
+    const content = await page.getTextContent();
+    return content.items
+      .map((item) => ("str" in item ? item.str : ""))
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "ukjent feil";
+    return `[Side ${number} kunne ikke leses: ${reason}]`;
+  }
+}
+
+function sectionFor(part: { name: string; text: string }): string {
+  const body = part.text.includes("===== PAGE ") ? part.text : formatPages([part.text]);
+  return `===== FILE ${part.name} =====\n${body}`;
 }
 
 export interface ImportedDocument {
@@ -57,11 +59,17 @@ export async function importDocumentText(filename: string, buffer: Buffer): Prom
     return { text: await extractDocxText(buffer), entryCount: 1 };
   }
   if (ext === ".pdf") {
-    return { text: await extractPdfText(buffer), entryCount: 1 };
+    return { text: await extractPdfText(new Uint8Array(buffer)), entryCount: 1 };
   }
   if (ext === ".zip") {
-    const { texts, entryCount } = extractZipTextEntries(buffer);
-    return { text: texts.join("\n\n---\n\n").trim(), entryCount: Math.max(texts.length, entryCount) };
+    const archive = unzipSync(new Uint8Array(buffer));
+    const entries = Object.entries(archive).map(([name, data]) => ({ name, data }));
+    const { parts, skipped } = await readArchive(entries, {
+      pdf: extractPdfText,
+      docx: async (data) => extractDocxText(Buffer.from(data))
+    });
+    const text = `${parts.map(sectionFor).join("\n\n")}${formatSkipped(skipped)}`.trim();
+    return { text, entryCount: Math.max(parts.length, 1) };
   }
   throw new Error(`Filtype støttes ikke: ${ext || "ukjent"}`);
 }

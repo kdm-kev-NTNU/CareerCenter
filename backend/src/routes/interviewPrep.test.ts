@@ -308,4 +308,47 @@ describe("interview prep routes", () => {
     expect(attempt.statusCode).toBe(201);
     await app.close();
   });
+
+  it("retries a failed import job and rejects a job that is still running", async () => {
+    const mainRepo = new MemoryRepository();
+    const repo = new InterviewPrepMemoryRepository();
+    const user = await mainRepo.createUser("__test__", "x");
+    const doc = await repo.createKnowledgeDoc(user.id, {
+      kind: "case",
+      title: "Official Casebook",
+      content: `===== PAGE 1 =====\nCase 1: Alpha\n${"a".repeat(250)}`,
+      contentHash: sha256Content("retry-doc"),
+      sourceFilename: "book.pdf"
+    });
+    const job = await repo.createImportJob(user.id, { knowledgeDocId: doc.id });
+    await repo.updateImportJob(user.id, job.id, { status: "running", message: "pågår" });
+    const app = await buildServer({
+      repository: mainRepo,
+      authDisabled: true,
+      llmClient: new FakeLlmClient({
+        structuredResult: { title: "Alpha", prompt: "prompten", interviewerInfo: "", solution: "løsningen" }
+      }),
+      interviewPrepRepository: repo
+    });
+    await app.ready();
+
+    const blocked = await app.inject({ method: "POST", url: `/api/interview/import-jobs/${job.id}/retry` });
+    expect(blocked.statusCode).toBe(409);
+
+    await repo.updateImportJob(user.id, job.id, { status: "failed", message: "boom" });
+    const retry = await app.inject({ method: "POST", url: `/api/interview/import-jobs/${job.id}/retry` });
+    expect(retry.statusCode).toBe(200);
+
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const current = await repo.getImportJob(user.id, job.id);
+      if (current?.status === "done") break;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    const finished = await repo.getImportJob(user.id, job.id);
+    expect(finished?.status).toBe("done");
+    expect(finished?.message).toMatch(/caseutkast/);
+    const state = JSON.parse(finished?.resultJson ?? "{}") as { chunks: Array<{ pageStart: number; status: string }> };
+    expect(state.chunks[0]).toMatchObject({ pageStart: 1, status: "done" });
+    await app.close();
+  });
 });
