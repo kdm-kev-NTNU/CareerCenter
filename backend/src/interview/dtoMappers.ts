@@ -68,7 +68,9 @@ export function toPrepPlanDto(plan: InterviewPrepPlanRecord): InterviewPrepPlanD
       source: q.source,
       bankQuestionId: q.bankQuestionId,
       storyId: q.storyId,
-      gapReason: q.gapReason
+      gapReason: q.gapReason,
+      included: q.included,
+      notes: q.notes
     })),
     tasks: plan.tasks,
     recommendedCases: plan.recommendedCases,
@@ -82,6 +84,7 @@ export function toImportJobDto(job: InterviewImportJobRecord): InterviewImportJo
   return {
     id: job.id,
     knowledgeDocId: job.knowledgeDocId,
+    kind: job.kind,
     status: job.status,
     progress: job.progress,
     message: job.message,
@@ -105,6 +108,7 @@ export function toSessionDto(session: InterviewSessionRecord): InterviewSessionD
     id: session.id,
     mode: session.mode,
     title: session.title,
+    prepPlanId: session.prepPlanId,
     finishedAt: session.finishedAt,
     feedback: session.feedback,
     createdAt: session.createdAt,

@@ -3,7 +3,6 @@ import type {
   InterviewBankQuestionDto,
   InterviewCaseEntryDto,
   InterviewCasePublicDto,
-  InterviewCaseRepertoireLogDto,
   InterviewImportJobDto,
   InterviewKnowledgeDocDto,
   InterviewMessageDto,
@@ -11,8 +10,6 @@ import type {
   InterviewPrepPlanDto,
   InterviewSessionDto,
   InterviewSimulatorSettingsDto,
-  InterviewStoryBankEntryDto,
-  InterviewStoryScoreDto,
   InterviewVideoRunDto,
   InterviewVideoSettingsDto,
   InterviewMode,
@@ -70,7 +67,10 @@ export const interviewPrepApi = {
     return request<InterviewBankQuestionDto[]>(`/api/interview/questions${suffix}`);
   },
   reindexQuestions: () =>
-    request<{ indexed: number }>("/api/interview/questions/reindex", { method: "POST" }),
+    request<{ indexed: number; queuedJobs: number; documentCount: number; message: string }>(
+      "/api/interview/questions/reindex",
+      { method: "POST" }
+    ),
 
   cases: (params: { q?: string; sourceKind?: string; style?: string; approvalStatus?: string } = {}) => {
     const query = new URLSearchParams();
@@ -97,6 +97,8 @@ export const interviewPrepApi = {
   importJob: (id: string) => request<InterviewImportJobDto>(`/api/interview/import-jobs/${id}`),
   retryImportJob: (id: string) =>
     request<InterviewImportJobDto>(`/api/interview/import-jobs/${id}/retry`, { method: "POST" }),
+  cancelImportJob: (id: string) =>
+    request<InterviewImportJobDto>(`/api/interview/import-jobs/${id}/cancel`, { method: "POST" }),
 
   plans: () => request<InterviewPrepPlanDto[]>("/api/interview/plans"),
   plan: (id: string) => request<PrepPlanDetail>(`/api/interview/plans/${id}`),
@@ -104,6 +106,8 @@ export const interviewPrepApi = {
     request<InterviewPrepPlanDto>("/api/interview/plans", { method: "POST", body: JSON.stringify(payload) }),
   startPlanResearch: (id: string) =>
     request<InterviewPrepPlanDto>(`/api/interview/plans/${id}/research`, { method: "POST" }),
+  cancelPlan: (id: string) =>
+    request<InterviewPrepPlanDto>(`/api/interview/plans/${id}/cancel`, { method: "POST" }),
   submitClarifications: (
     id: string,
     answers: Array<{ id: string; answer: string }>,
@@ -121,6 +125,32 @@ export const interviewPrepApi = {
     request<InterviewPrepPlanDto>(`/api/interview/plans/${planId}/questions/${questionId}`, {
       method: "PUT",
       body: JSON.stringify(payload)
+    }),
+  patchPlanQuestion: (
+    planId: string,
+    questionId: string,
+    payload: { text?: string; category?: string; notes?: string; included?: boolean }
+  ) =>
+    request<InterviewPrepPlanDto>(`/api/interview/plans/${planId}/questions/${questionId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload)
+    }),
+  addPlanQuestion: (
+    planId: string,
+    payload: { text: string; category: string; target?: string; notes?: string; included?: boolean }
+  ) =>
+    request<InterviewPrepPlanDto>(`/api/interview/plans/${planId}/questions`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  deletePlanQuestion: (planId: string, questionId: string) =>
+    request<InterviewPrepPlanDto>(`/api/interview/plans/${planId}/questions/${questionId}`, {
+      method: "DELETE"
+    }),
+  reorderPlanQuestions: (planId: string, orderedIds: string[]) =>
+    request<InterviewPrepPlanDto>(`/api/interview/plans/${planId}/questions/order`, {
+      method: "PUT",
+      body: JSON.stringify({ orderedIds })
     }),
 
   simulatorSettings: (mode: InterviewMode) =>
@@ -145,7 +175,11 @@ export const interviewPrepApi = {
   finishSession: (sessionId: string) =>
     request<InterviewSessionDto>(`/api/interview/sessions/${sessionId}/finish`, { method: "POST" }),
 
-  createVoiceSession: () => request<VoiceSessionDto>("/api/interview/voice/session", { method: "POST" }),
+  createVoiceSession: (sessionId: string) =>
+    request<VoiceSessionDto>("/api/interview/voice/session", {
+      method: "POST",
+      body: JSON.stringify({ sessionId })
+    }),
   appendTranscript: (sessionId: string, payload: { role: "user" | "assistant"; content: string }) =>
     request<InterviewMessageDto>(`/api/interview/sessions/${sessionId}/transcript`, {
       method: "POST",
@@ -198,41 +232,6 @@ export const interviewPrepApi = {
     durationMs: number;
   }) =>
     request<InterviewAbilityTestAttemptDto>("/api/interview/ability/attempts", {
-      method: "POST",
-      body: JSON.stringify(payload)
-    }),
-
-  stories: () => request<InterviewStoryBankEntryDto[]>("/api/interview/stories"),
-  weakestStories: () => request<InterviewStoryBankEntryDto[]>("/api/interview/stories/weakest"),
-  createStory: (payload: Omit<InterviewStoryBankEntryDto, "id" | "createdAt" | "updatedAt" | "latestSum" | "averageSum">) =>
-    request<InterviewStoryBankEntryDto>("/api/interview/stories", { method: "POST", body: JSON.stringify(payload) }),
-  updateStory: (id: string, payload: Omit<InterviewStoryBankEntryDto, "id" | "createdAt" | "updatedAt" | "latestSum" | "averageSum">) =>
-    request<InterviewStoryBankEntryDto>(`/api/interview/stories/${id}`, {
-      method: "PUT",
-      body: JSON.stringify(payload)
-    }),
-  deleteStory: (id: string) => request<void>(`/api/interview/stories/${id}`, { method: "DELETE" }),
-  storyScores: (id: string) => request<InterviewStoryScoreDto[]>(`/api/interview/stories/${id}/scores`),
-  addStoryScore: (id: string, payload: { scores: Record<string, number>; note?: string }) =>
-    request<InterviewStoryScoreDto>(`/api/interview/stories/${id}/scores`, {
-      method: "POST",
-      body: JSON.stringify(payload)
-    }),
-  ankiExportUrl: () => "/api/interview/stories/export/anki.csv",
-
-  repertoireLogs: () => request<InterviewCaseRepertoireLogDto[]>("/api/interview/repertoire"),
-  createRepertoireLog: (payload: {
-    caseEntryId?: string;
-    title: string;
-    company?: string;
-    format?: string;
-    tested?: string;
-    improvement: string;
-    outcome?: string;
-    notes?: string;
-    practicedAt?: string;
-  }) =>
-    request<InterviewCaseRepertoireLogDto>("/api/interview/repertoire", {
       method: "POST",
       body: JSON.stringify(payload)
     })

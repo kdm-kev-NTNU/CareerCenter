@@ -6,7 +6,6 @@ import type {
   InterviewAbilityTestAttemptRecord,
   InterviewBankQuestionRecord,
   InterviewCaseEntryRecord,
-  InterviewCaseRepertoireLogRecord,
   InterviewImportJobRecord,
   InterviewKnowledgeDoc,
   InterviewMessageRecord,
@@ -14,21 +13,21 @@ import type {
   InterviewPrepRepository,
   InterviewSessionRecord,
   InterviewSimulatorSettingsRecord,
-  InterviewStoryBankEntryRecord,
-  InterviewStoryScoreRecord,
   InterviewVideoRunRecord,
   InterviewVideoSettingsRecord,
   CaseEntryInput,
   KnowledgeDocInput,
+  PlanQuestionCreateInput,
+  PlanQuestionPatchInput,
   PrepPlanCreateInput,
-  RepertoireLogInput,
-  StoryBankInput,
   VideoRunInput
 } from "./interviewPrepRepository.js";
 import type { InterviewFeedbackRubric } from "./interview/feedbackRubric.js";
 import type {
+  ImportJobKind,
   InterviewMode,
   PrepPlanStatus,
+  PrepQuestionSource,
   QuestionCategory,
   QuestionTarget,
   VideoSimulatorSettings
@@ -51,9 +50,6 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
   private readonly simulatorSettings = new Map<string, InterviewSimulatorSettingsRecord>();
   private readonly sessions = new Map<string, InterviewSessionRecord>();
   private readonly messages = new Map<string, InterviewMessageRecord>();
-  private readonly stories = new Map<string, InterviewStoryBankEntryRecord>();
-  private readonly storyScores = new Map<string, InterviewStoryScoreRecord>();
-  private readonly repertoireLogs = new Map<string, InterviewCaseRepertoireLogRecord>();
   private readonly abilityAttempts = new Map<string, InterviewAbilityTestAttemptRecord>();
   private readonly videoSettings = new Map<string, InterviewVideoSettingsRecord>();
   private readonly videoRuns = new Map<string, InterviewVideoRunRecord>();
@@ -143,6 +139,37 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       };
       this.bankQuestions.set(row.id, row);
     }
+  }
+
+  async upsertBankQuestionsForDoc(
+    userId: string,
+    knowledgeDocId: string,
+    questions: Array<{ text: string; category: QuestionCategory; tags: string[]; contentHash: string }>
+  ): Promise<number> {
+    const existingHashes = new Set(
+      [...this.bankQuestions.values()]
+        .filter((q) => q.userId === userId && q.knowledgeDocId === knowledgeDocId)
+        .map((q) => q.contentHash)
+    );
+    const timestamp = nowIso();
+    let inserted = 0;
+    for (const item of questions) {
+      if (existingHashes.has(item.contentHash)) continue;
+      existingHashes.add(item.contentHash);
+      const row: InterviewBankQuestionRecord = {
+        id: nanoid(),
+        userId,
+        knowledgeDocId,
+        text: item.text,
+        category: item.category,
+        tags: item.tags,
+        contentHash: item.contentHash,
+        createdAt: timestamp
+      };
+      this.bankQuestions.set(row.id, row);
+      inserted += 1;
+    }
+    return inserted;
   }
 
   async listBankQuestions(
@@ -421,7 +448,7 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
         text: string;
         category: QuestionCategory;
         target: QuestionTarget;
-        source: "bank" | "generated";
+        source?: PrepQuestionSource;
         bankQuestionId?: string;
         storyId?: string;
         gapReason?: string;
@@ -443,7 +470,9 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
         source: item.source ?? "generated",
         bankQuestionId: item.bankQuestionId,
         storyId: item.storyId,
-        gapReason: item.gapReason
+        gapReason: item.gapReason,
+        included: true,
+        notes: ""
       })),
       tasks: input.tasks.map((item, index) => ({
         id: nanoid(),
@@ -467,7 +496,7 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       text: string;
       category: QuestionCategory;
       target: QuestionTarget;
-      source: "bank" | "generated";
+      source: PrepQuestionSource;
       bankQuestionId?: string;
       storyId?: string;
     }
@@ -487,8 +516,99 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       source: replacement.source,
       bankQuestionId: replacement.bankQuestionId,
       storyId: replacement.storyId,
-      gapReason: undefined
+      gapReason: undefined,
+      included: existing.included,
+      notes: existing.notes
     };
+    const updated = { ...plan, questions, updatedAt: nowIso() };
+    this.prepPlans.set(planId, updated);
+    return updated;
+  }
+
+  async patchPlanQuestion(
+    userId: string,
+    planId: string,
+    questionId: string,
+    patch: PlanQuestionPatchInput
+  ): Promise<InterviewPrepPlanRecord | null> {
+    const plan = await this.getPrepPlan(userId, planId);
+    if (!plan) return null;
+    const index = plan.questions.findIndex((q) => q.id === questionId);
+    if (index < 0) return null;
+    const existing = plan.questions[index]!;
+    const questions = [...plan.questions];
+    questions[index] = {
+      ...existing,
+      text: patch.text ?? existing.text,
+      category: patch.category ?? existing.category,
+      notes: patch.notes ?? existing.notes,
+      included: patch.included ?? existing.included,
+      source: patch.source ?? existing.source,
+      gapReason: patch.text && patch.text !== existing.text ? undefined : existing.gapReason
+    };
+    const updated = { ...plan, questions, updatedAt: nowIso() };
+    this.prepPlans.set(planId, updated);
+    return updated;
+  }
+
+  async addPlanQuestion(
+    userId: string,
+    planId: string,
+    input: PlanQuestionCreateInput
+  ): Promise<InterviewPrepPlanRecord | null> {
+    const plan = await this.getPrepPlan(userId, planId);
+    if (!plan) return null;
+    const maxOrder = plan.questions.reduce((max, q) => Math.max(max, q.sortOrder), -1);
+    const question = {
+      id: nanoid(),
+      text: input.text,
+      category: input.category,
+      target: input.target ?? ("interview" as QuestionTarget),
+      sortOrder: maxOrder + 1,
+      source: "custom" as const,
+      included: input.included ?? true,
+      notes: input.notes ?? ""
+    };
+    const updated = {
+      ...plan,
+      questions: [...plan.questions, question],
+      updatedAt: nowIso()
+    };
+    this.prepPlans.set(planId, updated);
+    return updated;
+  }
+
+  async deletePlanQuestion(
+    userId: string,
+    planId: string,
+    questionId: string
+  ): Promise<InterviewPrepPlanRecord | null> {
+    const plan = await this.getPrepPlan(userId, planId);
+    if (!plan) return null;
+    if (!plan.questions.some((q) => q.id === questionId)) return null;
+    const questions = plan.questions
+      .filter((q) => q.id !== questionId)
+      .map((q, index) => ({ ...q, sortOrder: index }));
+    const updated = { ...plan, questions, updatedAt: nowIso() };
+    this.prepPlans.set(planId, updated);
+    return updated;
+  }
+
+  async reorderPlanQuestions(
+    userId: string,
+    planId: string,
+    orderedIds: string[]
+  ): Promise<InterviewPrepPlanRecord | null> {
+    const plan = await this.getPrepPlan(userId, planId);
+    if (!plan) return null;
+    const byId = new Map(plan.questions.map((q) => [q.id, q]));
+    if (orderedIds.length !== plan.questions.length) return null;
+    if (new Set(orderedIds).size !== orderedIds.length) return null;
+    if (!orderedIds.every((id) => byId.has(id))) return null;
+    const questions = orderedIds.map((id, index) => ({
+      ...byId.get(id)!,
+      sortOrder: index
+    }));
     const updated = { ...plan, questions, updatedAt: nowIso() };
     this.prepPlans.set(planId, updated);
     return updated;
@@ -605,106 +725,6 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
     return updated;
   }
 
-  async listStoryBankEntries(userId: string): Promise<InterviewStoryBankEntryRecord[]> {
-    return [...this.stories.values()]
-      .filter((story) => story.userId === userId)
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  }
-
-  async getStoryBankEntry(userId: string, id: string): Promise<InterviewStoryBankEntryRecord | null> {
-    const story = this.stories.get(id);
-    if (!story || story.userId !== userId) return null;
-    return story;
-  }
-
-  async createStoryBankEntry(userId: string, input: StoryBankInput): Promise<InterviewStoryBankEntryRecord> {
-    const timestamp = nowIso();
-    const story: InterviewStoryBankEntryRecord = {
-      id: nanoid(),
-      userId,
-      ...input,
-      createdAt: timestamp,
-      updatedAt: timestamp
-    };
-    this.stories.set(story.id, story);
-    return story;
-  }
-
-  async updateStoryBankEntry(
-    userId: string,
-    id: string,
-    input: Partial<StoryBankInput>
-  ): Promise<InterviewStoryBankEntryRecord | null> {
-    const existing = await this.getStoryBankEntry(userId, id);
-    if (!existing) return null;
-    const updated = { ...existing, ...input, updatedAt: nowIso() };
-    this.stories.set(id, updated);
-    return updated;
-  }
-
-  async deleteStoryBankEntry(userId: string, id: string): Promise<boolean> {
-    const existing = await this.getStoryBankEntry(userId, id);
-    if (!existing) return false;
-    this.stories.delete(id);
-    for (const [scoreId, score] of this.storyScores) {
-      if (score.storyId === id) this.storyScores.delete(scoreId);
-    }
-    return true;
-  }
-
-  async listStoryScores(userId: string, storyId: string): Promise<InterviewStoryScoreRecord[]> {
-    const story = await this.getStoryBankEntry(userId, storyId);
-    if (!story) return [];
-    return [...this.storyScores.values()]
-      .filter((score) => score.storyId === storyId)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  }
-
-  async addStoryScore(
-    userId: string,
-    storyId: string,
-    input: { scores: InterviewStoryScoreRecord["scores"]; sum: number; note: string }
-  ): Promise<InterviewStoryScoreRecord | null> {
-    const story = await this.getStoryBankEntry(userId, storyId);
-    if (!story) return null;
-    const score: InterviewStoryScoreRecord = {
-      id: nanoid(),
-      storyId,
-      scores: input.scores,
-      sum: input.sum,
-      note: input.note,
-      createdAt: nowIso()
-    };
-    this.storyScores.set(score.id, score);
-    story.updatedAt = nowIso();
-    this.stories.set(storyId, story);
-    return score;
-  }
-
-  async listRepertoireLogs(userId: string): Promise<InterviewCaseRepertoireLogRecord[]> {
-    return [...this.repertoireLogs.values()]
-      .filter((row) => row.userId === userId)
-      .sort((a, b) => b.practicedAt.localeCompare(a.practicedAt));
-  }
-
-  async createRepertoireLog(userId: string, input: RepertoireLogInput): Promise<InterviewCaseRepertoireLogRecord> {
-    const row: InterviewCaseRepertoireLogRecord = {
-      id: nanoid(),
-      userId,
-      caseEntryId: input.caseEntryId,
-      title: input.title,
-      company: input.company ?? "",
-      format: input.format ?? "",
-      tested: input.tested ?? "",
-      improvement: input.improvement ?? "",
-      outcome: input.outcome,
-      notes: input.notes,
-      practicedAt: input.practicedAt ?? nowIso()
-    };
-    this.repertoireLogs.set(row.id, row);
-    return row;
-  }
-
   async listAbilityAttempts(userId: string, limit = 50): Promise<InterviewAbilityTestAttemptRecord[]> {
     return [...this.abilityAttempts.values()]
       .filter((row) => row.userId === userId)
@@ -769,6 +789,7 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       id: nanoid(),
       userId,
       knowledgeDocId: input.knowledgeDocId,
+      kind: input.kind ?? "cases",
       status: "queued",
       progress: 0,
       message: "",
@@ -792,6 +813,21 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
+  async listImportJobsForDoc(
+    userId: string,
+    knowledgeDocId: string,
+    kind?: ImportJobKind
+  ): Promise<InterviewImportJobRecord[]> {
+    return [...this.importJobs.values()]
+      .filter(
+        (row) =>
+          row.userId === userId &&
+          row.knowledgeDocId === knowledgeDocId &&
+          (!kind || row.kind === kind)
+      )
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+
   async updateImportJob(
     userId: string,
     id: string,
@@ -806,5 +842,35 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
     };
     this.importJobs.set(id, updated);
     return updated;
+  }
+
+  async failInterruptedImportJobs(message: string): Promise<number> {
+    let count = 0;
+    for (const [id, job] of this.importJobs) {
+      if (job.status !== "queued" && job.status !== "running") continue;
+      this.importJobs.set(id, {
+        ...job,
+        status: "failed",
+        message,
+        updatedAt: nowIso()
+      });
+      count += 1;
+    }
+    return count;
+  }
+
+  async failInterruptedPrepPlans(message: string): Promise<number> {
+    let count = 0;
+    for (const [id, plan] of this.prepPlans) {
+      if (plan.status !== "researching" && plan.status !== "curating") continue;
+      this.prepPlans.set(id, {
+        ...plan,
+        status: "failed",
+        failureReason: message,
+        updatedAt: nowIso()
+      });
+      count += 1;
+    }
+    return count;
   }
 }

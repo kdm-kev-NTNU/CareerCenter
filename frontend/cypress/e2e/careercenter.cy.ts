@@ -187,7 +187,6 @@ describe("CareerCenter", () => {
       { path: "/interview/bibel", title: "Intervjubibel", primary: "Lagre" },
       { path: "/interview/simulator", title: "Intervjussimulator", primary: "Start ny sesjon" },
       { path: "/interview/video", title: "Videosøknad", primary: "Bekreft og gå til enhetssjekk" },
-      { path: "/interview/struktur", title: "Historiebank", primary: "Lagre" },
       { path: "/interview/evnetester", title: "Evnetester", primary: "Start" }
     ];
 

@@ -3,11 +3,13 @@ import type {
   InterviewBankQuestionDto,
   InterviewPrepPlanCaseDto,
   InterviewPrepPlanDto,
-  PrepPlanPipelineStep
+  InterviewPrepQuestionDto,
+  PrepPlanPipelineStep,
+  QuestionCategory
 } from "@careercenter/shared";
-import { isPrepPlanPipelineActive } from "@careercenter/shared";
+import { canCancelPrepPlan, canStartSimulators, isPrepPlanPipelineActive } from "@careercenter/shared";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { interviewPrepApi } from "../../api/interviewPrep.js";
 import StatusBadge from "../../components/listing/StatusBadge.vue";
 import PrepPlanStepper from "../../components/interview/PrepPlanStepper.vue";
@@ -17,6 +19,7 @@ import PageHeader from "../../components/ui/PageHeader.vue";
 import StateView from "../../components/ui/StateView.vue";
 
 const route = useRoute();
+const router = useRouter();
 const plan = ref<InterviewPrepPlanDto | null>(null);
 const rankedCases = ref<InterviewPrepPlanCaseDto[]>([]);
 const loading = ref(true);
@@ -28,12 +31,22 @@ const bankHits = ref<InterviewBankQuestionDto[]>([]);
 const bankQ = ref("");
 const selectedStep = ref<PrepPlanPipelineStep>("created");
 const followLive = ref(true);
+const editingId = ref<string | null>(null);
+const editText = ref("");
+const editNotes = ref("");
+const newQuestionText = ref("");
+const newQuestionCategory = ref<QuestionCategory>("behavioral");
 let pollTimer: ReturnType<typeof setInterval> | undefined;
 
 const planId = computed(() => route.params.id as string);
 const statusTone = computed(() => (plan.value ? toneForPrepPlanStatus(plan.value.status) : null));
 const pipelineActive = computed(() =>
   plan.value ? isPrepPlanPipelineActive(plan.value.pipelineStep, plan.value.status) : false
+);
+const canCancel = computed(() => (plan.value ? canCancelPrepPlan(plan.value.status) : false));
+const canPractice = computed(() => (plan.value ? canStartSimulators(plan.value.status) : false));
+const includedCount = computed(
+  () => plan.value?.questions.filter((q) => q.included).length ?? 0
 );
 const questionsByCategory = computed(() => {
   const groups = new Map<string, NonNullable<typeof plan.value>["questions"]>();
@@ -146,6 +159,21 @@ async function retryResearch() {
   }
 }
 
+async function stopResearch() {
+  if (!plan.value) return;
+  saving.value = true;
+  error.value = null;
+  try {
+    const updated = await interviewPrepApi.cancelPlan(plan.value.id);
+    applyDetail({ plan: updated, rankedCases: updated.recommendedCases });
+    stopPolling();
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : "Kunne ikke stoppe.";
+  } finally {
+    saving.value = false;
+  }
+}
+
 async function openSwap(questionId: string) {
   swapQuestionId.value = questionId;
   bankHits.value = await interviewPrepApi.searchQuestions({ q: bankQ.value || undefined });
@@ -157,6 +185,74 @@ async function applySwap(bankQuestionId: string) {
     bankQuestionId
   });
   swapQuestionId.value = null;
+}
+
+function startEdit(question: InterviewPrepQuestionDto) {
+  editingId.value = question.id;
+  editText.value = question.text;
+  editNotes.value = question.notes;
+}
+
+async function saveEdit() {
+  if (!plan.value || !editingId.value) return;
+  saving.value = true;
+  try {
+    plan.value = await interviewPrepApi.patchPlanQuestion(plan.value.id, editingId.value, {
+      text: editText.value.trim(),
+      notes: editNotes.value
+    });
+    editingId.value = null;
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : "Kunne ikke lagre spørsmål.";
+  } finally {
+    saving.value = false;
+  }
+}
+
+async function toggleIncluded(question: InterviewPrepQuestionDto) {
+  if (!plan.value) return;
+  plan.value = await interviewPrepApi.patchPlanQuestion(plan.value.id, question.id, {
+    included: !question.included
+  });
+}
+
+async function removeQuestion(questionId: string) {
+  if (!plan.value) return;
+  plan.value = await interviewPrepApi.deletePlanQuestion(plan.value.id, questionId);
+}
+
+async function addQuestion() {
+  if (!plan.value || !newQuestionText.value.trim()) return;
+  saving.value = true;
+  try {
+    plan.value = await interviewPrepApi.addPlanQuestion(plan.value.id, {
+      text: newQuestionText.value.trim(),
+      category: newQuestionCategory.value
+    });
+    newQuestionText.value = "";
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : "Kunne ikke legge til spørsmål.";
+  } finally {
+    saving.value = false;
+  }
+}
+
+async function moveQuestion(questionId: string, direction: -1 | 1) {
+  if (!plan.value) return;
+  const ordered = [...plan.value.questions].sort((a, b) => a.sortOrder - b.sortOrder);
+  const index = ordered.findIndex((q) => q.id === questionId);
+  const target = index + direction;
+  if (index < 0 || target < 0 || target >= ordered.length) return;
+  const ids = ordered.map((q) => q.id);
+  const tmp = ids[index]!;
+  ids[index] = ids[target]!;
+  ids[target] = tmp;
+  plan.value = await interviewPrepApi.reorderPlanQuestions(plan.value.id, ids);
+}
+
+function practiceWithPlan() {
+  if (!plan.value) return;
+  void router.push({ name: "interview-simulator", query: { planId: plan.value.id } });
 }
 </script>
 
@@ -170,6 +266,11 @@ async function applySwap(bankQuestionId: string) {
         <template #meta>
           <StatusBadge v-if="statusTone" :label="statusTone.label" :variant="statusTone.variant" />
         </template>
+        <template #actions>
+          <AppButton v-if="canPractice" :disabled="includedCount === 0" @click="practiceWithPlan">
+            Øv med denne planen
+          </AppButton>
+        </template>
       </PageHeader>
 
       <article class="panel stack">
@@ -182,7 +283,9 @@ async function applySwap(bankQuestionId: string) {
         <PrepPlanStepper :plan="plan" :selected="selectedStep" @select="chooseStep" />
         <div class="plan-step-detail" data-test="plan-step-detail" aria-live="polite">
           <h3>{{ prepPlanPipelineStepLabel[selectedStep] }}</h3>
-          <p v-if="plan.status === 'failed' && plan.failureReason" class="error-text">{{ plan.failureReason }}</p>
+          <p v-if="(plan.status === 'failed' || plan.status === 'cancelled') && plan.failureReason" class="error-text">
+            {{ plan.failureReason }}
+          </p>
 
           <template v-if="selectedStep === 'created'">
             <p>{{ plan.companyName }}<template v-if="plan.roleTitle"> — {{ plan.roleTitle }}</template></p>
@@ -237,29 +340,83 @@ async function applySwap(bankQuestionId: string) {
             <p>Planen har {{ plan.questions.length }} spørsmål og {{ rankedCases.length }} anbefalte case.</p>
           </template>
         </div>
-        <AppButton v-if="plan.status === 'failed'" :loading="saving" @click="retryResearch">Start på nytt</AppButton>
+        <div class="form-grid">
+          <AppButton v-if="canCancel" variant="secondary" :loading="saving" @click="stopResearch">Stopp</AppButton>
+          <AppButton
+            v-if="plan.status === 'failed' || plan.status === 'cancelled'"
+            :loading="saving"
+            @click="retryResearch"
+          >
+            Start på nytt
+          </AppButton>
+        </div>
       </article>
 
       <article v-if="plan.repeatedStoryIds.length" class="panel">
         <p class="error-text">Advarsel: samme historie er brukt mer enn én gang i planen.</p>
       </article>
 
-      <article v-if="plan.questions.length" class="panel stack">
-        <h3>Spørsmål ({{ plan.questions.length }})</h3>
+      <article v-if="plan.questions.length || canPractice" class="panel stack">
+        <div class="panel-heading-row">
+          <h3>Spørsmål ({{ includedCount }}/{{ plan.questions.length }} i øving)</h3>
+          <AppButton v-if="canPractice" variant="secondary" :disabled="includedCount === 0" @click="practiceWithPlan">
+            Øv med denne planen
+          </AppButton>
+        </div>
         <div v-for="[category, items] in questionsByCategory" :key="category" class="stack">
           <h4>{{ category }}</h4>
           <ul class="plain-list">
-            <li v-for="question in items" :key="question.id" class="panel-heading-row">
-              <div>
-                {{ question.text }}
-                <span class="field-hint">
-                  {{ question.source === "bank" ? "fra bank" : "generert" }}
-                  <template v-if="question.gapReason"> — {{ question.gapReason }}</template>
-                </span>
+            <li v-for="question in items" :key="question.id" class="stack">
+              <div class="panel-heading-row">
+                <label class="inline-check">
+                  <input type="checkbox" :checked="question.included" @change="toggleIncluded(question)" />
+                  Ta med i øving
+                </label>
+                <div class="form-grid">
+                  <AppButton variant="ghost" class="mini-btn" @click="moveQuestion(question.id, -1)">Opp</AppButton>
+                  <AppButton variant="ghost" class="mini-btn" @click="moveQuestion(question.id, 1)">Ned</AppButton>
+                  <AppButton variant="ghost" class="mini-btn" @click="startEdit(question)">Rediger</AppButton>
+                  <AppButton variant="ghost" class="mini-btn" @click="openSwap(question.id)">Bytt</AppButton>
+                  <AppButton variant="ghost" class="mini-btn" @click="removeQuestion(question.id)">Slett</AppButton>
+                </div>
               </div>
-              <AppButton variant="ghost" class="mini-btn" @click="openSwap(question.id)">Bytt</AppButton>
+              <template v-if="editingId === question.id">
+                <textarea v-model="editText" rows="2" />
+                <label>
+                  Notater (til boten)
+                  <textarea v-model="editNotes" rows="2" />
+                </label>
+                <div class="form-grid">
+                  <AppButton :loading="saving" @click="saveEdit">Lagre</AppButton>
+                  <AppButton variant="ghost" @click="editingId = null">Avbryt</AppButton>
+                </div>
+              </template>
+              <template v-else>
+                <p :class="{ 'field-hint': !question.included }">{{ question.text }}</p>
+                <span class="field-hint">
+                  {{ question.source === "bank" ? "fra bank" : question.source === "custom" ? "egendefinert" : question.source === "edited" ? "redigert" : "generert" }}
+                  <template v-if="question.gapReason"> — {{ question.gapReason }}</template>
+                  <template v-if="question.notes"> — notater: {{ question.notes }}</template>
+                </span>
+              </template>
             </li>
           </ul>
+        </div>
+
+        <div class="stack">
+          <h4>Legg til spørsmål</h4>
+          <textarea v-model="newQuestionText" rows="2" placeholder="Skriv et intervjuspørsmål …" />
+          <label>
+            Kategori
+            <select v-model="newQuestionCategory">
+              <option value="behavioral">behavioral</option>
+              <option value="technical">technical</option>
+              <option value="motivation">motivation</option>
+              <option value="company">company</option>
+              <option value="case">case</option>
+            </select>
+          </label>
+          <AppButton :loading="saving" :disabled="!newQuestionText.trim()" @click="addQuestion">Legg til</AppButton>
         </div>
       </article>
 
@@ -298,3 +455,12 @@ async function applySwap(bankQuestionId: string) {
     </template>
   </section>
 </template>
+
+<style scoped>
+.inline-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+}
+</style>

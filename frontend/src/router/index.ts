@@ -17,7 +17,6 @@ import InterviewPlanView from "../views/interview/InterviewPlanView.vue";
 import InterviewSimulatorView from "../views/interview/InterviewSimulatorView.vue";
 import InterviewVideoView from "../views/interview/InterviewVideoView.vue";
 import AbilityTestsView from "../views/interview/AbilityTestsView.vue";
-import InterviewStructureView from "../views/interview/InterviewStructureView.vue";
 import EducationPlatformsView from "../views/education/EducationPlatformsView.vue";
 import LoginView from "../views/LoginView.vue";
 import ApplicationsView from "../views/ApplicationsView.vue";
@@ -167,9 +166,7 @@ const router = createRouter({
             },
             {
               path: "struktur",
-              name: "interview-structure",
-              component: InterviewStructureView,
-              meta: { title: "Struktur" }
+              redirect: { name: "interview-overview" }
             }
           ]
         }

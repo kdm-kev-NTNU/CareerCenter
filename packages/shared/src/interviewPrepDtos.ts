@@ -4,6 +4,7 @@ import type {
   CaseApprovalStatus,
   CaseSourceKind,
   CaseStyle,
+  ImportJobKind,
   ImportJobStatus,
   InterviewMode,
   KnowledgeDocKind,
@@ -72,6 +73,8 @@ export interface InterviewPrepQuestionDto {
   bankQuestionId?: string;
   storyId?: string;
   gapReason?: string;
+  included: boolean;
+  notes: string;
 }
 
 export interface InterviewPrepPlanCaseDto {
@@ -114,6 +117,7 @@ export interface InterviewPrepPlanDto {
 export interface InterviewImportJobDto {
   id: string;
   knowledgeDocId: string;
+  kind: ImportJobKind;
   status: ImportJobStatus;
   progress: number;
   message: string;
@@ -133,6 +137,7 @@ export interface InterviewSessionDto {
   id: string;
   mode: InterviewMode;
   title: string;
+  prepPlanId?: string;
   finishedAt?: string;
   feedback?: InterviewSessionFeedbackDto;
   createdAt: string;

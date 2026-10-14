@@ -3,6 +3,7 @@ import type {
   CaseApprovalStatus,
   CaseSourceKind,
   CaseStyle,
+  ImportJobKind,
   ImportJobStatus,
   InterviewMode,
   KnowledgeDocKind,
@@ -12,7 +13,6 @@ import type {
   PrepQuestionSource,
   QuestionCategory,
   QuestionTarget,
-  StarRubricCriterion,
   VideoSimState,
   VideoSimulatorSettings
 } from "@careercenter/shared";
@@ -77,6 +77,8 @@ export interface InterviewPrepQuestionRecord {
   bankQuestionId?: string;
   storyId?: string;
   gapReason?: string;
+  included: boolean;
+  notes: string;
 }
 
 export interface InterviewPrepPlanCaseRecord {
@@ -120,6 +122,7 @@ export interface InterviewImportJobRecord {
   id: string;
   userId: string;
   knowledgeDocId: string;
+  kind: ImportJobKind;
   status: ImportJobStatus;
   progress: number;
   message: string;
@@ -156,63 +159,6 @@ export interface InterviewMessageRecord {
   role: "system" | "user" | "assistant";
   content: string;
   createdAt: string;
-}
-
-export interface InterviewStoryBankEntryRecord {
-  id: string;
-  userId: string;
-  title: string;
-  situation: string;
-  task: string;
-  action: string;
-  result: string;
-  tags: string[];
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface StoryBankInput {
-  title: string;
-  situation: string;
-  task: string;
-  action: string;
-  result: string;
-  tags: string[];
-}
-
-export interface InterviewStoryScoreRecord {
-  id: string;
-  storyId: string;
-  scores: Record<StarRubricCriterion, number>;
-  sum: number;
-  note: string;
-  createdAt: string;
-}
-
-export interface InterviewCaseRepertoireLogRecord {
-  id: string;
-  userId: string;
-  caseEntryId?: string;
-  title: string;
-  company: string;
-  format: string;
-  tested: string;
-  improvement: string;
-  outcome: string;
-  notes: string;
-  practicedAt: string;
-}
-
-export interface RepertoireLogInput {
-  caseEntryId?: string;
-  title: string;
-  company?: string;
-  format?: string;
-  tested?: string;
-  improvement?: string;
-  outcome: string;
-  notes: string;
-  practicedAt?: string;
 }
 
 export interface InterviewAbilityTestAttemptRecord {
@@ -291,6 +237,7 @@ export interface PrepPlanCreateInput {
 
 export interface ImportJobCreateInput {
   knowledgeDocId: string;
+  kind?: ImportJobKind;
 }
 
 export interface ImportJobUpdateInput {
@@ -298,6 +245,22 @@ export interface ImportJobUpdateInput {
   progress?: number;
   message?: string;
   resultJson?: string;
+}
+
+export interface PlanQuestionPatchInput {
+  text?: string;
+  category?: QuestionCategory;
+  notes?: string;
+  included?: boolean;
+  source?: PrepQuestionSource;
+}
+
+export interface PlanQuestionCreateInput {
+  text: string;
+  category: QuestionCategory;
+  target?: QuestionTarget;
+  notes?: string;
+  included?: boolean;
 }
 
 export interface InterviewPrepRepository {
@@ -316,6 +279,12 @@ export interface InterviewPrepRepository {
     knowledgeDocId: string,
     questions: Array<{ text: string; category: QuestionCategory; tags: string[]; contentHash: string }>
   ): Promise<void>;
+  /** Insert questions that are not already present (by contentHash) for the document. */
+  upsertBankQuestionsForDoc(
+    userId: string,
+    knowledgeDocId: string,
+    questions: Array<{ text: string; category: QuestionCategory; tags: string[]; contentHash: string }>
+  ): Promise<number>;
   listBankQuestions(
     userId: string,
     filter?: { q?: string; category?: string; tag?: string }
@@ -407,6 +376,27 @@ export interface InterviewPrepRepository {
       storyId?: string;
     }
   ): Promise<InterviewPrepPlanRecord | null>;
+  patchPlanQuestion(
+    userId: string,
+    planId: string,
+    questionId: string,
+    patch: PlanQuestionPatchInput
+  ): Promise<InterviewPrepPlanRecord | null>;
+  addPlanQuestion(
+    userId: string,
+    planId: string,
+    input: PlanQuestionCreateInput
+  ): Promise<InterviewPrepPlanRecord | null>;
+  deletePlanQuestion(
+    userId: string,
+    planId: string,
+    questionId: string
+  ): Promise<InterviewPrepPlanRecord | null>;
+  reorderPlanQuestions(
+    userId: string,
+    planId: string,
+    orderedIds: string[]
+  ): Promise<InterviewPrepPlanRecord | null>;
   setPlanQuestionStory(
     userId: string,
     planId: string,
@@ -439,25 +429,6 @@ export interface InterviewPrepRepository {
     feedback: InterviewFeedbackRubric
   ): Promise<InterviewSessionRecord | null>;
 
-  listStoryBankEntries(userId: string): Promise<InterviewStoryBankEntryRecord[]>;
-  getStoryBankEntry(userId: string, id: string): Promise<InterviewStoryBankEntryRecord | null>;
-  createStoryBankEntry(userId: string, input: StoryBankInput): Promise<InterviewStoryBankEntryRecord>;
-  updateStoryBankEntry(
-    userId: string,
-    id: string,
-    input: Partial<StoryBankInput>
-  ): Promise<InterviewStoryBankEntryRecord | null>;
-  deleteStoryBankEntry(userId: string, id: string): Promise<boolean>;
-  listStoryScores(userId: string, storyId: string): Promise<InterviewStoryScoreRecord[]>;
-  addStoryScore(
-    userId: string,
-    storyId: string,
-    input: { scores: Record<StarRubricCriterion, number>; sum: number; note: string }
-  ): Promise<InterviewStoryScoreRecord | null>;
-
-  listRepertoireLogs(userId: string): Promise<InterviewCaseRepertoireLogRecord[]>;
-  createRepertoireLog(userId: string, input: RepertoireLogInput): Promise<InterviewCaseRepertoireLogRecord>;
-
   listAbilityAttempts(userId: string, limit?: number): Promise<InterviewAbilityTestAttemptRecord[]>;
   createAbilityAttempt(userId: string, input: AbilityAttemptInput): Promise<InterviewAbilityTestAttemptRecord>;
 
@@ -469,9 +440,18 @@ export interface InterviewPrepRepository {
   createImportJob(userId: string, input: ImportJobCreateInput): Promise<InterviewImportJobRecord>;
   getImportJob(userId: string, id: string): Promise<InterviewImportJobRecord | null>;
   listImportJobs(userId: string): Promise<InterviewImportJobRecord[]>;
+  listImportJobsForDoc(
+    userId: string,
+    knowledgeDocId: string,
+    kind?: ImportJobKind
+  ): Promise<InterviewImportJobRecord[]>;
   updateImportJob(
     userId: string,
     id: string,
     input: ImportJobUpdateInput
   ): Promise<InterviewImportJobRecord | null>;
+  /** Mark all queued/running import jobs as failed (process restart recovery). */
+  failInterruptedImportJobs(message: string): Promise<number>;
+  /** Mark researching/curating prep plans as failed (process restart recovery). */
+  failInterruptedPrepPlans(message: string): Promise<number>;
 }
