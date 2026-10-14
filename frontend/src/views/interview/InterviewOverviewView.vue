@@ -29,9 +29,7 @@ onMounted(async () => {
       <h2>AI-status</h2>
       <p v-if="loading">Henter status …</p>
       <p v-else-if="error">{{ error }}</p>
-      <p v-else-if="aiConfigured">
-        OpenAI er konfigurert. Du kan bruke AI-funksjoner når de aktiveres i neste epics.
-      </p>
+      <p v-else-if="aiConfigured">OpenAI er konfigurert. Bibel, plan og simulator er tilgjengelige.</p>
       <p v-else>
         AI er ikke konfigurert. Sett <code>OPENAI_API_KEY</code> på backend for å aktivere.
       </p>

@@ -372,8 +372,40 @@ export type {
   CaseStyle
 } from "./interviewPrep.js";
 
+export { inferKnowledgeKind, classifyCaseSource } from "./interviewKnowledge.js";
+export type { InferKnowledgeKindInput, ClassifyCaseSourceInput } from "./interviewKnowledge.js";
+
+export type {
+  InterviewKnowledgeDocDto,
+  InterviewCasePublicDto,
+  InterviewCaseEntryDto,
+  InterviewPrepClarificationDto,
+  InterviewPrepQuestionDto,
+  InterviewPrepTaskDto,
+  InterviewPrepPlanDto,
+  InterviewSimulatorSettingsDto,
+  InterviewSessionDto,
+  InterviewMessageDto,
+  InterviewSessionFeedbackDto
+} from "./interviewPrepDtos.js";
+
 export { abilityTestKinds } from "./abilityTests.js";
 export type { AbilityTestKind } from "./abilityTests.js";
+export {
+  createSeededRng,
+  generateSwitchChallenge,
+  isCorrectSwitchAnswer,
+  SWITCH_SYMBOLS
+} from "./switchChallenge.js";
+export type { SwitchChallengePuzzle, SwitchOperator, SwitchSymbol } from "./switchChallenge.js";
+export { generateScalesClx, isCorrectClxSelection } from "./scalesClx.js";
+export type { ClxCell, ClxColor, ClxGrid, ClxShape, ScalesClxPuzzle } from "./scalesClx.js";
+export { transitionPrepPlan, canStartSimulators } from "./prepPlanState.js";
+export type { PrepPlanEvent } from "./prepPlanState.js";
+export { transitionVideoSim, canStartRecording, videoSimStates } from "./videoSimState.js";
+export type { VideoSimState, VideoSimEvent } from "./videoSimState.js";
+export { rankCasesForCompany } from "./rankCases.js";
+export type { CaseRankProfile, RankableCase } from "./rankCases.js";
 import type { InternshipStatusOption } from "./internshipStatus.js";
 
 export interface InternshipLocationOption {

@@ -1,0 +1,65 @@
+export const videoSimStates = [
+  "setup",
+  "device_check",
+  "deck",
+  "thinking",
+  "recording",
+  "review",
+  "done"
+] as const;
+export type VideoSimState = (typeof videoSimStates)[number];
+
+export type VideoSimEvent =
+  | { type: "settings_confirmed" }
+  | { type: "devices_ready" }
+  | { type: "devices_failed" }
+  | { type: "card_selected" }
+  | { type: "think_elapsed" }
+  | { type: "stop_recording" }
+  | { type: "answer_elapsed" }
+  | { type: "retake" }
+  | { type: "next_card" }
+  | { type: "all_done" }
+  | { type: "leave" };
+
+/**
+ * Pure video application simulator state machine.
+ * Invariant: recording cannot start before think time has elapsed.
+ */
+export function transitionVideoSim(state: VideoSimState, event: VideoSimEvent): VideoSimState {
+  if (event.type === "leave") return "done";
+
+  switch (state) {
+    case "setup":
+      if (event.type === "settings_confirmed") return "device_check";
+      break;
+    case "device_check":
+      if (event.type === "devices_ready") return "deck";
+      if (event.type === "devices_failed") return "setup";
+      break;
+    case "deck":
+      if (event.type === "card_selected") return "thinking";
+      if (event.type === "all_done") return "done";
+      break;
+    case "thinking":
+      // Only think_elapsed may enter recording — never skip
+      if (event.type === "think_elapsed") return "recording";
+      break;
+    case "recording":
+      if (event.type === "stop_recording" || event.type === "answer_elapsed") return "review";
+      break;
+    case "review":
+      if (event.type === "retake") return "thinking";
+      if (event.type === "next_card") return "deck";
+      if (event.type === "all_done") return "done";
+      break;
+    case "done":
+      break;
+  }
+  return state;
+}
+
+/** Recording is only legal after thinking completed. */
+export function canStartRecording(state: VideoSimState): boolean {
+  return state === "recording";
+}

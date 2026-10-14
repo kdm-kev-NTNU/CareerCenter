@@ -11,6 +11,10 @@ import EducationBooksView from "../views/education/EducationBooksView.vue";
 import EducationCoursesView from "../views/education/EducationCoursesView.vue";
 import EducationOverviewView from "../views/education/EducationOverviewView.vue";
 import InterviewOverviewView from "../views/interview/InterviewOverviewView.vue";
+import InterviewBibelView from "../views/interview/InterviewBibelView.vue";
+import InterviewPlanNewView from "../views/interview/InterviewPlanNewView.vue";
+import InterviewPlanView from "../views/interview/InterviewPlanView.vue";
+import InterviewSimulatorView from "../views/interview/InterviewSimulatorView.vue";
 import EducationPlatformsView from "../views/education/EducationPlatformsView.vue";
 import LoginView from "../views/LoginView.vue";
 import ApplicationsView from "../views/ApplicationsView.vue";
@@ -121,6 +125,30 @@ const router = createRouter({
               name: "interview-overview",
               component: InterviewOverviewView,
               meta: { title: "Intervju" }
+            },
+            {
+              path: "bibel",
+              name: "interview-bibel",
+              component: InterviewBibelView,
+              meta: { title: "Intervjubibel" }
+            },
+            {
+              path: "plan/ny",
+              name: "interview-plan-new",
+              component: InterviewPlanNewView,
+              meta: { title: "Ny plan" }
+            },
+            {
+              path: "plan/:id",
+              name: "interview-plan",
+              component: InterviewPlanView,
+              meta: { title: "Forberedelsesplan" }
+            },
+            {
+              path: "simulator",
+              name: "interview-simulator",
+              component: InterviewSimulatorView,
+              meta: { title: "Simulator" }
             }
           ]
         }

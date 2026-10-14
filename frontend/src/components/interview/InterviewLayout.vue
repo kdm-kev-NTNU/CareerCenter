@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import { RouterLink, RouterView } from "vue-router";
 
-const tabs = [{ to: "/interview", label: "Oversikt", end: true }];
+const tabs = [
+  { to: "/interview", label: "Oversikt", end: true },
+  { to: "/interview/bibel", label: "Bibel" },
+  { to: "/interview/plan/ny", label: "Ny plan" },
+  { to: "/interview/simulator", label: "Simulator" }
+];
 </script>
 
 <template>
