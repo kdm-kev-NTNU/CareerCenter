@@ -19,14 +19,22 @@ import { bachelorStorageRoutes } from "./routes/bachelorStorage.js";
 import { educationRoutes } from "./routes/education.js";
 import { competitionsRoutes } from "./routes/competitions.js";
 import { thesisCompaniesRoutes } from "./routes/thesisCompanies.js";
+import { interviewPrepRoutes } from "./routes/interviewPrep.js";
+import type { LlmClient } from "./ai/llmClient.js";
+import { OpenAiLlmClient } from "./ai/openaiLlmClient.js";
+import type { InterviewPrepRepository } from "./interviewPrepRepository.js";
+import { InterviewPrepMemoryRepository } from "./interviewPrepMemoryRepository.js";
 const TEST_AUTH_USER_NAME = "__test__";
 const TEST_AUTH_USER_PIN = "0000";
+const INTERVIEW_MEDIA_PERMISSIONS_POLICY = "camera=(self), microphone=(self)";
 
 export interface ServerOptions {
   repository: Repository;
   authDisabled?: boolean;
   /** Raise in tests so lockout flows do not hit the auth rate limiter first. */
   authRateLimitMax?: number;
+  llmClient?: LlmClient;
+  interviewPrepRepository?: InterviewPrepRepository;
 }
 
 function isPublicApiPath(url: string): boolean {
@@ -42,12 +50,17 @@ export async function buildServer(options: ServerOptions) {
   const app = Fastify({ logger: env.NODE_ENV === "production" });
   const repository = options.repository;
   const authDisabled = options.authDisabled ?? env.AUTH_DISABLED;
+  const llmClient = options.llmClient ?? new OpenAiLlmClient(env);
+  const interviewPrepRepository = options.interviewPrepRepository ?? new InterviewPrepMemoryRepository();
 
   registerErrorHandler(app);
   await registerAuthPlugins(app);
 
   await app.register(helmet, {
     contentSecurityPolicy: env.NODE_ENV === "production" ? undefined : false
+  });
+  app.addHook("onRequest", async (_request, reply) => {
+    reply.header("Permissions-Policy", INTERVIEW_MEDIA_PERMISSIONS_POLICY);
   });
 
   await app.register(cors, {
@@ -97,6 +110,7 @@ export async function buildServer(options: ServerOptions) {
   app.register((instance) => thesisCompaniesRoutes(instance, repository));
   app.register((instance) => educationRoutes(instance, repository));
   app.register((instance) => bachelorStorageRoutes(instance, repository));
+  app.register((instance) => interviewPrepRoutes(instance, { llmClient, interviewPrepRepository }));
 
   return app;
 }

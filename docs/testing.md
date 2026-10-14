@@ -7,7 +7,7 @@ CareerCenter enforces **75% line/statement/function/branch coverage** before mer
 | Gate | Command | What it measures |
 |------|---------|------------------|
 | Unit | `npm run coverage:merge:unit` | Vitest coverage for `backend/src` and `frontend/src` TypeScript (Vue SFCs are covered in the full gate via Cypress) |
-| Full | `npm run coverage:merge:full` | Unit output merged with Cypress Istanbul data from `frontend/.nyc_output`. Lines/statements/functions use the merged map; **branches** use the unit gate map (Cypress dilutes branch % on TypeScript). |
+| Full | `npm run coverage:merge:full` | Unit output merged with Cypress Istanbul data from `frontend/.nyc_output`. Lines/statements/functions use the merged map; **branches** use the unit gate map (Cypress dilutes branch % on TypeScript). Function counters that stay at 0 after the function body executed are reconciled from statement hits before the threshold check. |
 
 Run unit tests with coverage first:
 

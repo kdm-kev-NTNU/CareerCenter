@@ -3,6 +3,7 @@ import path from "node:path";
 import coverage from "istanbul-lib-coverage";
 import report from "istanbul-lib-report";
 import reports from "istanbul-reports";
+import { reconcileCoverageMap } from "./reconcileFunctionCoverage.mjs";
 
 const { createCoverageMap } = coverage;
 const { createContext } = report;
@@ -182,6 +183,10 @@ const dirs = mode === "full" ? fullDirs : unitDirs;
 const label = mode === "full" ? "Full (unit + e2e)" : "Unit";
 const unitMap = loadCoverageMap(unitDirs, "unit");
 const map = loadCoverageMap(dirs, mode);
+const reconciled = reconcileCoverageMap(map);
+if (reconciled > 0) {
+  console.log(`Reconciled ${reconciled} function hits from executed statements`);
+}
 writeReports(map);
 printWorstFiles(map);
 enforceThresholds(map, label, mode, unitMap);

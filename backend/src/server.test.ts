@@ -73,6 +73,13 @@ describe("CareerCenter API", () => {
     await app.close();
   });
 
+  it("allows same-origin camera and microphone", async () => {
+    const app = await createTestApp();
+    const response = await app.inject({ method: "GET", url: "/" });
+    expect(response.headers["permissions-policy"]).toBe("camera=(self), microphone=(self)");
+    await app.close();
+  });
+
   it("returns me without a session cookie when auth is disabled", async () => {
     const app = await createTestApp();
 

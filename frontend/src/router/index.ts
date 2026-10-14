@@ -2,6 +2,7 @@ import { getActivePinia } from "pinia";
 import { createRouter, createWebHistory } from "vue-router";
 import { useAppStore } from "../stores/app.js";
 import EducationLayout from "../components/education/EducationLayout.vue";
+import InterviewLayout from "../components/interview/InterviewLayout.vue";
 import AppShell from "../components/layout/AppShell.vue";
 import DashboardView from "../views/DashboardView.vue";
 import EducationAiResourcesView from "../views/education/EducationAiResourcesView.vue";
@@ -9,6 +10,14 @@ import EducationBachelorView from "../views/education/EducationBachelorView.vue"
 import EducationBooksView from "../views/education/EducationBooksView.vue";
 import EducationCoursesView from "../views/education/EducationCoursesView.vue";
 import EducationOverviewView from "../views/education/EducationOverviewView.vue";
+import InterviewOverviewView from "../views/interview/InterviewOverviewView.vue";
+import InterviewBibelView from "../views/interview/InterviewBibelView.vue";
+import InterviewPlanNewView from "../views/interview/InterviewPlanNewView.vue";
+import InterviewPlanView from "../views/interview/InterviewPlanView.vue";
+import InterviewSimulatorView from "../views/interview/InterviewSimulatorView.vue";
+import InterviewVideoView from "../views/interview/InterviewVideoView.vue";
+import AbilityTestsView from "../views/interview/AbilityTestsView.vue";
+import InterviewStructureView from "../views/interview/InterviewStructureView.vue";
 import EducationPlatformsView from "../views/education/EducationPlatformsView.vue";
 import LoginView from "../views/LoginView.vue";
 import ApplicationsView from "../views/ApplicationsView.vue";
@@ -106,6 +115,61 @@ const router = createRouter({
               name: "education-ai-resources",
               component: EducationAiResourcesView,
               meta: { title: "AI-ressurser" }
+            }
+          ]
+        },
+        {
+          path: "interview",
+          component: InterviewLayout,
+          meta: { title: "Intervju" },
+          children: [
+            {
+              path: "",
+              name: "interview-overview",
+              component: InterviewOverviewView,
+              meta: { title: "Intervju" }
+            },
+            {
+              path: "bibel",
+              name: "interview-bibel",
+              component: InterviewBibelView,
+              meta: { title: "Intervjubibel" }
+            },
+            {
+              path: "plan/ny",
+              name: "interview-plan-new",
+              component: InterviewPlanNewView,
+              meta: { title: "Ny plan" }
+            },
+            {
+              path: "plan/:id",
+              name: "interview-plan",
+              component: InterviewPlanView,
+              meta: { title: "Forberedelsesplan" }
+            },
+            {
+              path: "simulator",
+              name: "interview-simulator",
+              component: InterviewSimulatorView,
+              meta: { title: "Simulator" }
+            },
+            {
+              path: "video",
+              name: "interview-video",
+              component: InterviewVideoView,
+              meta: { title: "Videosøknad" }
+            },
+            {
+              path: "evnetester",
+              name: "interview-ability",
+              component: AbilityTestsView,
+              meta: { title: "Evnetester" }
+            },
+            {
+              path: "struktur",
+              name: "interview-structure",
+              component: InterviewStructureView,
+              meta: { title: "Struktur" }
             }
           ]
         }

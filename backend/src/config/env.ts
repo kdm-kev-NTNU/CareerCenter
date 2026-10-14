@@ -11,7 +11,11 @@ const envSchema = z.object({
     .enum(["true", "false"])
     .optional()
     .default("false")
-    .transform((value) => value === "true")
+    .transform((value) => value === "true"),
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_TEXT_MODEL: z.string().default("gpt-4.1-mini"),
+  OPENAI_VOICE_MODEL: z.string().default("gpt-live-1"),
+  OPENAI_TRANSCRIBE_MODEL: z.string().default("whisper-1")
 });
 
 export type Env = z.infer<typeof envSchema>;

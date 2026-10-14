@@ -344,6 +344,90 @@ export {
   internshipTemplateStageIds
 } from "./internshipStatus.js";
 export type { InternshipStatusKind, InternshipStatusOption } from "./internshipStatus.js";
+
+export {
+  interviewModes,
+  knowledgeDocKinds,
+  starRubricCriteria,
+  starRubricCriterionLabels,
+  caseFrameworkSteps,
+  caseFrameworkStepLabels,
+  prepPlanStatuses,
+  prepFormats,
+  questionTargets,
+  questionCategories,
+  caseSourceKinds,
+  caseStyles
+} from "./interviewPrep.js";
+export type {
+  InterviewMode,
+  KnowledgeDocKind,
+  StarRubricCriterion,
+  CaseFrameworkStep,
+  PrepPlanStatus,
+  PrepFormat,
+  QuestionTarget,
+  QuestionCategory,
+  CaseSourceKind,
+  CaseStyle
+} from "./interviewPrep.js";
+
+export { inferKnowledgeKind, classifyCaseSource } from "./interviewKnowledge.js";
+export type { InferKnowledgeKindInput, ClassifyCaseSourceInput } from "./interviewKnowledge.js";
+
+export type {
+  InterviewKnowledgeDocDto,
+  InterviewCasePublicDto,
+  InterviewCaseEntryDto,
+  InterviewPrepClarificationDto,
+  InterviewPrepQuestionDto,
+  InterviewPrepTaskDto,
+  InterviewPrepPlanDto,
+  InterviewSimulatorSettingsDto,
+  InterviewSessionDto,
+  InterviewMessageDto,
+  InterviewSessionFeedbackDto
+} from "./interviewPrepDtos.js";
+
+export { abilityTestKinds } from "./abilityTests.js";
+export type { AbilityTestKind } from "./abilityTests.js";
+export {
+  createSeededRng,
+  generateSwitchChallenge,
+  isCorrectSwitchAnswer,
+  SWITCH_SYMBOLS
+} from "./switchChallenge.js";
+export type { SwitchChallengePuzzle, SwitchOperator, SwitchSymbol } from "./switchChallenge.js";
+export { generateScalesClx, isCorrectClxSelection } from "./scalesClx.js";
+export type { ClxCell, ClxColor, ClxGrid, ClxShape, ScalesClxPuzzle } from "./scalesClx.js";
+export { transitionPrepPlan, canStartSimulators } from "./prepPlanState.js";
+export type { PrepPlanEvent } from "./prepPlanState.js";
+export { transitionVideoSim, canStartRecording, videoSimStates } from "./videoSimState.js";
+export type { VideoSimState, VideoSimEvent } from "./videoSimState.js";
+export {
+  videoSimulatorSettingsSchema,
+  defaultVideoSimulatorSettings
+} from "./videoSimulatorSettings.js";
+export type { VideoSimulatorSettings } from "./videoSimulatorSettings.js";
+export {
+  weakestStoryQueue,
+  averageStarSum,
+  storyToAnkiRow,
+  storiesToAnkiCsv,
+  emptyStarScores
+} from "./storyBank.js";
+export type { StoryScoreSnapshot, StoryWithScores, AnkiStoryRow } from "./storyBank.js";
+export type {
+  InterviewStoryBankEntryDto,
+  InterviewStoryScoreDto,
+  InterviewCaseRepertoireLogDto,
+  InterviewAbilityTestAttemptDto,
+  InterviewVideoSettingsDto,
+  InterviewVideoRunDto,
+  VoiceSessionDto
+} from "./interviewMeccaDtos.js";
+export { rankCasesForCompany } from "./rankCases.js";
+export type { CaseRankProfile, RankableCase } from "./rankCases.js";
 import type { InternshipStatusOption } from "./internshipStatus.js";
 
 export interface InternshipLocationOption {
