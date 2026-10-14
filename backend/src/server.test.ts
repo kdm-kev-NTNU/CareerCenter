@@ -628,6 +628,45 @@ describe("CareerCenter API", () => {
     await app.close();
   });
 
+  it("returns 404 when bachelor file metadata exists but bytes are missing on disk", async () => {
+    const { deleteStoredFile } = await import("./bachelorFileStorage.js");
+    const repository = new MemoryRepository();
+    const app = await buildServer({ repository, authDisabled: true });
+    await app.ready();
+    const boundary = "----CareerCenterBoundary";
+
+    const upload = await app.inject({
+      method: "POST",
+      url: "/api/education/bachelor/files",
+      headers: {
+        "content-type": `multipart/form-data; boundary=${boundary}`
+      },
+      payload:
+        `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="file"; filename="gone.txt"\r\n` +
+        `Content-Type: text/plain\r\n\r\n` +
+        `will disappear\r\n` +
+        `--${boundary}--\r\n`
+    });
+    expect(upload.statusCode).toBe(201);
+    const fileId = upload.json().id as string;
+
+    const me = await app.inject({ method: "GET", url: "/api/auth/me" });
+    const userId = me.json().id as string;
+    const record = await repository.getBachelorFileWithStorage(userId, fileId);
+    expect(record).not.toBeNull();
+    await deleteStoredFile(record!.storagePath);
+
+    const download = await app.inject({
+      method: "GET",
+      url: `/api/education/bachelor/files/${fileId}/download`
+    });
+    expect(download.statusCode).toBe(404);
+    expect(download.json().message).toBe("Filen er ikke tilgjengelig.");
+
+    await app.close();
+  });
+
   it("rejects bachelor upload without multipart body", async () => {
     const app = await createTestApp();
     const response = await app.inject({

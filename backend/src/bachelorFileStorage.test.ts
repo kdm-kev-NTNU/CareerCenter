@@ -98,4 +98,12 @@ describe("bachelorFileStorage", () => {
     const entries = await readdir(dir);
     expect(entries).toEqual([]);
   });
+
+  it("reports whether a stored file exists on disk", async () => {
+    const { storedFileExists } = await import("./bachelorFileStorage.js");
+    const storagePath = buildStoragePath("user-1", null, "file-1", "notes.txt");
+    expect(await storedFileExists(storagePath)).toBe(false);
+    await writeUploadedFile(storagePath, Readable.from(["hello"]));
+    expect(await storedFileExists(storagePath)).toBe(true);
+  });
 });
