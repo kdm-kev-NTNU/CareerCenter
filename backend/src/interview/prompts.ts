@@ -1,4 +1,64 @@
 import type { CaseStyle, InterviewMode } from "@careercenter/shared";
+import {
+  candidateProfile,
+  deliveryRules,
+  formatRubricCriteriaForPrompt,
+  hardRules,
+  interviewerRoleRules,
+  modeSections,
+  pressurePoints,
+  scoreInterpretation,
+  sessionStartInstruction
+} from "./interviewerPlaybook.js";
+
+function section(title: string, lines: string[]): string {
+  return `${title}\n${lines.map((line) => `- ${line}`).join("\n")}`;
+}
+
+export interface PlanPracticeQuestion {
+  text: string;
+  category: string;
+  notes?: string;
+  included?: boolean;
+  sortOrder?: number;
+}
+
+export interface PlanPracticeInput {
+  companyName: string;
+  roleTitle?: string;
+  companyProfileSummary?: string;
+  questions: PlanPracticeQuestion[];
+}
+
+/**
+ * Builds a numbered practice script from included plan questions.
+ * Pure: does not mutate plan; callers snapshot this into the session prompt.
+ */
+export function buildPlanPracticeScript(plan: PlanPracticeInput): string {
+  const included = [...plan.questions]
+    .filter((q) => q.included !== false)
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+
+  if (included.length === 0) {
+    return "";
+  }
+
+  const lines = [
+    `Øvingsplan for ${plan.companyName}${plan.roleTitle ? ` — ${plan.roleTitle}` : ""}.`,
+    plan.companyProfileSummary ? `Bedriftsprofil: ${plan.companyProfileSummary}` : "",
+    "Still spørsmålene i denne rekkefølgen, ett om gangen. Gi korte, realistiske oppfølgingsspørsmål før du går videre.",
+    "Spørsmålsliste:"
+  ];
+
+  included.forEach((question, index) => {
+    const notes = question.notes?.trim()
+      ? ` (notater til intervjuer: ${question.notes.trim()})`
+      : "";
+    lines.push(`${index + 1}. [${question.category}] ${question.text}${notes}`);
+  });
+
+  return lines.filter(Boolean).join("\n");
+}
 
 export function buildSimulatorSystemPrompt(input: {
   mode: InterviewMode;
@@ -10,15 +70,35 @@ export function buildSimulatorSystemPrompt(input: {
   casePrompt?: string;
   interviewerInfo?: string;
   solution?: string;
+  planScript?: string;
 }): string {
   const essentials = input.essentialsSheet.trim();
-  const lines = [
-    "Du er en erfaren intervjucoach som simulerer et intervju.",
+  const isTutor = input.mode === "concept_tutor";
+
+  const lines: string[] = [
+    "Du er intervjuer og øvingspartner i en muntlig intervjuøkt. Les hele instruksen før du svarer. Ikke oppsummer den.",
     `Modus: ${input.mode}.`,
     input.companyName ? `Selskap: ${input.companyName}.` : "",
     `Tone: ${input.tone}. Språk: ${input.language}.`,
-    "Still ett spørsmål om gangen. Gi korte, realistiske oppfølgingsspørsmål."
+    sessionStartInstruction,
+    section("Kandidatprofil", candidateProfile),
+    section("Leveringsregler (noter, coach ikke underveis)", deliveryRules)
   ];
+
+  if (!isTutor) {
+    lines.push(section("Rolle", interviewerRoleRules));
+    lines.push(section("Presspunkter", pressurePoints));
+    lines.push(section("Regler du ikke bryter", hardRules));
+  }
+
+  lines.push(section("Modusspesifikke regler", modeSections[input.mode]));
+
+  if (input.planScript?.trim()) {
+    lines.push(
+      "Du følger en redigerbar øvingsplan. Bruk listen under som primær spørsmålskilde.",
+      input.planScript.trim()
+    );
+  }
 
   if (input.mode === "case_oral" && input.casePrompt) {
     lines.push(`Case-prompt til kandidaten:\n${input.casePrompt}`);
@@ -42,14 +122,19 @@ export function buildSimulatorSystemPrompt(input: {
   }
 
   if (essentials) lines.push(`Essensielt ark:\n${essentials}`);
-  return lines.filter(Boolean).join("\n");
+  return lines.filter(Boolean).join("\n\n");
 }
 
 export function buildFinishRubricPrompt(): string {
   return [
-    "Evaluer kandidatens siste svar med STAR-rubric.",
-    "Gi score 1–4 per kriterium, sum, og ett konkret forbedringspunkt."
-  ].join(" ");
+    "Evaluer kandidatens intervjusvar med STAR-rubric fra Intervjubibelen.",
+    "Score hvert kriterium fra 1 til 4. Returner scores, sum (totalt av 32), og ett konkret forbedringspunkt.",
+    "Bruk hele transkriptet. Relevans betyr at historien svarer på spørsmålet som ble stilt.",
+    "Kriterier:",
+    formatRubricCriteriaForPrompt(),
+    "Slik tolker du scoren:",
+    ...scoreInterpretation.map((line) => `- ${line}`)
+  ].join("\n");
 }
 
 export function buildResearchSystemPrompt(companyName: string, roleTitle: string): string {
@@ -79,4 +164,17 @@ export function buildCurationSystemPrompt(companyName: string, roleTitle: string
     "Lag generatedQuestions KUN for temaer banken ikke dekker, og oppgi gapReason for hvert.",
     "Ikke finn opp bank-id-er."
   ].join("\n");
+}
+
+/** Build a role-labeled transcript for rubric evaluation. */
+export function formatSessionTranscriptForRubric(
+  messages: Array<{ role: string; content: string }>
+): string {
+  if (messages.length === 0) return "Ingen meldinger i sesjonen.";
+  return messages
+    .map((message) => {
+      const label = message.role === "assistant" ? "Intervjuer" : message.role === "user" ? "Kandidat" : message.role;
+      return `${label}: ${message.content}`;
+    })
+    .join("\n\n");
 }

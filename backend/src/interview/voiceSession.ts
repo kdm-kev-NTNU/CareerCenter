@@ -16,7 +16,8 @@ const VOICE_TOOLS = [
 
 /** Ephemeral Realtime client secret. Never returns the API key. */
 export async function createVoiceSession(
-  env: Pick<Env, "OPENAI_API_KEY" | "OPENAI_VOICE_MODEL">
+  env: Pick<Env, "OPENAI_API_KEY" | "OPENAI_VOICE_MODEL">,
+  instructions?: string
 ): Promise<VoiceSessionPayload> {
   const expiresAt = new Date(Date.now() + 55_000).toISOString();
   const model = env.OPENAI_VOICE_MODEL;
@@ -32,24 +33,27 @@ export async function createVoiceSession(
   }
 
   try {
+    const sessionBody: Record<string, unknown> = {
+      type: "realtime",
+      model,
+      tools: VOICE_TOOLS.map((tool) => ({
+        type: "function",
+        name: tool.name,
+        description: tool.description,
+        parameters: { type: "object", properties: {} }
+      }))
+    };
+    if (instructions?.trim()) {
+      sessionBody.instructions = instructions.trim();
+    }
+
     const response = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${env.OPENAI_API_KEY}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({
-        session: {
-          type: "realtime",
-          model,
-          tools: VOICE_TOOLS.map((tool) => ({
-            type: "function",
-            name: tool.name,
-            description: tool.description,
-            parameters: { type: "object", properties: {} }
-          }))
-        }
-      })
+      body: JSON.stringify({ session: sessionBody })
     });
 
     if (!response.ok) {
@@ -78,7 +82,6 @@ export async function createVoiceSession(
       tools: VOICE_TOOLS
     };
   } catch {
-    // Fail closed to mock-less error path without leaking the key
     return {
       mock: false,
       model,

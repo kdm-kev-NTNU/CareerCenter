@@ -3,12 +3,14 @@ import type {
   InterviewCasePublicDto,
   InterviewMessageDto,
   InterviewMode,
+  InterviewPrepPlanDto,
   InterviewSessionDto,
   InterviewSimulatorSettingsDto,
   VoiceSessionDto
 } from "@careercenter/shared";
 import { interviewModes } from "@careercenter/shared";
-import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { useRoute } from "vue-router";
 import { interviewPrepApi } from "../../api/interviewPrep.js";
 import MediaDeviceCheck from "../../components/interview/MediaDeviceCheck.vue";
 import { useMediaStream } from "../../composables/useMediaStream.js";
@@ -18,6 +20,7 @@ import ChatMessage from "../../components/ui/ChatMessage.vue";
 import PageHeader from "../../components/ui/PageHeader.vue";
 import StateView from "../../components/ui/StateView.vue";
 
+const route = useRoute();
 const channel = ref<"text" | "voice">("text");
 const mode = ref<InterviewMode>("behavioral_mock");
 const settings = ref<InterviewSimulatorSettingsDto | null>(null);
@@ -30,10 +33,21 @@ const voiceReady = ref(false);
 const voiceDevices = ref<{ audioDeviceId?: string; videoDeviceId?: string }>({});
 const cases = ref<InterviewCasePublicDto[]>([]);
 const caseEntryId = ref("");
+const prepPlan = ref<InterviewPrepPlanDto | null>(null);
 const { stream: voiceStream, acquire: acquireVoiceStream, release: releaseVoiceStream } = useMediaStream();
 const loading = ref(false);
 const error = ref<string | null>(null);
 let stopRealtime: (() => void) | null = null;
+
+const routePlanId = computed(() => {
+  const value = route.query.planId;
+  return typeof value === "string" && value ? value : undefined;
+});
+const planLabel = computed(() => {
+  if (!prepPlan.value) return null;
+  const count = prepPlan.value.questions.filter((q) => q.included).length;
+  return `Plan: ${prepPlan.value.companyName} (${count} spørsmål)`;
+});
 
 const voiceDeviceCheckActive = () =>
   channel.value === "voice" && Boolean(session.value) && !session.value?.finishedAt;
@@ -61,7 +75,25 @@ async function loadSettings() {
   }
 }
 
-onMounted(() => void loadSettings());
+async function loadPlan() {
+  if (!routePlanId.value) {
+    prepPlan.value = null;
+    return;
+  }
+  try {
+    const detail = await interviewPrepApi.plan(routePlanId.value);
+    prepPlan.value = detail.plan;
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : "Kunne ikke laste plan.";
+    prepPlan.value = null;
+  }
+}
+
+onMounted(() => {
+  void loadSettings();
+  void loadPlan();
+});
+watch(routePlanId, () => void loadPlan());
 
 onBeforeUnmount(() => {
   stopRealtime?.();
@@ -85,12 +117,15 @@ async function startSession() {
     await saveSettings();
     session.value = await interviewPrepApi.createSession({
       mode: mode.value,
-      title: `${mode.value} sim`,
+      title: prepPlan.value
+        ? `Øving: ${prepPlan.value.companyName}`
+        : `${mode.value} sim`,
+      prepPlanId: routePlanId.value,
       caseEntryId: mode.value === "case_oral" && caseEntryId.value ? caseEntryId.value : undefined
     });
     messages.value = (await interviewPrepApi.sessionMessages(session.value.id)).filter((m) => m.role !== "system");
     if (channel.value === "voice") {
-      voiceSession.value = await interviewPrepApi.createVoiceSession();
+      voiceSession.value = await interviewPrepApi.createVoiceSession(session.value.id);
     }
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Kunne ikke starte sesjon.";
@@ -184,6 +219,7 @@ function printEssentials() {
 <template>
   <section class="stack">
     <PageHeader title="Intervjussimulator" lead="Øv PEI og case med tekst eller stemme." />
+    <p v-if="planLabel" class="field-hint" data-test="plan-practice-label">{{ planLabel }}</p>
 
     <article class="panel stack no-print">
       <div class="toolbar">
