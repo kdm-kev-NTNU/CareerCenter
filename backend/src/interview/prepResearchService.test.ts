@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { FakeLlmClient } from "../ai/fakeLlmClient.js";
 import { InterviewPrepMemoryRepository } from "../interviewPrepMemoryRepository.js";
+import { JobCancellationRegistry } from "./jobCancellationRegistry.js";
 import { PrepResearchService } from "./prepResearchService.js";
 import { sha256Content } from "./contentHash.js";
+
+function service(llmClient: FakeLlmClient, repository: InterviewPrepMemoryRepository) {
+  return new PrepResearchService(llmClient, repository, new JobCancellationRegistry());
+}
 
 describe("PrepResearchService", () => {
   it("runs research and bank-driven curation flow", async () => {
@@ -47,7 +52,7 @@ describe("PrepResearchService", () => {
         }
       ]
     });
-    const service = new PrepResearchService(llmClient, repository);
+    const research = service(llmClient, repository);
     const plan = await repository.createPrepPlan("u1", {
       companyName: "DNB",
       roleTitle: "Consultant",
@@ -61,7 +66,7 @@ describe("PrepResearchService", () => {
       return original(userId, id, input);
     };
 
-    await service.startResearch("u1", plan.id);
+    await research.startResearch("u1", plan.id);
     let updated = await repository.getPrepPlan("u1", plan.id);
     expect(updated?.status).toBe("awaiting_answers");
     expect(updated?.pipelineStep).toBe("awaiting_answers");
@@ -75,7 +80,7 @@ describe("PrepResearchService", () => {
     expect(updated?.clarifications).toHaveLength(1);
     expect(updated?.companyProfileJson).toContain("banking");
 
-    await service.submitClarificationsAndCurate("u1", plan.id, [
+    await research.submitClarificationsAndCurate("u1", plan.id, [
       { id: updated!.clarifications[0]!.id, answer: "Corporate banking" }
     ]);
 
@@ -124,14 +129,14 @@ describe("PrepResearchService", () => {
         }
       ]
     });
-    const service = new PrepResearchService(llmClient, repository);
+    const research = service(llmClient, repository);
     const plan = await repository.createPrepPlan("u1", {
       companyName: "X",
       roleTitle: "Y",
       format: "interview"
     });
-    await service.startResearch("u1", plan.id);
-    await service.submitClarificationsAndCurate("u1", plan.id, [], true);
+    await research.startResearch("u1", plan.id);
+    await research.submitClarificationsAndCurate("u1", plan.id, [], true);
     const updated = await repository.getPrepPlan("u1", plan.id);
     expect(updated?.status).toBe("ready");
   });

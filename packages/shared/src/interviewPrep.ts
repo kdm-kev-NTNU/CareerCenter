@@ -31,11 +31,11 @@ export const starRubricCriteria = [
 export type StarRubricCriterion = (typeof starRubricCriteria)[number];
 
 export const starRubricCriterionLabels: Record<StarRubricCriterion, string> = {
-  openingAndStructure: "Innledning og struktur",
+  openingAndStructure: "Åpning og struktur",
   situationAndTask: "Situasjon og oppgave",
   action: "Handling",
   result: "Resultat",
-  learning: "Læring",
+  learning: "Lærdom",
   ownership: "Eierskap",
   tempoAndLength: "Tempo og lengde",
   relevance: "Relevans"
@@ -59,7 +59,8 @@ export const prepPlanStatuses = [
   "awaiting_answers",
   "curating",
   "ready",
-  "failed"
+  "failed",
+  "cancelled"
 ] as const;
 export type PrepPlanStatus = (typeof prepPlanStatuses)[number];
 
@@ -78,11 +79,14 @@ export type CaseSourceKind = (typeof caseSourceKinds)[number];
 export const caseStyles = ["interviewer_led", "candidate_led"] as const;
 export type CaseStyle = (typeof caseStyles)[number];
 
-export const prepQuestionSources = ["bank", "generated"] as const;
+export const prepQuestionSources = ["bank", "generated", "edited", "custom"] as const;
 export type PrepQuestionSource = (typeof prepQuestionSources)[number];
 
 export const caseApprovalStatuses = ["pending", "approved", "rejected"] as const;
 export type CaseApprovalStatus = (typeof caseApprovalStatuses)[number];
 
-export const importJobStatuses = ["queued", "running", "review", "done", "failed"] as const;
+export const importJobStatuses = ["queued", "running", "review", "done", "failed", "cancelled"] as const;
 export type ImportJobStatus = (typeof importJobStatuses)[number];
+
+export const importJobKinds = ["cases", "questions"] as const;
+export type ImportJobKind = (typeof importJobKinds)[number];

@@ -37,6 +37,9 @@ export class FakeLlmClient implements LlmClient {
   }
 
   async complete(options: LlmCompleteOptions): Promise<string> {
+    if (options.signal?.aborted) {
+      throw Object.assign(new Error("Avbrutt"), { name: "AbortError" });
+    }
     this.completeCalls.push(options);
     return this.completeResult;
   }
@@ -45,12 +48,18 @@ export class FakeLlmClient implements LlmClient {
     options: LlmCompleteOptions,
     schema: T
   ): Promise<z.infer<T>> {
+    if (options.signal?.aborted) {
+      throw Object.assign(new Error("Avbrutt"), { name: "AbortError" });
+    }
     this.structuredCalls.push({ options, schema });
     const next = this.structuredResults.shift() ?? this.structuredResult;
     return schema.parse(next);
   }
 
-  async webSearch(query: string): Promise<string> {
+  async webSearch(query: string, signal?: AbortSignal): Promise<string> {
+    if (signal?.aborted) {
+      throw Object.assign(new Error("Avbrutt"), { name: "AbortError" });
+    }
     this.webSearchCalls.push(query);
     return this.webSearchResult;
   }

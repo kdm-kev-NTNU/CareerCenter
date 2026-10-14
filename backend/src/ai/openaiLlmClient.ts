@@ -34,12 +34,17 @@ export class OpenAiLlmClient implements LlmClient {
 
   async complete(options: LlmCompleteOptions): Promise<string> {
     const client = this.requireClient();
-    const response = await client.responses.create({
-      model: this.textModel,
-      input: toResponsesInput(options),
-      reasoning: { effort: this.reasoningEffort },
-      ...(this.fastMode ? { service_tier: "priority" as const } : {})
-    });
+    throwIfAborted(options.signal);
+    const response = await client.responses.create(
+      {
+        model: this.textModel,
+        input: toResponsesInput(options),
+        reasoning: { effort: this.reasoningEffort },
+        ...(this.fastMode ? { service_tier: "priority" as const } : {})
+      },
+      requestOptions(options.signal)
+    );
+    throwIfAborted(options.signal);
     const text = response.output_text?.trim();
     if (!text) throw new Error("OpenAI returnerte tomt svar.");
     return text;
@@ -50,13 +55,18 @@ export class OpenAiLlmClient implements LlmClient {
     schema: T
   ): Promise<z.infer<T>> {
     const client = this.requireClient();
-    const response = await client.responses.parse({
-      model: this.textModel,
-      input: toResponsesInput(options),
-      reasoning: { effort: this.reasoningEffort },
-      text: { format: zodTextFormat(schema, "structured_response") },
-      ...(this.fastMode ? { service_tier: "priority" as const } : {})
-    });
+    throwIfAborted(options.signal);
+    const response = await client.responses.parse(
+      {
+        model: this.textModel,
+        input: toResponsesInput(options),
+        reasoning: { effort: this.reasoningEffort },
+        text: { format: zodTextFormat(schema, "structured_response") },
+        ...(this.fastMode ? { service_tier: "priority" as const } : {})
+      },
+      requestOptions(options.signal)
+    );
+    throwIfAborted(options.signal);
     const parsed = response.output_parsed;
     if (parsed === undefined || parsed === null) {
       throw new Error("OpenAI returnerte ugyldig strukturert svar.");
@@ -64,15 +74,20 @@ export class OpenAiLlmClient implements LlmClient {
     return parsed;
   }
 
-  async webSearch(query: string): Promise<string> {
+  async webSearch(query: string, signal?: AbortSignal): Promise<string> {
     const client = this.requireClient();
-    const response = await client.responses.create({
-      model: this.textModel,
-      tools: [{ type: "web_search" }],
-      input: query,
-      reasoning: { effort: this.reasoningEffort },
-      ...(this.fastMode ? { service_tier: "priority" as const } : {})
-    });
+    throwIfAborted(signal);
+    const response = await client.responses.create(
+      {
+        model: this.textModel,
+        tools: [{ type: "web_search" }],
+        input: query,
+        reasoning: { effort: this.reasoningEffort },
+        ...(this.fastMode ? { service_tier: "priority" as const } : {})
+      },
+      requestOptions(signal)
+    );
+    throwIfAborted(signal);
     const text = response.output_text?.trim();
     if (!text) throw new Error("OpenAI web search returnerte tomt svar.");
     return text;
@@ -103,4 +118,16 @@ export class OpenAiLlmClient implements LlmClient {
 
 function toResponsesInput(options: LlmCompleteOptions): string {
   return options.messages.map((m) => `${m.role.toUpperCase()}:\n${m.content}`).join("\n\n");
+}
+
+function requestOptions(signal?: AbortSignal): { signal?: AbortSignal } | undefined {
+  return signal ? { signal } : undefined;
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    const error = new Error("Avbrutt");
+    error.name = "AbortError";
+    throw error;
+  }
 }

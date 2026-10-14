@@ -9,7 +9,8 @@ export type PrepPlanEvent =
   | { type: "more_clarifications" }
   | { type: "curation_done" }
   | { type: "curation_failed"; reason?: string }
-  | { type: "fail"; reason?: string };
+  | { type: "fail"; reason?: string }
+  | { type: "cancel" };
 
 export const prepPlanPipelineSteps = [
   "created",
@@ -54,7 +55,9 @@ export function prepPlanStepVisual(
 
 /** True while the server is still producing the next persisted plan state. */
 export function isPrepPlanPipelineActive(step: PrepPlanPipelineStep, status: PrepPlanStatus): boolean {
-  if (status === "failed" || status === "ready" || status === "draft") return false;
+  if (status === "failed" || status === "ready" || status === "draft" || status === "cancelled") {
+    return false;
+  }
   if (status === "researching" || status === "curating") return true;
   return (
     step === "searching" ||
@@ -64,6 +67,11 @@ export function isPrepPlanPipelineActive(step: PrepPlanPipelineStep, status: Pre
     step === "curating_questions" ||
     step === "curating_cases"
   );
+}
+
+/** Statuses where an in-flight research/curation pipeline can be cancelled. */
+export function canCancelPrepPlan(status: PrepPlanStatus): boolean {
+  return status === "researching" || status === "curating";
 }
 
 export const MAX_CLARIFICATION_ROUNDS = 2;
@@ -81,6 +89,11 @@ export function transitionPrepPlan(status: PrepPlanStatus, event: PrepPlanEvent)
   if (event.type === "fail" || event.type === "research_failed" || event.type === "curation_failed") {
     if (status === "ready") return status;
     return "failed";
+  }
+
+  if (event.type === "cancel") {
+    if (canCancelPrepPlan(status)) return "cancelled";
+    return status;
   }
 
   switch (status) {
@@ -102,6 +115,7 @@ export function transitionPrepPlan(status: PrepPlanStatus, event: PrepPlanEvent)
     case "ready":
       break;
     case "failed":
+    case "cancelled":
       if (event.type === "start_research") return "researching";
       break;
   }

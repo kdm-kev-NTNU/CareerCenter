@@ -14,7 +14,8 @@ export const prepPlanStatusTone = {
   awaiting_answers: { label: "Venter på svar", variant: "muted" },
   curating: { label: "Kurerer", variant: "blue" },
   ready: { label: "Klar", variant: "accent" },
-  failed: { label: "Feilet", variant: "danger" }
+  failed: { label: "Feilet", variant: "danger" },
+  cancelled: { label: "Stoppet", variant: "muted" }
 } as const satisfies Record<PrepPlanStatus, StatusTone>;
 
 void (prepPlanStatuses satisfies readonly (keyof typeof prepPlanStatusTone)[]);
