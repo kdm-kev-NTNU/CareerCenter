@@ -3,6 +3,11 @@ import type { InterviewPrepPlanDto, RankableCase } from "@careercenter/shared";
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { interviewPrepApi } from "../../api/interviewPrep.js";
+import StatusBadge from "../../components/listing/StatusBadge.vue";
+import { toneForPrepPlanStatus } from "../../components/interview/statusTone.js";
+import AppButton from "../../components/ui/AppButton.vue";
+import PageHeader from "../../components/ui/PageHeader.vue";
+import StateView from "../../components/ui/StateView.vue";
 
 const route = useRoute();
 const plan = ref<InterviewPrepPlanDto | null>(null);
@@ -13,6 +18,7 @@ const error = ref<string | null>(null);
 const answers = ref<Record<string, string>>({});
 
 const planId = computed(() => route.params.id as string);
+const statusTone = computed(() => (plan.value ? toneForPrepPlanStatus(plan.value.status) : null));
 
 async function load() {
   loading.value = true;
@@ -52,13 +58,23 @@ async function submitAnswers() {
 
 <template>
   <section class="stack">
-    <p v-if="loading">Laster plan …</p>
-    <p v-else-if="error">{{ error }}</p>
+    <StateView v-if="loading" state="loading" message="Laster plan …" />
+    <StateView v-else-if="error" state="error" :message="error" />
     <template v-else-if="plan">
-      <article class="panel strong">
-        <h2>{{ plan.companyName }}</h2>
-        <p>{{ plan.roleTitle || "Rolle ikke spesifisert" }} · Status: {{ plan.status }}</p>
-      </article>
+      <PageHeader
+        :title="plan.companyName"
+        :lead="plan.roleTitle || 'Rolle ikke spesifisert'"
+      >
+        <template #meta>
+          <StatusBadge v-if="statusTone" :label="statusTone.label" :variant="statusTone.variant" />
+        </template>
+      </PageHeader>
+
+      <StateView
+        v-if="plan.status === 'researching' || plan.status === 'curating'"
+        state="loading"
+        :message="plan.status === 'researching' ? 'Researcher bedrift og rolle …' : 'Kurerer plan …'"
+      />
 
       <article v-if="plan.researchNotes" class="panel">
         <h3>Research</h3>
@@ -71,9 +87,9 @@ async function submitAnswers() {
           {{ item.question }}
           <textarea v-model="answers[item.id]" rows="2" />
         </label>
-        <button type="button" :disabled="saving" @click="submitAnswers">
+        <AppButton :loading="saving" @click="submitAnswers">
           {{ saving ? "Kurerer …" : "Send svar og lag plan" }}
-        </button>
+        </AppButton>
       </article>
 
       <article v-if="plan.questions.length" class="panel stack">

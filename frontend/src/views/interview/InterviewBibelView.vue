@@ -2,6 +2,9 @@
 import type { InterviewCasePublicDto, InterviewKnowledgeDocDto } from "@careercenter/shared";
 import { onMounted, ref } from "vue";
 import { interviewPrepApi } from "../../api/interviewPrep.js";
+import AppButton from "../../components/ui/AppButton.vue";
+import PageHeader from "../../components/ui/PageHeader.vue";
+import StateView from "../../components/ui/StateView.vue";
 
 const loading = ref(true);
 const error = ref<string | null>(null);
@@ -58,15 +61,18 @@ async function removeDoc(id: string) {
 
 <template>
   <section class="stack">
-    <article class="panel strong">
-      <h2>Intervjubibel</h2>
-      <p>Kunnskapsbase og case – løsning og intervjuer-notater skjules i lister.</p>
-    </article>
+    <PageHeader
+      title="Intervjubibel"
+      lead="Importer PDF/tekst og bygg casebiblioteket."
+    />
 
     <article class="panel stack">
       <h3>Importer dokument</h3>
-      <p v-if="uploading">Importerer …</p>
-      <input type="file" accept=".txt,.md,.docx,.pdf,.zip" @change="onFileInput" />
+      <StateView v-if="uploading" state="loading" message="Importerer …" />
+      <label class="file-picker">
+        Velg fil …
+        <input type="file" accept=".txt,.md,.docx,.pdf,.zip" @change="onFileInput" />
+      </label>
     </article>
 
     <article class="panel stack">
@@ -74,26 +80,31 @@ async function removeDoc(id: string) {
       <form class="stack" @submit.prevent="createDoc">
         <input v-model="newTitle" placeholder="Tittel" required />
         <textarea v-model="newContent" rows="4" placeholder="Innhold" />
-        <button type="submit">Lagre</button>
+        <AppButton type="submit">Lagre</AppButton>
       </form>
     </article>
 
-    <p v-if="error">{{ error }}</p>
-    <p v-if="loading">Laster …</p>
+    <StateView v-if="error" state="error" :message="error" />
+    <StateView v-if="loading" state="loading" />
 
     <article v-if="!loading" class="panel stack">
       <h3>Dokumenter ({{ docs.length }})</h3>
-      <ul class="plain-list">
-        <li v-for="doc in docs" :key="doc.id">
-          <strong>{{ doc.title }}</strong> — {{ doc.kind }}
-          <button type="button" class="ghost mini-btn" @click="removeDoc(doc.id)">Slett</button>
+      <StateView v-if="!docs.length" state="empty" message="Ingen dokumenter ennå. Importer den første filen." />
+      <ul v-else class="plain-list">
+        <li v-for="doc in docs" :key="doc.id" class="panel-heading-row">
+          <div>
+            <strong>{{ doc.title }}</strong>
+            <span class="field-hint">{{ doc.kind }}</span>
+          </div>
+          <AppButton variant="ghost" class="mini-btn" @click="removeDoc(doc.id)">Slett</AppButton>
         </li>
       </ul>
     </article>
 
     <article v-if="!loading" class="panel stack">
       <h3>Case (offentlig prompt)</h3>
-      <ul class="plain-list">
+      <StateView v-if="!cases.length" state="empty" message="Ingen caser ennå." />
+      <ul v-else class="plain-list">
         <li v-for="item in cases" :key="item.id">
           <strong>{{ item.title }}</strong>
           <p>{{ item.prompt.slice(0, 240) }}<span v-if="item.prompt.length > 240"> …</span></p>

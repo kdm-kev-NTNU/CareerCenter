@@ -2,6 +2,8 @@
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { interviewPrepApi } from "../../api/interviewPrep.js";
+import AppButton from "../../components/ui/AppButton.vue";
+import PageHeader from "../../components/ui/PageHeader.vue";
 
 const router = useRouter();
 const companyName = ref("");
@@ -31,21 +33,23 @@ async function submit() {
 
 <template>
   <section class="stack">
-    <article class="panel strong">
-      <h2>Ny forberedelsesplan</h2>
-      <p>Research, avklaringsspørsmål og kuratert plan for selskapet.</p>
-    </article>
+    <PageHeader
+      title="Ny prep-plan"
+      lead="Oppgi bedrift og stilling. Research starter automatisk."
+    />
     <form class="panel stack" @submit.prevent="submit">
       <label>
-        Selskap
+        Bedrift
         <input v-model="companyName" required />
       </label>
       <label>
         Rolle
         <input v-model="roleTitle" />
       </label>
-      <p v-if="error">{{ error }}</p>
-      <button type="submit" :disabled="loading">{{ loading ? "Starter …" : "Opprett og start research" }}</button>
+      <p v-if="error" class="error-text">{{ error }}</p>
+      <AppButton type="submit" :loading="loading">
+        {{ loading ? "Starter …" : "Opprett og start research" }}
+      </AppButton>
     </form>
   </section>
 </template>
