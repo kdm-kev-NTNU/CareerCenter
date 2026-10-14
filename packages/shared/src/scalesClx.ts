@@ -20,10 +20,21 @@ export interface ScalesClxPuzzle {
 }
 
 const SHAPES: ClxShape[] = ["circle", "square", "triangle", "plus"];
-const COLORS: ClxColor[] = ["yellow", "red", "green", "blue"];
+
+/** Each shape has one fixed color, as in the Aon practice material; the rule is about shapes only. */
+export const CLX_SHAPE_COLOR: Record<ClxShape, ClxColor> = {
+  circle: "yellow",
+  square: "red",
+  triangle: "green",
+  plus: "blue"
+};
 
 function pick<T>(arr: T[], rng: () => number): T {
   return arr[Math.floor(rng() * arr.length)]!;
+}
+
+function cell(shape: ClxShape): ClxCell {
+  return { shape, color: CLX_SHAPE_COLOR[shape] };
 }
 
 /** Rule: exactly 7 of one shape, plus two other distinct single shapes. */
@@ -44,10 +55,10 @@ function makeSevenPlusTwo(rng: () => number): ClxGrid {
   const b = others[1]!;
   const cells: ClxGrid = [];
   for (let i = 0; i < 7; i++) {
-    cells.push({ shape: majority, color: pick(COLORS, rng) });
+    cells.push(cell(majority));
   }
-  cells.push({ shape: a, color: pick(COLORS, rng) });
-  cells.push({ shape: b, color: pick(COLORS, rng) });
+  cells.push(cell(a));
+  cells.push(cell(b));
   shuffle(cells, rng);
   return cells;
 }
@@ -56,13 +67,13 @@ function makeNotSevenPlusTwo(rng: () => number): ClxGrid {
   // 5+2+2 or 6+1+1+1 etc.
   const majority = pick(SHAPES, rng);
   const cells: ClxGrid = [];
-  for (let i = 0; i < 5; i++) cells.push({ shape: majority, color: pick(COLORS, rng) });
+  for (let i = 0; i < 5; i++) cells.push(cell(majority));
   const rest = SHAPES.filter((s) => s !== majority);
   shuffle(rest, rng);
-  cells.push({ shape: rest[0]!, color: pick(COLORS, rng) });
-  cells.push({ shape: rest[0]!, color: pick(COLORS, rng) });
-  cells.push({ shape: rest[1]!, color: pick(COLORS, rng) });
-  cells.push({ shape: rest[1]!, color: pick(COLORS, rng) });
+  cells.push(cell(rest[0]!));
+  cells.push(cell(rest[0]!));
+  cells.push(cell(rest[1]!));
+  cells.push(cell(rest[1]!));
   shuffle(cells, rng);
   return cells;
 }

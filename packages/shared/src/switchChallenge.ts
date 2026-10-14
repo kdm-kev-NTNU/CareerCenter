@@ -9,9 +9,9 @@ export function createSeededRng(seed: number): () => number {
   };
 }
 
-export type SwitchSymbol = "square" | "triangle" | "cross" | "circle";
+export type SwitchSymbol = "triangle" | "circle" | "cross" | "star";
 
-export const SWITCH_SYMBOLS: SwitchSymbol[] = ["square", "triangle", "cross", "circle"];
+export const SWITCH_SYMBOLS: SwitchSymbol[] = ["triangle", "circle", "cross", "star"];
 
 /** Operator codes like "3241" mean: output[i] = input[code[i]-1]. */
 export type SwitchOperator = string;
