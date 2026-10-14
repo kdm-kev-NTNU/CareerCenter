@@ -30,7 +30,7 @@ const sections = [
     </RouterLink>
     <article class="panel wide">
       <h2>Om Utdanning</h2>
-      <p>Logg det du lærer på egenhånd over tid — adskilt fra Master Plan som planlegger NTNU semester 7–10.</p>
+      <p>Logg det du lærer på egenhånd over tid.</p>
     </article>
   </section>
 </template>

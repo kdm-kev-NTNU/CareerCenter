@@ -11,11 +11,9 @@ import EducationCoursesView from "../views/education/EducationCoursesView.vue";
 import EducationOverviewView from "../views/education/EducationOverviewView.vue";
 import EducationPlatformsView from "../views/education/EducationPlatformsView.vue";
 import LoginView from "../views/LoginView.vue";
-import MasterPlanView from "../views/MasterPlanView.vue";
+import ApplicationsView from "../views/ApplicationsView.vue";
 import CompetitionsView from "../views/CompetitionsView.vue";
 import ThesisCompaniesView from "../views/ThesisCompaniesView.vue";
-import GraduateProgramsView from "../views/GraduateProgramsView.vue";
-import InternshipsView from "../views/InternshipsView.vue";
 import { useAuthStore } from "../stores/auth.js";
 
 const router = createRouter({
@@ -40,21 +38,21 @@ const router = createRouter({
         },
         {
           path: "master",
-          name: "master",
-          component: MasterPlanView,
-          meta: { title: "Master Plan" }
+          redirect: { name: "dashboard" }
+        },
+        {
+          path: "soknader",
+          name: "applications",
+          component: ApplicationsView,
+          meta: { title: "Søknader" }
         },
         {
           path: "internships",
-          name: "internships",
-          component: InternshipsView,
-          meta: { title: "Internship" }
+          redirect: { name: "applications", query: { type: "internship" } }
         },
         {
           path: "graduate",
-          name: "graduate",
-          component: GraduateProgramsView,
-          meta: { title: "Graduate-programmer" }
+          redirect: { name: "applications", query: { type: "graduate" } }
         },
         {
           path: "master-thesis",

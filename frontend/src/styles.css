@@ -76,6 +76,12 @@ button:disabled,
 }
 .logout-btn { margin-top: auto; width: 100%; }
 .segmented { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 4px; background: #eef2f7; border-radius: 8px; }
+.kind-filter { grid-template-columns: repeat(3, max-content); width: max-content; }
+.kind-filter button { width: auto; padding: 8px 12px; }
+.catalog-kind-switch { grid-column: 1 / -1; }
+.catalog-kind-switch .kind-filter { grid-template-columns: repeat(2, max-content); }
+.chooser-actions { display: flex; gap: 8px; margin-top: 12px; }
+.application-kind { display: inline-flex; margin-top: 6px; }
 .segmented button, .toolbar button {
   border: 0;
   background: transparent;

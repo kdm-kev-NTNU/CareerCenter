@@ -27,13 +27,13 @@ function formatUpcomingDate(value?: string): string {
       <p>fag er lagt inn for semester 7-10.</p>
     </article>
     <article class="panel strong">
-      <h2>Muligheter</h2>
+      <h2>Søknader</h2>
       <strong>{{ internshipsStore.internships.length + graduateProgramsStore.graduatePrograms.length }}</strong>
-      <p>internship- og graduate-programmer er registrert.</p>
+      <p>internship- og graduate-søknader er registrert.</p>
     </article>
     <article class="panel strong">
       <h2>Neste steg</h2>
-      <p>Legg til internship eller graduate-programmer og følg opp søknadene dine.</p>
+      <p>Legg til søknader og følg dem opp.</p>
     </article>
     <article class="panel wide">
       <div class="panel-heading-row">
