@@ -113,8 +113,11 @@ async function runSearch() {
   }
 }
 
+const reindexMessage = ref<string | null>(null);
+
 async function reindex() {
-  await interviewPrepApi.reindexQuestions();
+  const result = await interviewPrepApi.reindexQuestions();
+  reindexMessage.value = result.message;
   await runSearch();
 }
 
@@ -143,6 +146,16 @@ async function retryJob(id: string) {
     error.value = err instanceof Error ? err.message : "Kunne ikke fortsette importen.";
   }
 }
+
+async function stopJob(id: string) {
+  error.value = null;
+  try {
+    await interviewPrepApi.cancelImportJob(id);
+    await refresh();
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : "Kunne ikke stoppe importen.";
+  }
+}
 </script>
 
 <template>
@@ -162,6 +175,7 @@ async function retryJob(id: string) {
     <template v-if="tab === 'bibliotek'">
       <article class="panel stack">
         <h3>Importer dokument</h3>
+        <p class="field-hint">Maks 50 MB. PDF, DOCX, TXT, MD eller ZIP.</p>
         <StateView v-if="uploading" state="loading" message="Importerer …" />
         <label class="file-picker">
           Velg fil …
@@ -185,7 +199,22 @@ async function retryJob(id: string) {
             <strong>{{ sourceLabel(job.knowledgeDocId) || "Dokument" }}</strong>
             <span class="field-hint">{{ job.status }} · {{ job.progress }}%</span>
             <p>{{ job.message }}</p>
-            <AppButton v-if="job.status === 'failed'" variant="secondary" @click="retryJob(job.id)">Fortsett</AppButton>
+            <div class="form-grid">
+              <AppButton
+                v-if="job.status === 'queued' || job.status === 'running'"
+                variant="secondary"
+                @click="stopJob(job.id)"
+              >
+                Stopp
+              </AppButton>
+              <AppButton
+                v-if="job.status === 'failed' || job.status === 'cancelled'"
+                variant="secondary"
+                @click="retryJob(job.id)"
+              >
+                Fortsett
+              </AppButton>
+            </div>
           </li>
         </ul>
       </article>
@@ -239,6 +268,7 @@ async function retryJob(id: string) {
           <AppButton :loading="searching" @click="runSearch">Søk</AppButton>
           <AppButton variant="secondary" @click="reindex">Reindekser spørsmål</AppButton>
         </div>
+        <p v-if="reindexMessage" class="field-hint">{{ reindexMessage }}</p>
       </article>
 
       <article class="panel stack">
@@ -269,8 +299,26 @@ async function retryJob(id: string) {
         <h3>Importjobber</h3>
         <StateView v-if="!jobs.length" state="empty" message="Ingen jobber ennå." />
         <ul v-else class="plain-list">
-          <li v-for="job in jobs" :key="job.id">
-            <strong>{{ sourceLabel(job.knowledgeDocId) || job.status }}</strong> — {{ job.progress }}% — {{ job.message }}
+          <li v-for="job in jobs" :key="job.id" class="stack">
+            <strong>{{ sourceLabel(job.knowledgeDocId) || job.status }}</strong>
+            <span class="field-hint">{{ job.kind }} · {{ job.status }} · {{ job.progress }}%</span>
+            <p>{{ job.message }}</p>
+            <div class="form-grid">
+              <AppButton
+                v-if="job.status === 'queued' || job.status === 'running'"
+                variant="secondary"
+                @click="stopJob(job.id)"
+              >
+                Stopp
+              </AppButton>
+              <AppButton
+                v-if="job.status === 'failed' || job.status === 'cancelled'"
+                variant="secondary"
+                @click="retryJob(job.id)"
+              >
+                Fortsett
+              </AppButton>
+            </div>
           </li>
         </ul>
       </article>
