@@ -10,6 +10,7 @@ import {
   ensureDirForFile,
   readStoredFile,
   resolveStoredPath,
+  storedFileExists,
   writeUploadedFile
 } from "../bachelorFileStorage.js";
 import {
@@ -205,6 +206,9 @@ export async function bachelorStorageRoutes(app: FastifyInstance, repository: Re
 
     try {
       const absolutePath = resolveStoredPath(record.storagePath);
+      if (!(await storedFileExists(absolutePath))) {
+        return reply.code(404).send({ message: "Filen er ikke tilgjengelig." });
+      }
       return reply
         .header("Content-Type", record.mimeType)
         .header("Content-Disposition", `attachment; filename="${encodeURIComponent(record.originalName)}"`)

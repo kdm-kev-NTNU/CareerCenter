@@ -68,6 +68,16 @@ export async function writeUploadedFile(storagePath: string, stream: Readable): 
   }
 }
 
+export async function storedFileExists(storagePath: string): Promise<boolean> {
+  try {
+    const fileStat = await stat(resolveStoredPath(storagePath));
+    return fileStat.isFile();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
+}
+
 export function readStoredFile(storagePath: string): Readable {
   return createReadStream(resolveStoredPath(storagePath));
 }

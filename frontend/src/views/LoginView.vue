@@ -60,7 +60,7 @@ function switchMode(next: "login" | "register") {
         <span class="mark">CC</span>
         <h1>CareerCenter</h1>
         <p class="lead">
-          Planlegg karrieren din med masterplan, internship, graduate og utdanning —
+          Planlegg karrieren din med søknader og utdanning —
           alt lagret trygt på din konto.
         </p>
       </section>

@@ -1,8 +1,8 @@
 describe("CareerCenter", () => {
   it("creates a graduate program with requirements and status", () => {
-    cy.visit("/");
+    cy.visit("/graduate");
+    cy.contains("h1", "Søknader").should("be.visible");
 
-    cy.contains("button", "Graduate").click();
     cy.contains("button", "+ Legg til").click();
     cy.get('[role="dialog"]').contains("h2", "Legg til graduate-program").should("be.visible");
 
@@ -19,9 +19,9 @@ describe("CareerCenter", () => {
   });
 
   it("creates an internship with requirements and status", () => {
-    cy.visit("/");
+    cy.visit("/internships");
+    cy.contains("h1", "Søknader").should("be.visible");
 
-    cy.contains("button", "Internship").click();
     cy.contains("button", "+ Legg til").click();
     cy.get('[role="dialog"]').contains("h2", "Legg til internship").should("be.visible");
 
@@ -157,38 +157,15 @@ describe("CareerCenter", () => {
     cy.contains(".course-card", "Udemy").should("be.visible");
   });
 
-  it("adds a course on the master plan", () => {
-    cy.visit("/");
-    cy.contains("button", "Master Plan").click();
-    cy.contains("label", "Fagkode").find("input").type("TDT4173");
-    cy.contains("label", "Tittel").find("input").type("Machine Learning");
-    cy.contains("button", "Legg til fag").click();
-    cy.contains(".course-card", "TDT4173").should("be.visible");
-  });
-
-  it("edits notes on a master plan course", () => {
-    const noteText = "Passer energispor";
-
-    cy.visit("/");
-    cy.contains("button", "Master Plan").click();
-    cy.contains("label", "Fagkode").find("input").type("TDT4999");
-    cy.contains("label", "Tittel").find("input").type("E2E Notes Course");
-    cy.contains("button", "Legg til fag").click();
-    cy.contains(".course-card", "TDT4999").contains("button", "Legg til notater").click();
-    cy.get('[role="dialog"]').find("textarea").type(noteText);
-    cy.get('[role="dialog"]').contains("button", "Lagre").click();
-    cy.contains(".course-card", "TDT4999").should("contain", noteText);
-  });
-
   it("smoke-tests listing views, filters, and education tabs", () => {
     cy.visit("/");
 
-    cy.contains("button", "Graduate").click();
+    cy.contains("button", "Søknader").click();
     cy.get("input[placeholder*='Søk']").type("NBIM");
     cy.contains("button", "+ Legg til").click();
     cy.get('[role="dialog"]').contains("button", "Avbryt").click();
 
-    cy.contains("button", "Internship").click();
+    cy.contains(".listing-toolbar .kind-filter button", "Internship").click();
     cy.get("select").first().select(1);
     cy.contains("button", "Hackathons").click();
     cy.contains("button", "Tidslinje").click();

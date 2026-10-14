@@ -22,17 +22,22 @@ describe("router guards", () => {
   });
 
   it("redirects unauthenticated users to login", async () => {
-    await router.push("/internships");
+    await router.push("/soknader");
     expect(router.currentRoute.value.name).toBe("login");
-    expect(router.currentRoute.value.query.redirect).toBe("/internships");
+    expect(router.currentRoute.value.query.redirect).toBe("/soknader");
   });
 
   it("redirects authenticated users away from login", async () => {
     mockedMe.mockResolvedValue({ id: "u1", name: "Kevin" });
     const auth = useAuthStore();
     await auth.fetchMe();
+    await router.push("/soknader");
+    expect(router.currentRoute.value.name).toBe("applications");
     await router.push("/internships");
-    expect(router.currentRoute.value.name).toBe("internships");
+    expect(router.currentRoute.value.name).toBe("applications");
+    expect(router.currentRoute.value.query.type).toBe("internship");
+    await router.push("/graduate");
+    expect(router.currentRoute.value.query.type).toBe("graduate");
     await router.push("/login");
     expect(router.currentRoute.value.name).toBe("dashboard");
   });

@@ -110,36 +110,63 @@ describe("App", () => {
     mockInitialData();
     const wrapper = await mountApp();
     expect(wrapper.text()).toContain("Dashboard");
-    expect(wrapper.text()).toContain("Master Plan");
+    expect(wrapper.text()).not.toContain("Master Plan");
   });
 
-  it("adds and removes a course from the master plan", async () => {
+  it("lists internships and graduate programs on one applications page", async () => {
     mockInitialData();
-    mockedApi.createCourse.mockResolvedValue({ id: "course-1", semester: 7, courseCode: "TDT1000", title: "Data Science", credits: 7.5, status: "planned", notes: "Forecasting", trackTags: ["ENERGY_QUANT"], sortOrder: 0 });
-    mockedApi.deleteCourse.mockResolvedValue(undefined);
-    const wrapper = await mountApp();
-    await goTo("/master");
-    await wrapper.get("input[placeholder='TDT4173']").setValue("TDT1000");
-    await wrapper.get("input[placeholder='Machine Learning']").setValue("Data Science");
-    await wrapper.get("textarea[placeholder='Hvorfor faget passer pathen']").setValue("Forecasting");
-    await wrapper.get("form").trigger("submit");
-    await flushPromises();
-
-    expect(wrapper.text()).toContain("TDT1000");
-    await wrapper.get(".course-card .icon").trigger("click");
-    await flushPromises();
-
-    expect(mockedApi.deleteCourse).toHaveBeenCalledWith("course-1");
-    expect(wrapper.text()).not.toContain("TDT1000");
+    mockedApi.internships.mockResolvedValue([
+      {
+        id: "int-1",
+        companyName: "Statkraft",
+        title: "Summer Intern",
+        description: "",
+        applicationUrl: "",
+        notes: "",
+        statusId: "status-1",
+        status: { id: "status-1", label: "Interessert", kind: "stage", sortOrder: 0 },
+        stageIds: [],
+        locationIds: [],
+        locations: [],
+        trackTags: [],
+        requirements: [],
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z"
+      }
+    ]);
+    mockedApi.graduatePrograms.mockResolvedValue([
+      {
+        id: "gp-1",
+        companyName: "NBIM",
+        title: "Technology Graduate",
+        description: "",
+        applicationUrl: "",
+        notes: "",
+        statusId: "status-1",
+        status: { id: "status-1", label: "Interessert", sortOrder: 0 },
+        locationIds: [],
+        locations: [],
+        trackTags: [],
+        requirements: [],
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z"
+      }
+    ]);
+    const wrapper = await mountApp("/soknader");
+    expect(wrapper.get("aside").text()).toContain("Søknader");
+    expect(wrapper.get("aside").text()).not.toContain("Internship");
+    expect(wrapper.get("h1").text()).toBe("Søknader");
+    expect(wrapper.text()).toContain("Statkraft");
+    expect(wrapper.text()).toContain("NBIM");
   });
 
   it("navigates to primary feature routes from the shell", async () => {
     mockInitialData();
     await mountApp();
     const routes = [
-      ["/master", "master"],
-      ["/internships", "internships"],
-      ["/graduate", "graduate"],
+      ["/soknader", "applications"],
+      ["/internships", "applications"],
+      ["/graduate", "applications"],
       ["/master-thesis", "master-thesis"],
       ["/competitions", "competitions"],
       ["/education/kurs", "education-courses"],
