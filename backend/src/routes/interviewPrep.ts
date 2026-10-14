@@ -1,12 +1,18 @@
 import {
   classifyCaseSource,
+  defaultVideoSimulatorSettings,
   inferKnowledgeKind,
   rankCasesForCompany,
   starRubricCriteria,
+  storiesToAnkiCsv,
+  storyToAnkiRow,
+  videoSimulatorSettingsSchema,
+  weakestStoryQueue,
   type CaseRankProfile
 } from "@careercenter/shared";
 import type { FastifyInstance } from "fastify";
 import type { LlmClient } from "../ai/llmClient.js";
+import { env } from "../config/env.js";
 import { toFullCaseDto, toPublicCaseDto } from "../interview/caseDto.js";
 import { parseCaseSections } from "../interview/caseSections.js";
 import { sha256Content } from "../interview/contentHash.js";
@@ -22,8 +28,26 @@ import {
   sessionMessageSchema,
   simulatorSettingsSchema
 } from "../interview/knowledgeSchemas.js";
+import {
+  toAbilityAttemptDto,
+  toRepertoireDto,
+  toStoryDto,
+  toStoryScoreDto,
+  toVideoRunDto,
+  toVideoSettingsDto
+} from "../interview/meccaMappers.js";
+import {
+  abilityAttemptInputSchema,
+  repertoireLogInputSchema,
+  storyBankInputSchema,
+  storyScoreInputSchema,
+  transcriptMessageSchema,
+  videoRunInputSchema,
+  videoTranscribeStubSchema
+} from "../interview/meccaSchemas.js";
 import { PrepResearchService } from "../interview/prepResearchService.js";
 import { buildFinishRubricPrompt, buildSimulatorSystemPrompt } from "../interview/prompts.js";
+import { createVoiceSession } from "../interview/voiceSession.js";
 import type { InterviewPrepRepository } from "../interviewPrepRepository.js";
 
 export interface InterviewPrepRouteDeps {
@@ -391,5 +415,173 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
     const feedback = interviewFeedbackRubricSchema.parse(structured);
     const finished = await deps.interviewPrepRepository.finishSession(request.user.id, sessionId, feedback);
     return toSessionDto(finished!);
+  });
+
+  app.post("/api/interview/voice/session", async () => createVoiceSession(env));
+
+  app.post("/api/interview/sessions/:id/transcript", async (request, reply) => {
+    const sessionId = (request.params as { id: string }).id;
+    const session = await deps.interviewPrepRepository.getSession(request.user.id, sessionId);
+    if (!session) return reply.code(404).send({ message: "Sesjon ikke funnet." });
+    if (session.finishedAt) return reply.code(400).send({ message: "Sesjonen er avsluttet." });
+
+    const body = transcriptMessageSchema.parse(request.body);
+    const saved = await deps.interviewPrepRepository.appendSessionMessage(
+      request.user.id,
+      sessionId,
+      body.role,
+      body.content
+    );
+    if (!saved) return reply.code(404).send({ message: "Sesjon ikke funnet." });
+    return toMessageDto(saved);
+  });
+
+  app.get("/api/interview/video/settings", async (request) => {
+    const row = await deps.interviewPrepRepository.getVideoSettings(request.user.id);
+    if (!row) return defaultVideoSimulatorSettings;
+    return toVideoSettingsDto(row);
+  });
+
+  app.put("/api/interview/video/settings", async (request) => {
+    const body = videoSimulatorSettingsSchema.parse(request.body);
+    const saved = await deps.interviewPrepRepository.upsertVideoSettings(request.user.id, body);
+    return toVideoSettingsDto(saved);
+  });
+
+  app.get("/api/interview/video/runs", async (request) => {
+    const runs = await deps.interviewPrepRepository.listVideoRuns(request.user.id);
+    return runs.map(toVideoRunDto);
+  });
+
+  app.post("/api/interview/video/runs", async (request, reply) => {
+    const body = videoRunInputSchema.parse(request.body);
+    const run = await deps.interviewPrepRepository.createVideoRun(request.user.id, body);
+    return reply.code(201).send(toVideoRunDto(run));
+  });
+
+  app.post("/api/interview/video/transcribe", async (request) => {
+    const body = videoTranscribeStubSchema.parse(request.body ?? {});
+    return {
+      mock: true,
+      transcript: body.note.trim() || "(stub transkripsjon — ingen lyd behandlet)",
+      blobKey: body.blobKey
+    };
+  });
+
+  app.get("/api/interview/ability/attempts", async (request) => {
+    const attempts = await deps.interviewPrepRepository.listAbilityAttempts(request.user.id);
+    return attempts.map(toAbilityAttemptDto);
+  });
+
+  app.post("/api/interview/ability/attempts", async (request, reply) => {
+    const body = abilityAttemptInputSchema.parse(request.body);
+    const attempt = await deps.interviewPrepRepository.createAbilityAttempt(request.user.id, body);
+    return reply.code(201).send(toAbilityAttemptDto(attempt));
+  });
+
+  app.get("/api/interview/stories", async (request) => {
+    const stories = await deps.interviewPrepRepository.listStoryBankEntries(request.user.id);
+    const dtos = await Promise.all(
+      stories.map(async (story) => {
+        const scores = await deps.interviewPrepRepository.listStoryScores(request.user.id, story.id);
+        return toStoryDto(story, scores);
+      })
+    );
+    return dtos;
+  });
+
+  app.get("/api/interview/stories/weakest", async (request) => {
+    const stories = await deps.interviewPrepRepository.listStoryBankEntries(request.user.id);
+    const enriched = await Promise.all(
+      stories.map(async (story) => {
+        const scores = await deps.interviewPrepRepository.listStoryScores(request.user.id, story.id);
+        const dto = toStoryDto(story, scores);
+        return {
+          ...dto,
+          scoreHistory: scores.map((score) => ({
+            scores: score.scores,
+            sum: score.sum,
+            createdAt: score.createdAt
+          }))
+        };
+      })
+    );
+    return weakestStoryQueue(enriched);
+  });
+
+  app.get("/api/interview/stories/export/anki.csv", async (request, reply) => {
+    const stories = await deps.interviewPrepRepository.listStoryBankEntries(request.user.id);
+    const rows = stories.map((story) =>
+      storyToAnkiRow({
+        title: story.title,
+        situation: story.situation,
+        task: story.task,
+        action: story.action,
+        result: story.result,
+        tags: story.tags
+      })
+    );
+    const csv = storiesToAnkiCsv(rows);
+    reply.header("Content-Type", "text/csv; charset=utf-8");
+    reply.header("Content-Disposition", 'attachment; filename="interview-mecca-star.csv"');
+    return csv;
+  });
+
+  app.post("/api/interview/stories", async (request, reply) => {
+    const body = storyBankInputSchema.parse(request.body);
+    const story = await deps.interviewPrepRepository.createStoryBankEntry(request.user.id, body);
+    return reply.code(201).send(toStoryDto(story, []));
+  });
+
+  app.put("/api/interview/stories/:id", async (request, reply) => {
+    const body = storyBankInputSchema.parse(request.body);
+    const updated = await deps.interviewPrepRepository.updateStoryBankEntry(
+      request.user.id,
+      (request.params as { id: string }).id,
+      body
+    );
+    if (!updated) return reply.code(404).send({ message: "Historie ikke funnet." });
+    const scores = await deps.interviewPrepRepository.listStoryScores(request.user.id, updated.id);
+    return toStoryDto(updated, scores);
+  });
+
+  app.delete("/api/interview/stories/:id", async (request, reply) => {
+    const deleted = await deps.interviewPrepRepository.deleteStoryBankEntry(
+      request.user.id,
+      (request.params as { id: string }).id
+    );
+    return deleted ? reply.code(204).send() : reply.code(404).send({ message: "Historie ikke funnet." });
+  });
+
+  app.get("/api/interview/stories/:id/scores", async (request, reply) => {
+    const storyId = (request.params as { id: string }).id;
+    const story = await deps.interviewPrepRepository.getStoryBankEntry(request.user.id, storyId);
+    if (!story) return reply.code(404).send({ message: "Historie ikke funnet." });
+    const scores = await deps.interviewPrepRepository.listStoryScores(request.user.id, storyId);
+    return scores.map(toStoryScoreDto);
+  });
+
+  app.post("/api/interview/stories/:id/scores", async (request, reply) => {
+    const storyId = (request.params as { id: string }).id;
+    const body = storyScoreInputSchema.parse(request.body);
+    const sum = sumRubricScores(body.scores);
+    const saved = await deps.interviewPrepRepository.addStoryScore(request.user.id, storyId, {
+      scores: body.scores,
+      sum,
+      note: body.note
+    });
+    if (!saved) return reply.code(404).send({ message: "Historie ikke funnet." });
+    return reply.code(201).send(toStoryScoreDto(saved));
+  });
+
+  app.get("/api/interview/repertoire", async (request) => {
+    const rows = await deps.interviewPrepRepository.listRepertoireLogs(request.user.id);
+    return rows.map(toRepertoireDto);
+  });
+
+  app.post("/api/interview/repertoire", async (request, reply) => {
+    const body = repertoireLogInputSchema.parse(request.body);
+    const row = await deps.interviewPrepRepository.createRepertoireLog(request.user.id, body);
+    return reply.code(201).send(toRepertoireDto(row));
   });
 }

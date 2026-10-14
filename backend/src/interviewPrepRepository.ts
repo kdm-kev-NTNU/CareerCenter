@@ -1,4 +1,5 @@
 import type {
+  AbilityTestKind,
   CaseSourceKind,
   CaseStyle,
   InterviewMode,
@@ -6,7 +7,10 @@ import type {
   PrepFormat,
   PrepPlanStatus,
   QuestionCategory,
-  QuestionTarget
+  QuestionTarget,
+  StarRubricCriterion,
+  VideoSimState,
+  VideoSimulatorSettings
 } from "@careercenter/shared";
 import type { InterviewFeedbackRubric } from "./interview/feedbackRubric.js";
 
@@ -104,6 +108,100 @@ export interface InterviewMessageRecord {
   role: "system" | "user" | "assistant";
   content: string;
   createdAt: string;
+}
+
+export interface InterviewStoryBankEntryRecord {
+  id: string;
+  userId: string;
+  title: string;
+  situation: string;
+  task: string;
+  action: string;
+  result: string;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StoryBankInput {
+  title: string;
+  situation: string;
+  task: string;
+  action: string;
+  result: string;
+  tags: string[];
+}
+
+export interface InterviewStoryScoreRecord {
+  id: string;
+  storyId: string;
+  scores: Record<StarRubricCriterion, number>;
+  sum: number;
+  note: string;
+  createdAt: string;
+}
+
+export interface InterviewCaseRepertoireLogRecord {
+  id: string;
+  userId: string;
+  caseEntryId?: string;
+  title: string;
+  outcome: string;
+  notes: string;
+  practicedAt: string;
+}
+
+export interface RepertoireLogInput {
+  caseEntryId?: string;
+  title: string;
+  outcome: string;
+  notes: string;
+  practicedAt?: string;
+}
+
+export interface InterviewAbilityTestAttemptRecord {
+  id: string;
+  userId: string;
+  kind: AbilityTestKind;
+  seed: number;
+  correct: boolean;
+  durationMs: number;
+  createdAt: string;
+}
+
+export interface AbilityAttemptInput {
+  kind: AbilityTestKind;
+  seed: number;
+  correct: boolean;
+  durationMs: number;
+}
+
+export interface InterviewVideoSettingsRecord {
+  userId: string;
+  thinkSeconds: number;
+  answerSeconds: number;
+  promptsJson: string;
+  updatedAt: string;
+}
+
+export interface InterviewVideoRunRecord {
+  id: string;
+  userId: string;
+  settingsJson: string;
+  state: VideoSimState;
+  cardIndex?: number;
+  blobKey?: string;
+  transcript: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface VideoRunInput {
+  state: VideoSimState;
+  cardIndex?: number;
+  blobKey?: string;
+  transcript: string;
+  settings: VideoSimulatorSettings;
 }
 
 export interface KnowledgeDocInput {
@@ -205,4 +303,31 @@ export interface InterviewPrepRepository {
     sessionId: string,
     feedback: InterviewFeedbackRubric
   ): Promise<InterviewSessionRecord | null>;
+
+  listStoryBankEntries(userId: string): Promise<InterviewStoryBankEntryRecord[]>;
+  getStoryBankEntry(userId: string, id: string): Promise<InterviewStoryBankEntryRecord | null>;
+  createStoryBankEntry(userId: string, input: StoryBankInput): Promise<InterviewStoryBankEntryRecord>;
+  updateStoryBankEntry(
+    userId: string,
+    id: string,
+    input: Partial<StoryBankInput>
+  ): Promise<InterviewStoryBankEntryRecord | null>;
+  deleteStoryBankEntry(userId: string, id: string): Promise<boolean>;
+  listStoryScores(userId: string, storyId: string): Promise<InterviewStoryScoreRecord[]>;
+  addStoryScore(
+    userId: string,
+    storyId: string,
+    input: { scores: Record<StarRubricCriterion, number>; sum: number; note: string }
+  ): Promise<InterviewStoryScoreRecord | null>;
+
+  listRepertoireLogs(userId: string): Promise<InterviewCaseRepertoireLogRecord[]>;
+  createRepertoireLog(userId: string, input: RepertoireLogInput): Promise<InterviewCaseRepertoireLogRecord>;
+
+  listAbilityAttempts(userId: string, limit?: number): Promise<InterviewAbilityTestAttemptRecord[]>;
+  createAbilityAttempt(userId: string, input: AbilityAttemptInput): Promise<InterviewAbilityTestAttemptRecord>;
+
+  getVideoSettings(userId: string): Promise<InterviewVideoSettingsRecord | null>;
+  upsertVideoSettings(userId: string, settings: VideoSimulatorSettings): Promise<InterviewVideoSettingsRecord>;
+  listVideoRuns(userId: string, limit?: number): Promise<InterviewVideoRunRecord[]>;
+  createVideoRun(userId: string, input: VideoRunInput): Promise<InterviewVideoRunRecord>;
 }

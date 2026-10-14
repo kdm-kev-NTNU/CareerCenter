@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { RouterLink } from "vue-router";
 import { onMounted, ref } from "vue";
 import { interviewPrepApi } from "../../api/interviewPrep.js";
 
@@ -23,6 +24,16 @@ onMounted(async () => {
     <article class="panel strong">
       <h2>Interview Mecca</h2>
       <p>Forberedelse til intervjuer, case og evnetester – med egen kunnskapsbase og AI-støtte.</p>
+    </article>
+
+    <article class="panel stack">
+      <h2>Moduler</h2>
+      <ul class="plain-list">
+        <li><RouterLink to="/interview/simulator">Simulator</RouterLink> — tekst eller stemme med enhetssjekk</li>
+        <li><RouterLink to="/interview/video">Videosøknad</RouterLink> — kortstokk, nedtelling og opptak</li>
+        <li><RouterLink to="/interview/evnetester">Evnetester</RouterLink> — Switch Challenge og Scales CLX</li>
+        <li><RouterLink to="/interview/struktur">Struktur</RouterLink> — STAR-bank, case-logg og Anki</li>
+      </ul>
     </article>
 
     <article class="panel">

@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import type {
+  AbilityTestKind,
   CaseSourceKind,
   CaseStyle,
   InterviewMode,
@@ -7,19 +8,34 @@ import type {
   PrepFormat,
   PrepPlanStatus,
   QuestionCategory,
-  QuestionTarget
+  QuestionTarget,
+  StarRubricCriterion,
+  VideoSimState,
+  VideoSimulatorSettings
 } from "@careercenter/shared";
+import { defaultVideoSimulatorSettings } from "@careercenter/shared";
+import { parseStarScores } from "./interview/meccaMappers.js";
 import type {
+  AbilityAttemptInput,
   CaseEntryInput,
+  InterviewAbilityTestAttemptRecord,
   InterviewCaseEntryRecord,
+  InterviewCaseRepertoireLogRecord,
   InterviewKnowledgeDoc,
   InterviewMessageRecord,
   InterviewPrepPlanRecord,
   InterviewPrepRepository,
   InterviewSessionRecord,
   InterviewSimulatorSettingsRecord,
+  InterviewStoryBankEntryRecord,
+  InterviewStoryScoreRecord,
+  InterviewVideoRunRecord,
+  InterviewVideoSettingsRecord,
   KnowledgeDocInput,
-  PrepPlanCreateInput
+  PrepPlanCreateInput,
+  RepertoireLogInput,
+  StoryBankInput,
+  VideoRunInput
 } from "./interviewPrepRepository.js";
 import type { InterviewFeedbackRubric } from "./interview/feedbackRubric.js";
 
@@ -380,6 +396,163 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
     return this.mapSession(row);
   }
 
+  async listStoryBankEntries(userId: string): Promise<InterviewStoryBankEntryRecord[]> {
+    const rows = await this.prisma.interviewStoryBankEntry.findMany({
+      where: { userId },
+      orderBy: { updatedAt: "desc" }
+    });
+    return rows.map((row) => this.mapStory(row));
+  }
+
+  async getStoryBankEntry(userId: string, id: string): Promise<InterviewStoryBankEntryRecord | null> {
+    const row = await this.prisma.interviewStoryBankEntry.findFirst({ where: { id, userId } });
+    return row ? this.mapStory(row) : null;
+  }
+
+  async createStoryBankEntry(userId: string, input: StoryBankInput): Promise<InterviewStoryBankEntryRecord> {
+    const row = await this.prisma.interviewStoryBankEntry.create({
+      data: { userId, ...input }
+    });
+    return this.mapStory(row);
+  }
+
+  async updateStoryBankEntry(
+    userId: string,
+    id: string,
+    input: Partial<StoryBankInput>
+  ): Promise<InterviewStoryBankEntryRecord | null> {
+    const existing = await this.getStoryBankEntry(userId, id);
+    if (!existing) return null;
+    const row = await this.prisma.interviewStoryBankEntry.update({
+      where: { id },
+      data: input
+    });
+    return this.mapStory(row);
+  }
+
+  async deleteStoryBankEntry(userId: string, id: string): Promise<boolean> {
+    const existing = await this.getStoryBankEntry(userId, id);
+    if (!existing) return false;
+    await this.prisma.interviewStoryBankEntry.delete({ where: { id } });
+    return true;
+  }
+
+  async listStoryScores(userId: string, storyId: string): Promise<InterviewStoryScoreRecord[]> {
+    const story = await this.getStoryBankEntry(userId, storyId);
+    if (!story) return [];
+    const rows = await this.prisma.interviewStoryScore.findMany({
+      where: { storyId },
+      orderBy: { createdAt: "desc" }
+    });
+    return rows.map((row) => this.mapStoryScore(row));
+  }
+
+  async addStoryScore(
+    userId: string,
+    storyId: string,
+    input: { scores: Record<StarRubricCriterion, number>; sum: number; note: string }
+  ): Promise<InterviewStoryScoreRecord | null> {
+    const story = await this.getStoryBankEntry(userId, storyId);
+    if (!story) return null;
+    const row = await this.prisma.interviewStoryScore.create({
+      data: {
+        storyId,
+        scoresJson: JSON.stringify(input.scores),
+        sum: input.sum,
+        note: input.note
+      }
+    });
+    await this.prisma.interviewStoryBankEntry.update({
+      where: { id: storyId },
+      data: { updatedAt: new Date() }
+    });
+    return this.mapStoryScore(row);
+  }
+
+  async listRepertoireLogs(userId: string): Promise<InterviewCaseRepertoireLogRecord[]> {
+    const rows = await this.prisma.interviewCaseRepertoireLog.findMany({
+      where: { userId },
+      orderBy: { practicedAt: "desc" }
+    });
+    return rows.map((row) => this.mapRepertoire(row));
+  }
+
+  async createRepertoireLog(userId: string, input: RepertoireLogInput): Promise<InterviewCaseRepertoireLogRecord> {
+    const row = await this.prisma.interviewCaseRepertoireLog.create({
+      data: {
+        userId,
+        caseEntryId: input.caseEntryId,
+        title: input.title,
+        outcome: input.outcome,
+        notes: input.notes,
+        practicedAt: input.practicedAt ? new Date(input.practicedAt) : undefined
+      }
+    });
+    return this.mapRepertoire(row);
+  }
+
+  async listAbilityAttempts(userId: string, limit = 50): Promise<InterviewAbilityTestAttemptRecord[]> {
+    const rows = await this.prisma.interviewAbilityTestAttempt.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      take: limit
+    });
+    return rows.map((row) => this.mapAbilityAttempt(row));
+  }
+
+  async createAbilityAttempt(userId: string, input: AbilityAttemptInput): Promise<InterviewAbilityTestAttemptRecord> {
+    const row = await this.prisma.interviewAbilityTestAttempt.create({
+      data: { userId, ...input }
+    });
+    return this.mapAbilityAttempt(row);
+  }
+
+  async getVideoSettings(userId: string): Promise<InterviewVideoSettingsRecord | null> {
+    const row = await this.prisma.interviewVideoSettings.findUnique({ where: { userId } });
+    return row ? this.mapVideoSettings(row) : null;
+  }
+
+  async upsertVideoSettings(userId: string, settings: VideoSimulatorSettings): Promise<InterviewVideoSettingsRecord> {
+    const row = await this.prisma.interviewVideoSettings.upsert({
+      where: { userId },
+      create: {
+        userId,
+        thinkSeconds: settings.thinkSeconds,
+        answerSeconds: settings.answerSeconds,
+        promptsJson: JSON.stringify(settings.prompts)
+      },
+      update: {
+        thinkSeconds: settings.thinkSeconds,
+        answerSeconds: settings.answerSeconds,
+        promptsJson: JSON.stringify(settings.prompts)
+      }
+    });
+    return this.mapVideoSettings(row);
+  }
+
+  async listVideoRuns(userId: string, limit = 20): Promise<InterviewVideoRunRecord[]> {
+    const rows = await this.prisma.interviewVideoRun.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      take: limit
+    });
+    return rows.map((row) => this.mapVideoRun(row));
+  }
+
+  async createVideoRun(userId: string, input: VideoRunInput): Promise<InterviewVideoRunRecord> {
+    const row = await this.prisma.interviewVideoRun.create({
+      data: {
+        userId,
+        settingsJson: JSON.stringify(input.settings),
+        state: input.state,
+        cardIndex: input.cardIndex,
+        blobKey: input.blobKey,
+        transcript: input.transcript
+      }
+    });
+    return this.mapVideoRun(row);
+  }
+
   private mapKnowledge(row: {
     id: string;
     userId: string;
@@ -532,6 +705,130 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       role: row.role as InterviewMessageRecord["role"],
       content: row.content,
       createdAt: row.createdAt.toISOString()
+    };
+  }
+
+  private mapStory(row: {
+    id: string;
+    userId: string;
+    title: string;
+    situation: string;
+    task: string;
+    action: string;
+    result: string;
+    tags: string[];
+    createdAt: Date;
+    updatedAt: Date;
+  }): InterviewStoryBankEntryRecord {
+    return {
+      id: row.id,
+      userId: row.userId,
+      title: row.title,
+      situation: row.situation,
+      task: row.task,
+      action: row.action,
+      result: row.result,
+      tags: row.tags,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString()
+    };
+  }
+
+  private mapStoryScore(row: {
+    id: string;
+    storyId: string;
+    scoresJson: string;
+    sum: number;
+    note: string;
+    createdAt: Date;
+  }): InterviewStoryScoreRecord {
+    return {
+      id: row.id,
+      storyId: row.storyId,
+      scores: parseStarScores(row.scoresJson),
+      sum: row.sum,
+      note: row.note,
+      createdAt: row.createdAt.toISOString()
+    };
+  }
+
+  private mapRepertoire(row: {
+    id: string;
+    userId: string;
+    caseEntryId: string | null;
+    title: string;
+    outcome: string;
+    notes: string;
+    practicedAt: Date;
+  }): InterviewCaseRepertoireLogRecord {
+    return {
+      id: row.id,
+      userId: row.userId,
+      caseEntryId: row.caseEntryId ?? undefined,
+      title: row.title,
+      outcome: row.outcome,
+      notes: row.notes,
+      practicedAt: row.practicedAt.toISOString()
+    };
+  }
+
+  private mapAbilityAttempt(row: {
+    id: string;
+    userId: string;
+    kind: string;
+    seed: number;
+    correct: boolean;
+    durationMs: number;
+    createdAt: Date;
+  }): InterviewAbilityTestAttemptRecord {
+    return {
+      id: row.id,
+      userId: row.userId,
+      kind: row.kind as AbilityTestKind,
+      seed: row.seed,
+      correct: row.correct,
+      durationMs: row.durationMs,
+      createdAt: row.createdAt.toISOString()
+    };
+  }
+
+  private mapVideoSettings(row: {
+    userId: string;
+    thinkSeconds: number;
+    answerSeconds: number;
+    promptsJson: string;
+    updatedAt: Date;
+  }): InterviewVideoSettingsRecord {
+    return {
+      userId: row.userId,
+      thinkSeconds: row.thinkSeconds,
+      answerSeconds: row.answerSeconds,
+      promptsJson: row.promptsJson || JSON.stringify(defaultVideoSimulatorSettings.prompts),
+      updatedAt: row.updatedAt.toISOString()
+    };
+  }
+
+  private mapVideoRun(row: {
+    id: string;
+    userId: string;
+    settingsJson: string;
+    state: string;
+    cardIndex: number | null;
+    blobKey: string | null;
+    transcript: string;
+    createdAt: Date;
+    updatedAt: Date;
+  }): InterviewVideoRunRecord {
+    return {
+      id: row.id,
+      userId: row.userId,
+      settingsJson: row.settingsJson,
+      state: row.state as VideoSimState,
+      cardIndex: row.cardIndex ?? undefined,
+      blobKey: row.blobKey ?? undefined,
+      transcript: row.transcript,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString()
     };
   }
 }

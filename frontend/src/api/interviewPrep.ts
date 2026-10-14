@@ -1,14 +1,22 @@
 import type {
+  InterviewAbilityTestAttemptDto,
   InterviewCaseEntryDto,
   InterviewCasePublicDto,
+  InterviewCaseRepertoireLogDto,
   InterviewKnowledgeDocDto,
   InterviewMessageDto,
   InterviewPrepPlanDto,
   InterviewSessionDto,
   InterviewSimulatorSettingsDto,
+  InterviewStoryBankEntryDto,
+  InterviewStoryScoreDto,
+  InterviewVideoRunDto,
+  InterviewVideoSettingsDto,
   InterviewMode,
   PrepFormat,
-  RankableCase
+  RankableCase,
+  VideoSimulatorSettings,
+  VoiceSessionDto
 } from "@careercenter/shared";
 import { request, uploadRequest } from "./client.js";
 
@@ -89,5 +97,79 @@ export const interviewPrepApi = {
       body: JSON.stringify({ content })
     }),
   finishSession: (sessionId: string) =>
-    request<InterviewSessionDto>(`/api/interview/sessions/${sessionId}/finish`, { method: "POST" })
+    request<InterviewSessionDto>(`/api/interview/sessions/${sessionId}/finish`, { method: "POST" }),
+
+  createVoiceSession: () => request<VoiceSessionDto>("/api/interview/voice/session", { method: "POST" }),
+  appendTranscript: (sessionId: string, payload: { role: "user" | "assistant"; content: string }) =>
+    request<InterviewMessageDto>(`/api/interview/sessions/${sessionId}/transcript`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+
+  videoSettings: () => request<InterviewVideoSettingsDto>("/api/interview/video/settings"),
+  saveVideoSettings: (payload: VideoSimulatorSettings) =>
+    request<InterviewVideoSettingsDto>("/api/interview/video/settings", {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    }),
+  videoRuns: () => request<InterviewVideoRunDto[]>("/api/interview/video/runs"),
+  createVideoRun: (payload: {
+    state: string;
+    cardIndex?: number;
+    blobKey?: string;
+    transcript?: string;
+    settings: VideoSimulatorSettings;
+  }) =>
+    request<InterviewVideoRunDto>("/api/interview/video/runs", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  transcribeVideoStub: (payload: { blobKey?: string; note?: string }) =>
+    request<{ mock: boolean; transcript: string }>("/api/interview/video/transcribe", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+
+  abilityAttempts: () => request<InterviewAbilityTestAttemptDto[]>("/api/interview/ability/attempts"),
+  createAbilityAttempt: (payload: {
+    kind: string;
+    seed: number;
+    correct: boolean;
+    durationMs: number;
+  }) =>
+    request<InterviewAbilityTestAttemptDto>("/api/interview/ability/attempts", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+
+  stories: () => request<InterviewStoryBankEntryDto[]>("/api/interview/stories"),
+  weakestStories: () => request<InterviewStoryBankEntryDto[]>("/api/interview/stories/weakest"),
+  createStory: (payload: Omit<InterviewStoryBankEntryDto, "id" | "createdAt" | "updatedAt" | "latestSum" | "averageSum">) =>
+    request<InterviewStoryBankEntryDto>("/api/interview/stories", { method: "POST", body: JSON.stringify(payload) }),
+  updateStory: (id: string, payload: Omit<InterviewStoryBankEntryDto, "id" | "createdAt" | "updatedAt" | "latestSum" | "averageSum">) =>
+    request<InterviewStoryBankEntryDto>(`/api/interview/stories/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    }),
+  deleteStory: (id: string) => request<void>(`/api/interview/stories/${id}`, { method: "DELETE" }),
+  storyScores: (id: string) => request<InterviewStoryScoreDto[]>(`/api/interview/stories/${id}/scores`),
+  addStoryScore: (id: string, payload: { scores: Record<string, number>; note?: string }) =>
+    request<InterviewStoryScoreDto>(`/api/interview/stories/${id}/scores`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  ankiExportUrl: () => "/api/interview/stories/export/anki.csv",
+
+  repertoireLogs: () => request<InterviewCaseRepertoireLogDto[]>("/api/interview/repertoire"),
+  createRepertoireLog: (payload: {
+    caseEntryId?: string;
+    title: string;
+    outcome?: string;
+    notes?: string;
+    practicedAt?: string;
+  }) =>
+    request<InterviewCaseRepertoireLogDto>("/api/interview/repertoire", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    })
 };

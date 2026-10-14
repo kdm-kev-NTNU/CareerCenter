@@ -1,18 +1,35 @@
 import { nanoid } from "nanoid";
 import type {
+  AbilityAttemptInput,
+  InterviewAbilityTestAttemptRecord,
   InterviewCaseEntryRecord,
+  InterviewCaseRepertoireLogRecord,
   InterviewKnowledgeDoc,
   InterviewMessageRecord,
   InterviewPrepPlanRecord,
   InterviewPrepRepository,
   InterviewSessionRecord,
   InterviewSimulatorSettingsRecord,
+  InterviewStoryBankEntryRecord,
+  InterviewStoryScoreRecord,
+  InterviewVideoRunRecord,
+  InterviewVideoSettingsRecord,
   CaseEntryInput,
   KnowledgeDocInput,
-  PrepPlanCreateInput
+  PrepPlanCreateInput,
+  RepertoireLogInput,
+  StoryBankInput,
+  VideoRunInput
 } from "./interviewPrepRepository.js";
 import type { InterviewFeedbackRubric } from "./interview/feedbackRubric.js";
-import type { InterviewMode, PrepPlanStatus, QuestionCategory, QuestionTarget } from "@careercenter/shared";
+import type {
+  InterviewMode,
+  PrepPlanStatus,
+  QuestionCategory,
+  QuestionTarget,
+  VideoSimulatorSettings
+} from "@careercenter/shared";
+import { defaultVideoSimulatorSettings } from "@careercenter/shared";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -25,6 +42,12 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
   private readonly simulatorSettings = new Map<string, InterviewSimulatorSettingsRecord>();
   private readonly sessions = new Map<string, InterviewSessionRecord>();
   private readonly messages = new Map<string, InterviewMessageRecord>();
+  private readonly stories = new Map<string, InterviewStoryBankEntryRecord>();
+  private readonly storyScores = new Map<string, InterviewStoryScoreRecord>();
+  private readonly repertoireLogs = new Map<string, InterviewCaseRepertoireLogRecord>();
+  private readonly abilityAttempts = new Map<string, InterviewAbilityTestAttemptRecord>();
+  private readonly videoSettings = new Map<string, InterviewVideoSettingsRecord>();
+  private readonly videoRuns = new Map<string, InterviewVideoRunRecord>();
 
   async listKnowledgeDocs(userId: string): Promise<InterviewKnowledgeDoc[]> {
     return [...this.knowledgeDocs.values()]
@@ -344,5 +367,159 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
     };
     this.sessions.set(sessionId, updated);
     return updated;
+  }
+
+  async listStoryBankEntries(userId: string): Promise<InterviewStoryBankEntryRecord[]> {
+    return [...this.stories.values()]
+      .filter((story) => story.userId === userId)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+
+  async getStoryBankEntry(userId: string, id: string): Promise<InterviewStoryBankEntryRecord | null> {
+    const story = this.stories.get(id);
+    if (!story || story.userId !== userId) return null;
+    return story;
+  }
+
+  async createStoryBankEntry(userId: string, input: StoryBankInput): Promise<InterviewStoryBankEntryRecord> {
+    const timestamp = nowIso();
+    const story: InterviewStoryBankEntryRecord = {
+      id: nanoid(),
+      userId,
+      ...input,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    };
+    this.stories.set(story.id, story);
+    return story;
+  }
+
+  async updateStoryBankEntry(
+    userId: string,
+    id: string,
+    input: Partial<StoryBankInput>
+  ): Promise<InterviewStoryBankEntryRecord | null> {
+    const existing = await this.getStoryBankEntry(userId, id);
+    if (!existing) return null;
+    const updated = { ...existing, ...input, updatedAt: nowIso() };
+    this.stories.set(id, updated);
+    return updated;
+  }
+
+  async deleteStoryBankEntry(userId: string, id: string): Promise<boolean> {
+    const existing = await this.getStoryBankEntry(userId, id);
+    if (!existing) return false;
+    this.stories.delete(id);
+    for (const [scoreId, score] of this.storyScores) {
+      if (score.storyId === id) this.storyScores.delete(scoreId);
+    }
+    return true;
+  }
+
+  async listStoryScores(userId: string, storyId: string): Promise<InterviewStoryScoreRecord[]> {
+    const story = await this.getStoryBankEntry(userId, storyId);
+    if (!story) return [];
+    return [...this.storyScores.values()]
+      .filter((score) => score.storyId === storyId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  async addStoryScore(
+    userId: string,
+    storyId: string,
+    input: { scores: InterviewStoryScoreRecord["scores"]; sum: number; note: string }
+  ): Promise<InterviewStoryScoreRecord | null> {
+    const story = await this.getStoryBankEntry(userId, storyId);
+    if (!story) return null;
+    const score: InterviewStoryScoreRecord = {
+      id: nanoid(),
+      storyId,
+      scores: input.scores,
+      sum: input.sum,
+      note: input.note,
+      createdAt: nowIso()
+    };
+    this.storyScores.set(score.id, score);
+    story.updatedAt = nowIso();
+    this.stories.set(storyId, story);
+    return score;
+  }
+
+  async listRepertoireLogs(userId: string): Promise<InterviewCaseRepertoireLogRecord[]> {
+    return [...this.repertoireLogs.values()]
+      .filter((row) => row.userId === userId)
+      .sort((a, b) => b.practicedAt.localeCompare(a.practicedAt));
+  }
+
+  async createRepertoireLog(userId: string, input: RepertoireLogInput): Promise<InterviewCaseRepertoireLogRecord> {
+    const row: InterviewCaseRepertoireLogRecord = {
+      id: nanoid(),
+      userId,
+      caseEntryId: input.caseEntryId,
+      title: input.title,
+      outcome: input.outcome,
+      notes: input.notes,
+      practicedAt: input.practicedAt ?? nowIso()
+    };
+    this.repertoireLogs.set(row.id, row);
+    return row;
+  }
+
+  async listAbilityAttempts(userId: string, limit = 50): Promise<InterviewAbilityTestAttemptRecord[]> {
+    return [...this.abilityAttempts.values()]
+      .filter((row) => row.userId === userId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit);
+  }
+
+  async createAbilityAttempt(userId: string, input: AbilityAttemptInput): Promise<InterviewAbilityTestAttemptRecord> {
+    const row: InterviewAbilityTestAttemptRecord = {
+      id: nanoid(),
+      userId,
+      ...input,
+      createdAt: nowIso()
+    };
+    this.abilityAttempts.set(row.id, row);
+    return row;
+  }
+
+  async getVideoSettings(userId: string): Promise<InterviewVideoSettingsRecord | null> {
+    return this.videoSettings.get(userId) ?? null;
+  }
+
+  async upsertVideoSettings(userId: string, settings: VideoSimulatorSettings): Promise<InterviewVideoSettingsRecord> {
+    const row: InterviewVideoSettingsRecord = {
+      userId,
+      thinkSeconds: settings.thinkSeconds,
+      answerSeconds: settings.answerSeconds,
+      promptsJson: JSON.stringify(settings.prompts),
+      updatedAt: nowIso()
+    };
+    this.videoSettings.set(userId, row);
+    return row;
+  }
+
+  async listVideoRuns(userId: string, limit = 20): Promise<InterviewVideoRunRecord[]> {
+    return [...this.videoRuns.values()]
+      .filter((row) => row.userId === userId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit);
+  }
+
+  async createVideoRun(userId: string, input: VideoRunInput): Promise<InterviewVideoRunRecord> {
+    const timestamp = nowIso();
+    const row: InterviewVideoRunRecord = {
+      id: nanoid(),
+      userId,
+      settingsJson: JSON.stringify(input.settings),
+      state: input.state,
+      cardIndex: input.cardIndex,
+      blobKey: input.blobKey,
+      transcript: input.transcript,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    };
+    this.videoRuns.set(row.id, row);
+    return row;
   }
 }

@@ -78,3 +78,19 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
+
+export async function requestBlob(path: string): Promise<Blob> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      credentials: "include",
+      signal: AbortSignal.timeout(15_000)
+    });
+  } catch (error) {
+    throw new Error(toRequestErrorMessage(error));
+  }
+  if (!response.ok) {
+    throw new Error(await parseResponseError(response));
+  }
+  return response.blob();
+}

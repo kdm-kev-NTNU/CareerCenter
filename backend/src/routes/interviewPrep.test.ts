@@ -130,4 +130,77 @@ describe("interview prep routes", () => {
     expect(finished.json().feedback.sum).toBe(32);
     await app.close();
   });
+
+  it("exposes voice session mock and saves transcript messages", async () => {
+    const app = await buildInterviewApp();
+    const voice = await app.inject({ method: "POST", url: "/api/interview/voice/session" });
+    expect(voice.statusCode).toBe(200);
+    expect(voice.json().mock).toBe(true);
+
+    const session = await app.inject({
+      method: "POST",
+      url: "/api/interview/sessions",
+      payload: { mode: "behavioral_mock", title: "Voice stub" }
+    });
+    const sessionId = session.json().id as string;
+
+    const userLine = await app.inject({
+      method: "POST",
+      url: `/api/interview/sessions/${sessionId}/transcript`,
+      payload: { role: "user", content: "Hei, jeg er klar." }
+    });
+    expect(userLine.statusCode).toBe(200);
+    expect(userLine.json().role).toBe("user");
+
+    const assistantLine = await app.inject({
+      method: "POST",
+      url: `/api/interview/sessions/${sessionId}/transcript`,
+      payload: { role: "assistant", content: "Fortell om en utfordring du løste." }
+    });
+    expect(assistantLine.json().role).toBe("assistant");
+    await app.close();
+  });
+
+  it("manages story bank, anki export, and ability attempts", async () => {
+    const app = await buildInterviewApp();
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/interview/stories",
+      payload: {
+        title: "Ledet prosjekt",
+        situation: "S",
+        task: "T",
+        action: "A",
+        result: "R",
+        tags: ["leadership"]
+      }
+    });
+    expect(created.statusCode).toBe(201);
+    const storyId = created.json().id as string;
+
+    const score = await app.inject({
+      method: "POST",
+      url: `/api/interview/stories/${storyId}/scores`,
+      payload: {
+        scores: Object.fromEntries(starRubricCriteria.map((key) => [key, 2])),
+        note: "Trenger strammere STAR"
+      }
+    });
+    expect(score.statusCode).toBe(201);
+
+    const weakest = await app.inject({ method: "GET", url: "/api/interview/stories/weakest" });
+    expect(weakest.json()[0]?.id).toBe(storyId);
+
+    const csv = await app.inject({ method: "GET", url: "/api/interview/stories/export/anki.csv" });
+    expect(csv.headers["content-type"]).toContain("text/csv");
+    expect(csv.body).toContain("Ledet prosjekt");
+
+    const attempt = await app.inject({
+      method: "POST",
+      url: "/api/interview/ability/attempts",
+      payload: { kind: "switch_challenge", seed: 42, correct: true, durationMs: 12000 }
+    });
+    expect(attempt.statusCode).toBe(201);
+    await app.close();
+  });
 });

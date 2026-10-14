@@ -56,7 +56,11 @@ export async function buildServer(options: ServerOptions) {
   await registerAuthPlugins(app);
 
   await app.register(helmet, {
-    contentSecurityPolicy: env.NODE_ENV === "production" ? undefined : false
+    contentSecurityPolicy: env.NODE_ENV === "production" ? undefined : false,
+    permissionsPolicy: {
+      camera: ["self"],
+      microphone: ["self"]
+    }
   });
 
   await app.register(cors, {
