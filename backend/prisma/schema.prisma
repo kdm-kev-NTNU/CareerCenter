@@ -397,6 +397,7 @@ model InterviewPrepPlan {
   roleTitle           String                        @default("")
   format              String
   status              String
+  pipelineStep        String                        @default("created")
   researchNotes       String                        @default("")
   companyProfileJson  String                        @default("{}")
   clarificationRound  Int                           @default(0)

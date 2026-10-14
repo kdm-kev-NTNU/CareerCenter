@@ -48,11 +48,18 @@ async function refresh() {
 onMounted(() => {
   void refresh();
   pollTimer = setInterval(() => {
-    if (jobs.value.some((j) => j.status === "queued" || j.status === "running")) {
-      void interviewPrepApi.importJobs().then((rows) => {
-        jobs.value = rows;
-      });
-    }
+    const active = jobs.value.some((job) => job.status === "queued" || job.status === "running");
+    if (!active) return;
+    void interviewPrepApi.importJobs().then(async (rows) => {
+      const stillActive = rows.some((job) => job.status === "queued" || job.status === "running");
+      jobs.value = rows;
+      if (!stillActive) {
+        [cases.value, pendingCases.value] = await Promise.all([
+          interviewPrepApi.cases(),
+          interviewPrepApi.cases({ approvalStatus: "pending" })
+        ]);
+      }
+    });
   }, 4000);
 });
 
@@ -120,6 +127,22 @@ async function reject(id: string) {
   await interviewPrepApi.rejectCase(id);
   await refresh();
 }
+
+function sourceLabel(knowledgeDocId?: string): string {
+  if (!knowledgeDocId) return "";
+  const doc = docs.value.find((item) => item.id === knowledgeDocId);
+  return doc?.sourceFilename || doc?.title || "";
+}
+
+async function retryJob(id: string) {
+  error.value = null;
+  try {
+    await interviewPrepApi.retryImportJob(id);
+    await refresh();
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : "Kunne ikke fortsette importen.";
+  }
+}
 </script>
 
 <template>
@@ -155,6 +178,18 @@ async function reject(id: string) {
         </form>
       </article>
 
+      <article v-if="jobs.length" class="panel stack">
+        <h3>Import</h3>
+        <ul class="plain-list">
+          <li v-for="job in jobs" :key="job.id" class="stack">
+            <strong>{{ sourceLabel(job.knowledgeDocId) || "Dokument" }}</strong>
+            <span class="field-hint">{{ job.status }} · {{ job.progress }}%</span>
+            <p>{{ job.message }}</p>
+            <AppButton v-if="job.status === 'failed'" variant="secondary" @click="retryJob(job.id)">Fortsett</AppButton>
+          </li>
+        </ul>
+      </article>
+
       <StateView v-if="loading" state="loading" />
 
       <article v-if="!loading" class="panel stack">
@@ -178,6 +213,7 @@ async function reject(id: string) {
           <li v-for="item in cases" :key="item.id">
             <strong>{{ item.title }}</strong>
             <span class="field-hint">{{ item.sourceKind }} · {{ item.approvalStatus ?? "approved" }}</span>
+            <span v-if="sourceLabel(item.knowledgeDocId)" class="field-hint">{{ sourceLabel(item.knowledgeDocId) }}</span>
             <p>{{ item.prompt.slice(0, 240) }}<span v-if="item.prompt.length > 240"> …</span></p>
           </li>
         </ul>
@@ -234,7 +270,7 @@ async function reject(id: string) {
         <StateView v-if="!jobs.length" state="empty" message="Ingen jobber ennå." />
         <ul v-else class="plain-list">
           <li v-for="job in jobs" :key="job.id">
-            <strong>{{ job.status }}</strong> — {{ job.progress }}% — {{ job.message }}
+            <strong>{{ sourceLabel(job.knowledgeDocId) || job.status }}</strong> — {{ job.progress }}% — {{ job.message }}
           </li>
         </ul>
       </article>
@@ -245,6 +281,7 @@ async function reject(id: string) {
         <ul v-else class="plain-list">
           <li v-for="item in pendingCases" :key="item.id" class="stack">
             <strong>{{ item.title }}</strong>
+            <span v-if="sourceLabel(item.knowledgeDocId)" class="field-hint">{{ sourceLabel(item.knowledgeDocId) }}</span>
             <p>{{ item.prompt.slice(0, 280) }}</p>
             <div class="form-grid">
               <AppButton @click="approve(item.id)">Godkjenn</AppButton>

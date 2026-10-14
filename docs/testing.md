@@ -16,18 +16,26 @@ npm run test:coverage
 npm run coverage:merge:unit
 ```
 
-Run the full CI test suite locally (same order as GitHub Actions `e2e` job):
+The pull-request gate matches GitHub Actions `quality` and `unit`:
 
 ```bash
 npm run test:ci
 ```
 
+The main-branch gate adds Cypress and the merged coverage check:
+
+```bash
+npm run test:ci:full
+```
+
 ## CI jobs
 
-- `quality` — typecheck and lint
-- `unit` — `test:coverage` + unit coverage gate
-- `e2e` — Cypress E2E + full coverage gate (depends on `unit`)
-- `docker` — production image builds (depends on `quality` and `e2e`)
+- `quality` — typecheck and lint, in parallel with `unit`, on every push and pull request
+- `unit` — `test:coverage` + unit coverage gate, in parallel with `quality`
+- `e2e` — Cypress and the full coverage gate, on pushes to `main` and `workflow_dispatch`
+- `docker` — production image builds on pushes to `main`, after `quality` and `unit`
+
+A newer push to the same ref cancels the run that is still going.
 
 ## Branch protection
 
@@ -35,9 +43,8 @@ In GitHub **Settings → Branches → main**, require these status checks before
 
 - `quality`
 - `unit`
-- `e2e`
 
-Optionally require `docker` if image builds must block merges.
+`e2e` and `docker` run after the merge to `main`. Do not require `e2e` on pull requests: that job is skipped there, and a required skipped check blocks the merge.
 
 ## Agent inventory E2E
 

@@ -103,6 +103,13 @@ export const curatedBankSelectionSchema = z.object({
     .default([])
 });
 
+export const caseSpanExtractSchema = z.object({
+  title: z.string(),
+  prompt: z.string(),
+  interviewerInfo: z.string().default(""),
+  solution: z.string().default("")
+});
+
 export const casebookSegmentSchema = z.object({
   cases: z.array(
     z.object({

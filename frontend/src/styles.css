@@ -1259,6 +1259,53 @@ nav button.active, nav button:hover { background: #1f2937; color: #ffffff; }
   background: #fafcfd;
 }
 
+.plan-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.plan-step {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: inherit;
+}
+.plan-step:disabled {
+  cursor: default;
+  color: var(--muted);
+  background: #f8fafc;
+}
+.plan-step--done { border-color: #b7e0cf; background: var(--accent-soft); }
+.plan-step--active { border-color: #b9ccef; background: #f3f7fd; }
+.plan-step--failed { border-color: #f3c1bc; background: #fff5f4; }
+.plan-step--selected { outline: 2px solid var(--accent); }
+.plan-step-index {
+  width: 1.6rem;
+  height: 1.6rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid var(--border);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.plan-step-detail {
+  display: grid;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.plan-step-prose { white-space: pre-wrap; }
+
 @media (max-width: 980px) {
   .app-shell, .auth-panel { grid-template-columns: 1fr; }
   .sidebar { position: static; height: auto; }

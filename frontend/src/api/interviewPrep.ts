@@ -95,6 +95,8 @@ export const interviewPrepApi = {
 
   importJobs: () => request<InterviewImportJobDto[]>("/api/interview/import-jobs"),
   importJob: (id: string) => request<InterviewImportJobDto>(`/api/interview/import-jobs/${id}`),
+  retryImportJob: (id: string) =>
+    request<InterviewImportJobDto>(`/api/interview/import-jobs/${id}/retry`, { method: "POST" }),
 
   plans: () => request<InterviewPrepPlanDto[]>("/api/interview/plans"),
   plan: (id: string) => request<PrepPlanDetail>(`/api/interview/plans/${id}`),

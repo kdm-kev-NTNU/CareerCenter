@@ -1,4 +1,5 @@
 import type { CompanyProfile } from "./companyProfile.js";
+import type { PrepPlanPipelineStep } from "./prepPlanState.js";
 import type {
   CaseApprovalStatus,
   CaseSourceKind,
@@ -96,6 +97,7 @@ export interface InterviewPrepPlanDto {
   roleTitle: string;
   format: PrepFormat;
   status: PrepPlanStatus;
+  pipelineStep: PrepPlanPipelineStep;
   researchNotes: string;
   companyProfile?: CompanyProfile;
   clarificationRound: number;

@@ -1,13 +1,25 @@
-# CI: quality + unit coverage gate + e2e coverage gate + docker build
-# Local parity: npm run test:ci
+# CI
+# Tiers:
+# - pull_request and every branch push: quality and unit run in parallel.
+#   Local parity: npm run test:ci
+# - push to main, and workflow_dispatch: Cypress coverage gate (e2e).
+#   Local parity: npm run test:ci:full
+# - push to main: production image build, in parallel with e2e after the fast gate.
+# A newer push to the same ref cancels the run that is still going.
 
 name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
-    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   quality:
@@ -16,15 +28,9 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run db:generate --workspace=@careercenter/api
-      - run: npm run build --workspace=@careercenter/shared
-      - run: npm run typecheck --workspaces
-      - run: npm run lint --workspaces
+      - uses: ./.github/actions/setup-node-app
+      - run: npm run typecheck
+      - run: npm run lint
 
   unit:
     name: unit
@@ -32,15 +38,9 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run db:generate --workspace=@careercenter/api
-      - run: npm run build --workspace=@careercenter/shared
+      - uses: ./.github/actions/setup-node-app
       - run: npm run test:scripts
-      - run: npm run test:coverage --workspaces
+      - run: npm run test:coverage
       - run: npm run coverage:merge:unit
       - uses: actions/upload-artifact@v4
         if: always()
@@ -52,19 +52,14 @@ jobs:
   e2e:
     name: e2e
     needs: unit
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
       CI: true
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run db:generate --workspace=@careercenter/api
-      - run: npm run build --workspace=@careercenter/shared
+      - uses: ./.github/actions/setup-node-app
       - run: npx cypress install
       - uses: actions/download-artifact@v4
         with:
@@ -83,10 +78,10 @@ jobs:
 
   docker:
     name: docker
-    needs: [quality, e2e]
+    needs: [quality, unit]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3

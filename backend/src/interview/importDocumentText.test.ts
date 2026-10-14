@@ -27,6 +27,7 @@ describe("importDocumentText", () => {
     const result = await importDocumentText("bundle.zip", Buffer.from(zipped));
     expect(result.text).toContain("zip text");
     expect(result.text).toContain("md body");
-    expect(result.entryCount).toBeGreaterThanOrEqual(2);
+    expect(result.text).toContain("skip.bin: Filtypen støttes ikke");
+    expect(result.entryCount).toBe(2);
   });
 });

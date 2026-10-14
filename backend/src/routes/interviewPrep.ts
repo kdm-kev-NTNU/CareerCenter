@@ -26,6 +26,7 @@ import {
   toSimulatorSettingsDto
 } from "../interview/dtoMappers.js";
 import { interviewFeedbackRubricSchema, sumRubricScores } from "../interview/feedbackRubric.js";
+import { shouldChunkImport } from "../interview/caseSpans.js";
 import { importDocumentText } from "../interview/importDocumentText.js";
 import { processImportJob } from "../interview/importJobService.js";
 import { buildInterviewStoragePath, writeInterviewFile } from "../interview/interviewFileStorage.js";
@@ -165,7 +166,9 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
       entryCount: imported.entryCount
     });
 
-    if ((kind === "case" || kind === "practice") && sourceKind !== "casebook" && sourceKind !== "exhibit_pack") {
+    const chunked = shouldChunkImport({ content: imported.text, sourceKind });
+
+    if ((kind === "case" || kind === "practice") && !chunked && sourceKind !== "exhibit_pack") {
       const sections = parseCaseSections(imported.text);
       const caseHash = sha256Content(`${title}:${sections.prompt}:${sections.solution}`);
       const existingCase = await deps.interviewPrepRepository.findCaseByHash(request.user.id, caseHash);
@@ -187,7 +190,7 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
     }
 
     let importJob = null;
-    if (!existingDoc && (sourceKind === "casebook" || sourceKind === "exhibit_pack")) {
+    if (!existingDoc && (chunked || sourceKind === "exhibit_pack")) {
       importJob = await deps.interviewPrepRepository.createImportJob(request.user.id, {
         knowledgeDocId: doc.id
       });
@@ -249,6 +252,25 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
   app.get("/api/interview/import-jobs", async (request) => {
     const jobs = await deps.interviewPrepRepository.listImportJobs(request.user.id);
     return jobs.map(toImportJobDto);
+  });
+
+  app.post("/api/interview/import-jobs/:id/retry", async (request, reply) => {
+    const jobId = (request.params as { id: string }).id;
+    const job = await deps.interviewPrepRepository.getImportJob(request.user.id, jobId);
+    if (!job) return reply.code(404).send({ message: "Jobb ikke funnet." });
+    if (job.status !== "failed") {
+      return reply.code(409).send({ message: "Jobben kan bare kjøres på nytt når den har feilet." });
+    }
+    const queued = await deps.interviewPrepRepository.updateImportJob(request.user.id, jobId, {
+      status: "queued",
+      message: "Fortsetter fra første uferdige del…"
+    });
+    void processImportJob(
+      { llmClient: deps.llmClient, repository: deps.interviewPrepRepository },
+      request.user.id,
+      jobId
+    );
+    return queued ? toImportJobDto(queued) : toImportJobDto(job);
   });
 
   app.get("/api/interview/import-jobs/:id", async (request, reply) => {
@@ -384,12 +406,11 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
       return reply.code(503).send({ message: "AI er ikke konfigurert." });
     }
     try {
-      await researchService.startResearch(request.user.id, (request.params as { id: string }).id);
-      const plan = await deps.interviewPrepRepository.getPrepPlan(
+      const plan = await researchService.enqueueResearch(
         request.user.id,
         (request.params as { id: string }).id
       );
-      return toPrepPlanDto(plan!);
+      return reply.code(202).send(toPrepPlanDto(plan));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Research feilet.";
       return reply.code(400).send({ message });
@@ -402,17 +423,13 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
     }
     const body = clarificationAnswersSchema.parse(request.body);
     try {
-      await researchService.submitClarificationsAndCurate(
+      const plan = await researchService.enqueueClarifications(
         request.user.id,
         (request.params as { id: string }).id,
         body.answers,
         body.skip
       );
-      const plan = await deps.interviewPrepRepository.getPrepPlan(
-        request.user.id,
-        (request.params as { id: string }).id
-      );
-      return toPrepPlanDto(plan!);
+      return reply.code(202).send(toPrepPlanDto(plan));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Kuratering feilet.";
       return reply.code(400).send({ message });

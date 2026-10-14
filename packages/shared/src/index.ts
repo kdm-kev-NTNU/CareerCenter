@@ -429,12 +429,16 @@ export { CLX_SHAPE_COLOR } from "./scalesClx.js";
 export {
   transitionPrepPlan,
   canStartSimulators,
+  prepPlanPipelineSteps,
+  parsePrepPlanPipelineStep,
+  prepPlanStepVisual,
+  isPrepPlanPipelineActive,
   MAX_CLARIFICATION_ROUNDS,
   MAX_CLARIFICATIONS_PER_ROUND,
   MIN_CURATED_QUESTIONS,
   MAX_CURATED_QUESTIONS
 } from "./prepPlanState.js";
-export type { PrepPlanEvent } from "./prepPlanState.js";
+export type { PrepPlanEvent, PrepPlanPipelineStep, PrepPlanStepVisual } from "./prepPlanState.js";
 export {
   transitionVideoSim,
   canStartRecording,

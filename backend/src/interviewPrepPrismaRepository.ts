@@ -16,7 +16,8 @@ import type {
   VideoSimState,
   VideoSimulatorSettings
 } from "@careercenter/shared";
-import { defaultVideoSimulatorSettings } from "@careercenter/shared";
+import { defaultVideoSimulatorSettings, parsePrepPlanPipelineStep } from "@careercenter/shared";
+import { ensureInterviewBibleCatalog } from "./interview/bibleCatalog.js";
 import { parseStarScores } from "./interview/meccaMappers.js";
 import type {
   AbilityAttemptInput,
@@ -50,6 +51,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
   async listKnowledgeDocs(userId: string): Promise<InterviewKnowledgeDoc[]> {
+    await ensureInterviewBibleCatalog(this.prisma, userId);
     const rows = await this.prisma.interviewKnowledgeDoc.findMany({
       where: { userId },
       orderBy: { title: "asc" }
@@ -135,6 +137,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
     userId: string,
     filter?: { q?: string; category?: string; tag?: string }
   ): Promise<InterviewBankQuestionRecord[]> {
+    await ensureInterviewBibleCatalog(this.prisma, userId);
     const rows = await this.prisma.interviewBankQuestion.findMany({
       where: {
         userId,
@@ -160,6 +163,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
   }
 
   async listCaseEntries(userId: string): Promise<InterviewCaseEntryRecord[]> {
+    await ensureInterviewBibleCatalog(this.prisma, userId);
     const rows = await this.prisma.interviewCaseEntry.findMany({
       where: { userId },
       orderBy: { title: "asc" }
@@ -171,6 +175,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
     userId: string,
     filter?: { q?: string; sourceKind?: string; style?: string; approvalStatus?: string }
   ): Promise<InterviewCaseEntryRecord[]> {
+    await ensureInterviewBibleCatalog(this.prisma, userId);
     const rows = await this.prisma.interviewCaseEntry.findMany({
       where: {
         userId,
@@ -303,6 +308,29 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
     const row = await this.prisma.interviewPrepPlan.update({
       where: { id },
       data: { status, failureReason: failureReason ?? null },
+      include: planIncludes
+    });
+    return this.mapPlan(row);
+  }
+
+  async setPrepPlanPipeline(
+    userId: string,
+    id: string,
+    input: {
+      pipelineStep: InterviewPrepPlanRecord["pipelineStep"];
+      researchNotes?: string;
+      companyProfileJson?: string;
+    }
+  ): Promise<InterviewPrepPlanRecord | null> {
+    const existing = await this.prisma.interviewPrepPlan.findFirst({ where: { id, userId } });
+    if (!existing) return null;
+    const row = await this.prisma.interviewPrepPlan.update({
+      where: { id },
+      data: {
+        pipelineStep: input.pipelineStep,
+        ...(input.researchNotes !== undefined ? { researchNotes: input.researchNotes } : {}),
+        ...(input.companyProfileJson !== undefined ? { companyProfileJson: input.companyProfileJson } : {})
+      },
       include: planIncludes
     });
     return this.mapPlan(row);
@@ -906,6 +934,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       roleTitle: row.roleTitle,
       format: row.format as PrepFormat,
       status: row.status as PrepPlanStatus,
+      pipelineStep: parsePrepPlanPipelineStep(row.pipelineStep),
       researchNotes: row.researchNotes,
       companyProfileJson: row.companyProfileJson,
       clarificationRound: row.clarificationRound,
@@ -1190,6 +1219,7 @@ type PlanRow = {
   roleTitle: string;
   format: string;
   status: string;
+  pipelineStep: string;
   researchNotes: string;
   companyProfileJson: string;
   clarificationRound: number;

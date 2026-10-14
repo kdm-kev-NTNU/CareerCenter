@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { prepPlanStatuses, videoSimStates } from "@careercenter/shared";
-import { prepPlanStatusTone, toneForPrepPlanStatus, toneForVideoPhase, videoPhaseTone } from "./statusTone.js";
+import { prepPlanPipelineSteps, prepPlanStatuses, videoSimStates } from "@careercenter/shared";
+import {
+  prepPlanPipelineStepLabel,
+  prepPlanStatusTone,
+  toneForPrepPlanStatus,
+  toneForVideoPhase,
+  videoPhaseTone
+} from "./statusTone.js";
 
 describe("statusTone", () => {
   it("maps every prep plan status to a tone", () => {
@@ -9,6 +15,12 @@ describe("statusTone", () => {
       expect(tone.label.length).toBeGreaterThan(0);
       expect(["accent", "muted", "blue", "danger"]).toContain(tone.variant);
       expect(prepPlanStatusTone[status]).toEqual(tone);
+    }
+  });
+
+  it("labels every prep plan pipeline step", () => {
+    for (const step of prepPlanPipelineSteps) {
+      expect(prepPlanPipelineStepLabel[step].length).toBeGreaterThan(0);
     }
   });
 

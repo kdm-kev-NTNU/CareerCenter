@@ -1,7 +1,17 @@
-import { classifyCaseSource, type CaseSourceKind } from "@careercenter/shared";
+import { classifyCaseSource, type CaseSourceKind, type ImportJobStatus } from "@careercenter/shared";
 import type { LlmClient } from "../ai/llmClient.js";
+import { proposeCaseSpans } from "./caseSpans.js";
 import { sha256Content } from "./contentHash.js";
-import { casebookSegmentSchema, exhibitPromptSchema } from "./knowledgeSchemas.js";
+import { parseDocuments, spanText } from "./documentPages.js";
+import {
+  chunkProgressMessage,
+  chunksFromSpans,
+  parseImportJobState,
+  serializeImportJobState,
+  type ImportChunkState,
+  type ImportJobState
+} from "./importJobState.js";
+import { caseSpanExtractSchema, exhibitPromptSchema } from "./knowledgeSchemas.js";
 import type { InterviewPrepRepository } from "../interviewPrepRepository.js";
 
 const queue: Array<{ userId: string; jobId: string }> = [];
@@ -53,53 +63,64 @@ export async function processImportJob(
       return;
     }
 
-    const segmented = await deps.llmClient.completeStructured(
-      {
-        messages: [
-          {
-            role: "system",
-            content:
-              "Du deler en casebook etter innholdsfortegnelse/struktur. Returner separate cases med prompt, interviewerInfo og solution."
-          },
-          { role: "user", content: doc.content.slice(0, 120_000) }
-        ]
-      },
-      casebookSegmentSchema
-    );
+    const state = parseImportJobState(job.resultJson) ?? {
+      version: 2 as const,
+      chunks: chunksFromSpans(proposeCaseSpans(doc.content))
+    };
+    if (state.chunks.length === 0) throw new Error("Ingen tekst å dele opp.");
 
-    await deps.repository.updateImportJob(userId, jobId, {
-      status: "review",
-      progress: 80,
-      message: `${segmented.cases.length} cases klare for gjennomgang`,
-      resultJson: JSON.stringify(segmented.cases)
-    });
+    await persistState(deps, userId, jobId, state, "running", 0, "Deler opp dokumentet…");
 
-    let index = 0;
-    for (const item of segmented.cases) {
-      const contentHash = sha256Content(`${item.title}:${item.prompt}:${item.solution}:${index}`);
-      const existing = await deps.repository.findCaseByHash(userId, contentHash);
-      if (!existing) {
-        await deps.repository.createCaseEntry(userId, {
-          title: item.title,
-          prompt: item.prompt,
-          interviewerInfo: item.interviewerInfo,
-          solution: item.solution,
-          sourceKind: "casebook" satisfies CaseSourceKind,
-          companyTags: [],
-          knowledgeDocId: doc.id,
-          contentHash,
-          approvalStatus: "pending",
-          originalFileKey: doc.originalFileKey
-        });
+    for (const chunk of state.chunks) {
+      if (chunk.status === "done") continue;
+      const done = state.chunks.filter((item) => item.status === "done").length;
+      await persistState(
+        deps,
+        userId,
+        jobId,
+        state,
+        "running",
+        progressFor(done, state.chunks.length),
+        chunkProgressMessage(state.chunks, chunk)
+      );
+      try {
+        await extractChunk(deps, userId, doc.id, doc.content, doc.originalFileKey, chunk);
+        chunk.status = "done";
+        chunk.error = undefined;
+      } catch (error) {
+        chunk.status = "failed";
+        chunk.error = error instanceof Error ? error.message : "Uttrekk feilet.";
       }
-      index += 1;
+      await persistState(
+        deps,
+        userId,
+        jobId,
+        state,
+        "running",
+        progressFor(
+          state.chunks.filter((item) => item.status === "done").length,
+          state.chunks.length
+        ),
+        chunkProgressMessage(state.chunks, chunk)
+      );
     }
 
-    await deps.repository.updateImportJob(userId, jobId, {
-      status: "done",
-      progress: 100,
-      message: "Ferdig"
-    });
+    const failed = state.chunks.filter((chunk) => chunk.status === "failed");
+    const done = state.chunks.filter((chunk) => chunk.status === "done").length;
+    if (failed.length > 0) {
+      await persistState(
+        deps,
+        userId,
+        jobId,
+        state,
+        "failed",
+        progressFor(done, state.chunks.length),
+        `${failed.length} av ${state.chunks.length} feilet: ${failed[0]?.error ?? "ukjent feil"}`
+      );
+      return;
+    }
+
+    await persistState(deps, userId, jobId, state, "done", 100, `${done} caseutkast klare for gjennomgang`);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Importjobb feilet.";
     await deps.repository.updateImportJob(userId, jobId, {
@@ -108,6 +129,79 @@ export async function processImportJob(
       message
     });
   }
+}
+
+async function persistState(
+  deps: { repository: InterviewPrepRepository },
+  userId: string,
+  jobId: string,
+  state: ImportJobState,
+  status: ImportJobStatus,
+  progress: number,
+  message: string
+): Promise<void> {
+  await deps.repository.updateImportJob(userId, jobId, {
+    status,
+    progress,
+    message,
+    resultJson: serializeImportJobState(state)
+  });
+}
+
+function progressFor(done: number, total: number): number {
+  if (total === 0) return 0;
+  return Math.round((done / total) * 100);
+}
+
+async function extractChunk(
+  deps: { llmClient: LlmClient; repository: InterviewPrepRepository },
+  userId: string,
+  knowledgeDocId: string,
+  content: string,
+  originalFileKey: string | undefined,
+  chunk: ImportChunkState
+): Promise<void> {
+  const sections = parseDocuments(content);
+  const section = sections.find((item) => item.fileName === chunk.fileName) ?? sections[0];
+  if (!section) throw new Error("Fant ikke sidene for denne delen.");
+  const text = spanText(section.pages, chunk.pageStart, chunk.pageEnd);
+  if (!text.trim()) throw new Error("Delen har ingen tekst.");
+
+  const extracted = await deps.llmClient.completeStructured(
+    {
+      messages: [
+        {
+          role: "system",
+          content:
+            "Du trekker ut én case fra teksten. Returner title, prompt, interviewerInfo og solution for denne delen alene. Ikke finn opp andre caser."
+        },
+        {
+          role: "user",
+          content: `Tittelhint: ${chunk.title}\nSider: ${chunk.pageStart}–${chunk.pageEnd}\n\n${text}`
+        }
+      ]
+    },
+    caseSpanExtractSchema
+  );
+  if (!extracted.title.trim() || !extracted.prompt.trim()) {
+    throw new Error("Uttrekket mangler tittel eller prompt.");
+  }
+
+  const contentHash = sha256Content(`${extracted.title}:${extracted.prompt}:${extracted.solution}`);
+  const existing = await deps.repository.findCaseByHash(userId, contentHash);
+  if (existing) return;
+  await deps.repository.createCaseEntry(userId, {
+    title: extracted.title,
+    prompt: extracted.prompt,
+    interviewerInfo: extracted.interviewerInfo,
+    solution: extracted.solution,
+    sourceKind: "casebook" satisfies CaseSourceKind,
+    companyTags: [],
+    knowledgeDocId,
+    contentHash,
+    approvalStatus: "pending",
+    originalFileKey
+  });
 }
 
 async function processExhibitPack(

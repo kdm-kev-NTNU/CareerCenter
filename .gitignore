@@ -15,3 +15,6 @@ uploads/
 
 # Local mirror of global Cursor skills + MCP (see scripts/sync-agent-inventory.ps1)
 .agent-inventory/
+
+# Local interview source files (casebooks and extracts). Derived catalog lives in backend/src/interview.
+stoff/

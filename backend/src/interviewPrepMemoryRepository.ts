@@ -273,6 +273,7 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       roleTitle: input.roleTitle,
       format: input.format,
       status: "draft",
+      pipelineStep: "created",
       researchNotes: "",
       companyProfileJson: "{}",
       clarificationRound: 0,
@@ -296,6 +297,28 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
     const plan = await this.getPrepPlan(userId, id);
     if (!plan) return null;
     const updated = { ...plan, status, failureReason, updatedAt: nowIso() };
+    this.prepPlans.set(id, updated);
+    return updated;
+  }
+
+  async setPrepPlanPipeline(
+    userId: string,
+    id: string,
+    input: {
+      pipelineStep: InterviewPrepPlanRecord["pipelineStep"];
+      researchNotes?: string;
+      companyProfileJson?: string;
+    }
+  ): Promise<InterviewPrepPlanRecord | null> {
+    const plan = await this.getPrepPlan(userId, id);
+    if (!plan) return null;
+    const updated: InterviewPrepPlanRecord = {
+      ...plan,
+      pipelineStep: input.pipelineStep,
+      researchNotes: input.researchNotes ?? plan.researchNotes,
+      companyProfileJson: input.companyProfileJson ?? plan.companyProfileJson,
+      updatedAt: nowIso()
+    };
     this.prepPlans.set(id, updated);
     return updated;
   }
