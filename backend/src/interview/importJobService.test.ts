@@ -13,6 +13,54 @@ function deps(llmClient: FakeLlmClient, repository: InterviewPrepMemoryRepositor
   };
 }
 
+describe("question import", () => {
+  it("stores audience and category from the model, skips known questions and triggers cleanup", async () => {
+    const repository = new InterviewPrepMemoryRepository();
+    const doc = await repository.createKnowledgeDoc("u1", {
+      kind: "company",
+      title: "Bedrift",
+      content: "Hva vet du om oss?\nSpørsmål du stiller dem: Hvordan ser en typisk uke ut?",
+      contentHash: sha256Content("question-import")
+    });
+    await repository.insertBankQuestions("u1", doc.id, [
+      { text: "Hva vet du om oss?", category: "company", tags: [], origin: "rule", contentHash: sha256Content("known") }
+    ]);
+    const job = await repository.createImportJob("u1", { knowledgeDocId: doc.id, kind: "questions" });
+    const llmClient = new FakeLlmClient({
+      structuredResults: [
+        {
+          questions: [
+            { text: "«Hva vet du om oss?»", audience: "candidate", category: "company" },
+            { text: "Hvordan ser en typisk uke ut?", audience: "ask_interviewer_company", category: "behavioral" },
+            { text: "Kort?", audience: "candidate", category: "behavioral" }
+          ]
+        }
+      ]
+    });
+    const imported: string[] = [];
+
+    await processImportJob(
+      { ...deps(llmClient, repository), onQuestionsImported: (_userId, docId) => imported.push(docId) },
+      "u1",
+      job.id
+    );
+
+    expect(await repository.getImportJob("u1", job.id)).toMatchObject({ status: "done" });
+    const rows = await repository.listBankQuestions("u1", { knowledgeDocId: doc.id });
+    expect(rows).toHaveLength(2);
+    expect(rows.find((row) => row.text === "Hvordan ser en typisk uke ut?")).toMatchObject({
+      audience: "ask_interviewer_company",
+      category: "company",
+      origin: "llm",
+      tags: ["company", "llm"]
+    });
+    expect(imported).toEqual([doc.id]);
+    const systemPrompt = llmClient.structuredCalls[0]!.options.messages[0]!.content;
+    expect(systemPrompt).toContain("ask_interviewer_personal");
+    expect(systemPrompt).toContain("Ikke ta med: instrukser til intervjueren");
+  });
+});
+
 describe("importJobService", () => {
   it("returns early when import job is missing", async () => {
     const repository = new InterviewPrepMemoryRepository();
