@@ -14,6 +14,8 @@ export interface LlmCompleteOptions {
   model?: string;
   /** Optional abort signal for cancellable long-running calls. */
   signal?: AbortSignal;
+  /** Optional per-call timeout in ms (falls back to client default). */
+  timeoutMs?: number;
 }
 
 export interface LlmWebSearchOptions {

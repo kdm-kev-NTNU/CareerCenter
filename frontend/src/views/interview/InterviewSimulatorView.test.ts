@@ -41,6 +41,7 @@ function makePlan(id: string, status: PrepPlanStatus): InterviewPrepPlanDto {
     jobAdText: "",
     researchNotes: "",
     clarificationRound: 0,
+    curationFilledCount: 0,
     clarifications: [],
     questions: [
       {

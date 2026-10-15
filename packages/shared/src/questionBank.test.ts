@@ -4,7 +4,8 @@ import {
   extractBankQuestions,
   findRepeatedStories,
   normalizeQuestionKey,
-  rankBankQuestions
+  rankBankQuestions,
+  resolveCuratedSelection
 } from "./questionBank.js";
 
 describe("extractBankQuestions", () => {
@@ -103,5 +104,43 @@ describe("findRepeatedStories", () => {
         { id: "q4" }
       ])
     ).toEqual(["s1"]);
+  });
+});
+
+describe("resolveCuratedSelection", () => {
+  const candidates = Array.from({ length: 40 }, (_, i) => ({ id: `id-${i + 1}` }));
+
+  it("maps aliases, drops unknowns, and fills up to min", () => {
+    const refs = [
+      ...Array.from({ length: 22 }, (_, i) => `Q${i + 1}`),
+      "Q999",
+      "bogus",
+      "Q1"
+    ];
+    const result = resolveCuratedSelection(refs, candidates, { min: 30, max: 50 });
+    expect(result.ids).toHaveLength(30);
+    expect(result.filledCount).toBe(8);
+    expect(result.droppedRefs).toEqual(["Q999", "bogus"]);
+    expect(new Set(result.ids).size).toBe(30);
+    for (const id of result.ids) {
+      expect(candidates.some((c) => c.id === id)).toBe(true);
+    }
+  });
+
+  it("caps at max and never exceeds candidate pool", () => {
+    const small = Array.from({ length: 10 }, (_, i) => ({ id: `s-${i}` }));
+    const result = resolveCuratedSelection(["Q1", "Q2"], small, { min: 30, max: 50 });
+    expect(result.ids).toHaveLength(10);
+    expect(result.filledCount).toBe(8);
+  });
+
+  it("keeps length in [min, max] when enough candidates exist", () => {
+    for (const count of [0, 5, 30, 45, 60]) {
+      const refs = Array.from({ length: count }, (_, i) => `Q${(i % 40) + 1}`);
+      const result = resolveCuratedSelection(refs, candidates, { min: 30, max: 50 });
+      expect(result.ids.length).toBeGreaterThanOrEqual(30);
+      expect(result.ids.length).toBeLessThanOrEqual(50);
+      expect(new Set(result.ids).size).toBe(result.ids.length);
+    }
   });
 });

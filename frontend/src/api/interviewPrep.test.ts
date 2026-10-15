@@ -125,6 +125,11 @@ describe("interviewPrepApi", () => {
       withRubric: true,
       durationMs: 12_000
     });
+    await interviewPrepApi.rateVideo({
+      prompt: "Fortell om en utfordring",
+      transcript: "Jeg løste det.",
+      durationMs: 12_000
+    });
 
     expect(mockedRequest).toHaveBeenCalledWith(
       "/api/interview/plans",
@@ -157,6 +162,17 @@ describe("interviewPrepApi", () => {
     expect(formData?.get("withRubric")).toBe("true");
     expect(formData?.get("prompt")).toBe("Fortell om en utfordring");
     expect(formData?.get("file")).toBeInstanceOf(Blob);
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/api/interview/video/rate",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          prompt: "Fortell om en utfordring",
+          transcript: "Jeg løste det.",
+          durationMs: 12_000
+        })
+      })
+    );
   });
 
   it("downloads company report PDF via requestBlob", async () => {

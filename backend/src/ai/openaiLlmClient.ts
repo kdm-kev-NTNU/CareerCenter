@@ -25,7 +25,13 @@ export class OpenAiLlmClient implements LlmClient {
     this.transcribeModel = env.OPENAI_TRANSCRIBE_MODEL;
     this.reasoningEffort = env.OPENAI_REASONING_EFFORT;
     this.fastMode = env.OPENAI_FAST_MODE;
-    this.client = env.OPENAI_API_KEY ? new OpenAI({ apiKey: env.OPENAI_API_KEY }) : null;
+    this.client = env.OPENAI_API_KEY
+      ? new OpenAI({
+          apiKey: env.OPENAI_API_KEY,
+          timeout: 60_000,
+          maxRetries: 2
+        })
+      : null;
   }
 
   isConfigured(): boolean {
@@ -42,7 +48,7 @@ export class OpenAiLlmClient implements LlmClient {
         reasoning: { effort: this.reasoningEffort },
         ...(this.fastMode ? { service_tier: "priority" as const } : {})
       },
-      requestOptions(options.signal)
+      requestOptions(options.signal, options.timeoutMs)
     );
     throwIfAborted(options.signal);
     const text = response.output_text?.trim();
@@ -64,7 +70,7 @@ export class OpenAiLlmClient implements LlmClient {
         text: { format: zodTextFormat(schema, "structured_response") },
         ...(this.fastMode ? { service_tier: "priority" as const } : {})
       },
-      requestOptions(options.signal)
+      requestOptions(options.signal, options.timeoutMs)
     );
     throwIfAborted(options.signal);
     const parsed = response.output_parsed;
@@ -120,8 +126,15 @@ function toResponsesInput(options: LlmCompleteOptions): string {
   return options.messages.map((m) => `${m.role.toUpperCase()}:\n${m.content}`).join("\n\n");
 }
 
-function requestOptions(signal?: AbortSignal): { signal?: AbortSignal } | undefined {
-  return signal ? { signal } : undefined;
+function requestOptions(
+  signal?: AbortSignal,
+  timeoutMs?: number
+): { signal?: AbortSignal; timeout?: number } | undefined {
+  if (!signal && timeoutMs === undefined) return undefined;
+  return {
+    ...(signal ? { signal } : {}),
+    ...(timeoutMs !== undefined ? { timeout: timeoutMs } : {})
+  };
 }
 
 function throwIfAborted(signal?: AbortSignal): void {

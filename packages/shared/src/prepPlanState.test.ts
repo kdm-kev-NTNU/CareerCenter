@@ -3,6 +3,7 @@ import {
   canDeletePrepPlan,
   canStartSimulators,
   isPrepPlanPipelineActive,
+  prepPlanResumePoint,
   prepPlanStepVisual,
   transitionPrepPlan
 } from "./prepPlanState.js";
@@ -46,6 +47,29 @@ describe("transitionPrepPlan", () => {
     expect(transitionPrepPlan("awaiting_answers", { type: "cancel" })).toBe("awaiting_answers");
     expect(transitionPrepPlan("cancelled", { type: "start_research" })).toBe("researching");
     expect(isPrepPlanPipelineActive("searching", "cancelled")).toBe(false);
+  });
+
+  it("resumes from failed/cancelled to the right status", () => {
+    expect(transitionPrepPlan("failed", { type: "resume_research" })).toBe("researching");
+    expect(transitionPrepPlan("failed", { type: "resume_answers" })).toBe("awaiting_answers");
+    expect(transitionPrepPlan("failed", { type: "resume_curation" })).toBe("curating");
+    expect(transitionPrepPlan("cancelled", { type: "resume_curation" })).toBe("curating");
+    expect(transitionPrepPlan("ready", { type: "resume_research" })).toBe("ready");
+    expect(transitionPrepPlan("draft", { type: "resume_answers" })).toBe("draft");
+  });
+
+  it("maps pipeline step to resume point without overwriting answered clarifications", () => {
+    expect(prepPlanResumePoint("searching", 0)).toEqual({ kind: "research", from: "searching" });
+    expect(prepPlanResumePoint("research_notes", 0)).toEqual({ kind: "research", from: "research_notes" });
+    expect(prepPlanResumePoint("company_profile", 0)).toEqual({ kind: "research", from: "company_profile" });
+    expect(prepPlanResumePoint("company_report", 0)).toEqual({ kind: "research", from: "company_report" });
+    expect(prepPlanResumePoint("clarifications", 0)).toEqual({ kind: "research", from: "clarifications" });
+    expect(prepPlanResumePoint("clarifications", 1)).toEqual({ kind: "awaiting_answers" });
+    expect(prepPlanResumePoint("clarifications", 2)).toEqual({ kind: "awaiting_answers" });
+    expect(prepPlanResumePoint("awaiting_answers", 1)).toEqual({ kind: "awaiting_answers" });
+    expect(prepPlanResumePoint("curating_questions", 1)).toEqual({ kind: "curation" });
+    expect(prepPlanResumePoint("curating_cases", 1)).toEqual({ kind: "curation" });
+    expect(prepPlanResumePoint("created", 0)).toEqual({ kind: "research", from: "created" });
   });
 
   it("marks earlier pipeline steps done and later steps pending", () => {

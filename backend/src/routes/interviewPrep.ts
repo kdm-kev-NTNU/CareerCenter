@@ -13,13 +13,12 @@ import {
   inferKnowledgeKind,
   normalizeEssentialsInput,
   resolveEssentialsSheet,
-  starRubricCriteria,
   videoSimulatorSettingsSchema
 } from "@careercenter/shared";
 import type { QuestionAudience } from "@careercenter/shared";
 import type { FastifyInstance } from "fastify";
 import { nanoid } from "nanoid";
-import type { LlmClient } from "../ai/llmClient.js";
+import type { LlmClient, LlmTranscribeOptions } from "../ai/llmClient.js";
 import { env } from "../config/env.js";
 import { toFullCaseDto, toPublicCaseDto } from "../interview/caseDto.js";
 import { parseCaseSections } from "../interview/caseSections.js";
@@ -33,7 +32,6 @@ import {
   toSessionDto,
   toSimulatorSettingsDto
 } from "../interview/dtoMappers.js";
-import { interviewFeedbackRubricSchema, sumRubricScores } from "../interview/feedbackRubric.js";
 import { shouldChunkImport } from "../interview/caseSpans.js";
 import { importDocumentText } from "../interview/importDocumentText.js";
 import {
@@ -84,17 +82,21 @@ import {
   abilityAttemptInputSchema,
   parseMultipartBool,
   transcriptMessageSchema,
+  videoRateBodySchema,
   videoRunInputSchema,
   videoTranscribeFieldsSchema
 } from "../interview/meccaSchemas.js";
 import { PrepResearchService } from "../interview/prepResearchService.js";
 import { reindexAllBankQuestions, reindexBankQuestionsForDoc } from "../interview/reindexBankQuestions.js";
 import {
-  buildFinishRubricPrompt,
   buildPlanPracticeScript,
   buildSimulatorSystemPrompt,
   formatSessionTranscriptForRubric
 } from "../interview/prompts.js";
+import {
+  buildRubricUserContent,
+  rateStarAnswer
+} from "../interview/rateStarAnswer.js";
 import { createVoiceSession } from "../interview/voiceSession.js";
 import type { InterviewPrepRepository } from "../interviewPrepRepository.js";
 
@@ -102,6 +104,26 @@ export interface InterviewPrepRouteDeps {
   llmClient: LlmClient;
   interviewPrepRepository: InterviewPrepRepository;
   jobCancellationRegistry?: JobCancellationRegistry;
+}
+
+async function transcribeWithRetry(
+  llm: LlmClient,
+  options: LlmTranscribeOptions,
+  maxRetries = 1
+): Promise<string> {
+  if (!llm.transcribe) {
+    throw new Error("Transkripsjon er ikke tilgjengelig.");
+  }
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await llm.transcribe(options);
+    } catch (error) {
+      lastError = error;
+      if (attempt === maxRetries) break;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
 export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewPrepRouteDeps) {
@@ -670,6 +692,22 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
     }
   });
 
+  app.post("/api/interview/plans/:id/resume", async (request, reply) => {
+    if (!deps.llmClient.isConfigured()) {
+      return reply.code(503).send({ message: "AI er ikke konfigurert." });
+    }
+    try {
+      const plan = await researchService.enqueueResume(
+        request.user.id,
+        (request.params as { id: string }).id
+      );
+      return reply.code(202).send(toPrepPlanDto(plan));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Kunne ikke gjenoppta planen.";
+      return reply.code(400).send({ message });
+    }
+  });
+
   app.post("/api/interview/plans/:id/clarifications", async (request, reply) => {
     if (!deps.llmClient.isConfigured()) {
       return reply.code(503).send({ message: "AI er ikke konfigurert." });
@@ -880,27 +918,18 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
 
     const history = await deps.interviewPrepRepository.listSessionMessages(request.user.id, sessionId);
     const transcript = formatSessionTranscriptForRubric(history);
-    const defaultScores = Object.fromEntries(starRubricCriteria.map((key) => [key, 3])) as Record<
-      (typeof starRubricCriteria)[number],
-      number
-    >;
+    const rated = await rateStarAnswer(deps.llmClient, transcript, { log: request.log });
+    if (!rated.ok) {
+      return reply.code(502).send({
+        message: "KI-vurdering feilet midlertidig. Prøv å avslutte på nytt."
+      });
+    }
 
-    const structured = await deps.llmClient.completeStructured(
-      {
-        messages: [
-          { role: "system", content: buildFinishRubricPrompt() },
-          { role: "user", content: transcript }
-        ]
-      },
-      interviewFeedbackRubricSchema
-    ).catch(() => ({
-      scores: defaultScores,
-      sum: sumRubricScores(defaultScores),
-      improvement: "Stram inn innledningen og tydeliggjør resultat tidligere."
-    }));
-
-    const feedback = interviewFeedbackRubricSchema.parse(structured);
-    const finished = await deps.interviewPrepRepository.finishSession(request.user.id, sessionId, feedback);
+    const finished = await deps.interviewPrepRepository.finishSession(
+      request.user.id,
+      sessionId,
+      rated.feedback
+    );
     if (!finished) return reply.code(409).send({ message: "Sesjonen er allerede avsluttet." });
     return toSessionDto(finished);
   });
@@ -997,47 +1026,78 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
       if (!deps.llmClient.transcribe || !deps.llmClient.isConfigured()) {
         return reply.code(503).send({ message: "AI er ikke konfigurert." });
       }
-      transcript = await deps.llmClient.transcribe({
-        buffer: fileBuffer,
-        filename: parsed.filename ?? filename,
-        mimeType: parsed.mimeType ?? mimeType
-      });
+      try {
+        transcript = await transcribeWithRetry(deps.llmClient, {
+          buffer: fileBuffer,
+          filename: parsed.filename ?? filename,
+          mimeType: parsed.mimeType ?? mimeType
+        });
+      } catch (error) {
+        request.log.warn({ err: error }, "Video-transkripsjon feilet");
+        const message = error instanceof Error ? error.message : "";
+        if (/tomt svar/i.test(message)) {
+          return reply.code(422).send({ message: "Fant ingen tale i opptaket." });
+        }
+        return reply.code(502).send({
+          message: "Transkribering feilet midlertidig. Prøv på nytt."
+        });
+      }
       mock = false;
     }
 
-    const stats = answerStats(transcript, parsed.durationMs ?? 60_000);
-    let feedback = null;
-    let feedbackFallback = false;
-    if (withRubric) {
-      const defaultScores = Object.fromEntries(starRubricCriteria.map((key) => [key, 3])) as Record<
-        (typeof starRubricCriteria)[number],
-        number
-      >;
-      const rubricUserContent = prompt
-        ? `Spørsmål: ${prompt}\n\nSvar: ${transcript}`
-        : transcript;
-      let usedFallback = false;
-      feedback = await deps.llmClient
-        .completeStructured(
-          {
-            messages: [
-              { role: "system", content: buildFinishRubricPrompt() },
-              { role: "user", content: rubricUserContent }
-            ]
-          },
-          interviewFeedbackRubricSchema
-        )
-        .catch(() => {
-          usedFallback = true;
-          return {
-            scores: defaultScores,
-            sum: sumRubricScores(defaultScores),
-            improvement: "Stram inn strukturen og reduser fyllord."
-          };
-        });
-      feedbackFallback = usedFallback;
+    if (!transcript.trim()) {
+      return reply.code(422).send({ message: "Fant ingen tale i opptaket." });
     }
-    return { mock, transcript, stats, feedback, feedbackFallback };
+
+    const stats = answerStats(transcript, parsed.durationMs ?? 60_000);
+    if (!withRubric) {
+      return { mock, transcript, stats, feedback: null, rating: "skipped" as const };
+    }
+
+    const rated = await rateStarAnswer(deps.llmClient, buildRubricUserContent(prompt, transcript), {
+      log: request.log
+    });
+    if (!rated.ok) {
+      return {
+        mock,
+        transcript,
+        stats,
+        feedback: null,
+        rating: "unavailable" as const
+      };
+    }
+    return {
+      mock,
+      transcript,
+      stats,
+      feedback: rated.feedback,
+      rating: "ok" as const
+    };
+  });
+
+  app.post("/api/interview/video/rate", async (request, reply) => {
+    if (!deps.llmClient.isConfigured()) {
+      return reply.code(503).send({ message: "AI er ikke konfigurert." });
+    }
+    const body = videoRateBodySchema.parse(request.body);
+    const stats = answerStats(body.transcript, body.durationMs ?? 60_000);
+    const rated = await rateStarAnswer(
+      deps.llmClient,
+      buildRubricUserContent(body.prompt, body.transcript),
+      { log: request.log }
+    );
+    if (!rated.ok) {
+      return {
+        stats,
+        feedback: null,
+        rating: "unavailable" as const
+      };
+    }
+    return {
+      stats,
+      feedback: rated.feedback,
+      rating: "ok" as const
+    };
   });
 
   app.get("/api/interview/ability/attempts", async (request) => {

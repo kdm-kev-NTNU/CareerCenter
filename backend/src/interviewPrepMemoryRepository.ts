@@ -360,9 +360,11 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       pipelineStep: "created",
       jobAdText: input.jobAdText ?? "",
       researchNotes: "",
+      searchSnippet: "",
       companyProfileJson: "{}",
       companyReportJson: "",
       clarificationRound: 0,
+      curationFilledCount: 0,
       clarifications: [],
       questions: [],
       tasks: [],
@@ -393,8 +395,10 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
     input: {
       pipelineStep: InterviewPrepPlanRecord["pipelineStep"];
       researchNotes?: string;
+      searchSnippet?: string;
       companyProfileJson?: string;
       companyReportJson?: string;
+      curationFilledCount?: number;
     }
   ): Promise<InterviewPrepPlanRecord | null> {
     const plan = await this.getPrepPlan(userId, id);
@@ -403,8 +407,10 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       ...plan,
       pipelineStep: input.pipelineStep,
       researchNotes: input.researchNotes ?? plan.researchNotes,
+      searchSnippet: input.searchSnippet ?? plan.searchSnippet,
       companyProfileJson: input.companyProfileJson ?? plan.companyProfileJson,
       companyReportJson: input.companyReportJson ?? plan.companyReportJson,
+      curationFilledCount: input.curationFilledCount ?? plan.curationFilledCount,
       updatedAt: nowIso()
     };
     this.prepPlans.set(id, updated);
@@ -520,12 +526,14 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       }>;
       tasks: Array<{ title: string; description: string }>;
       recommendedCaseIds?: string[];
+      curationFilledCount?: number;
     }
   ): Promise<InterviewPrepPlanRecord | null> {
     const plan = await this.getPrepPlan(userId, id);
     if (!plan) return null;
     const updated: InterviewPrepPlanRecord = {
       ...plan,
+      curationFilledCount: input.curationFilledCount ?? plan.curationFilledCount,
       questions: input.questions.map((item, index) => ({
         id: nanoid(),
         text: item.text,

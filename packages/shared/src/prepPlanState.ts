@@ -10,7 +10,10 @@ export type PrepPlanEvent =
   | { type: "curation_done" }
   | { type: "curation_failed"; reason?: string }
   | { type: "fail"; reason?: string }
-  | { type: "cancel" };
+  | { type: "cancel" }
+  | { type: "resume_research" }
+  | { type: "resume_answers" }
+  | { type: "resume_curation" };
 
 export const prepPlanPipelineSteps = [
   "created",
@@ -25,6 +28,46 @@ export const prepPlanPipelineSteps = [
   "ready"
 ] as const;
 export type PrepPlanPipelineStep = (typeof prepPlanPipelineSteps)[number];
+
+/** Pipeline steps that produce research artefacts and can be resumed mid-flight. */
+export const researchPipelineSteps = [
+  "created",
+  "searching",
+  "research_notes",
+  "company_profile",
+  "company_report",
+  "clarifications"
+] as const;
+export type ResearchPipelineStep = (typeof researchPipelineSteps)[number];
+
+export type PrepPlanResumePoint =
+  | { kind: "research"; from: ResearchPipelineStep }
+  | { kind: "awaiting_answers" }
+  | { kind: "curation" };
+
+/**
+ * Where to resume a failed/cancelled plan without redoing finished work.
+ * Invariant: clarificationRound >= 1 with step "clarifications" means round-2
+ * generation failed after answers exist — resume to awaiting_answers, not research.
+ */
+export function prepPlanResumePoint(
+  step: PrepPlanPipelineStep,
+  clarificationRound: number
+): PrepPlanResumePoint {
+  if (step === "curating_questions" || step === "curating_cases" || step === "ready") {
+    return { kind: "curation" };
+  }
+  if (step === "awaiting_answers") {
+    return { kind: "awaiting_answers" };
+  }
+  if (step === "clarifications" && clarificationRound >= 1) {
+    return { kind: "awaiting_answers" };
+  }
+  if ((researchPipelineSteps as readonly string[]).includes(step)) {
+    return { kind: "research", from: step as ResearchPipelineStep };
+  }
+  return { kind: "research", from: "created" };
+}
 
 export type PrepPlanStepVisual = "done" | "active" | "pending" | "failed";
 
@@ -126,7 +169,9 @@ export function transitionPrepPlan(status: PrepPlanStatus, event: PrepPlanEvent)
       break;
     case "failed":
     case "cancelled":
-      if (event.type === "start_research") return "researching";
+      if (event.type === "start_research" || event.type === "resume_research") return "researching";
+      if (event.type === "resume_answers") return "awaiting_answers";
+      if (event.type === "resume_curation") return "curating";
       break;
   }
   return status;

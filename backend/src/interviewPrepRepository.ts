@@ -122,9 +122,11 @@ export interface InterviewPrepPlanRecord {
   pipelineStep: PrepPlanPipelineStep;
   jobAdText: string;
   researchNotes: string;
+  searchSnippet: string;
   companyProfileJson: string;
   companyReportJson: string;
   clarificationRound: number;
+  curationFilledCount: number;
   failureReason?: string;
   clarifications: InterviewPrepClarificationRecord[];
   questions: InterviewPrepQuestionRecord[];
@@ -389,8 +391,10 @@ export interface InterviewPrepRepository {
     input: {
       pipelineStep: PrepPlanPipelineStep;
       researchNotes?: string;
+      searchSnippet?: string;
       companyProfileJson?: string;
       companyReportJson?: string;
+      curationFilledCount?: number;
     }
   ): Promise<InterviewPrepPlanRecord | null>;
   setPrepPlanResearch(
@@ -432,6 +436,7 @@ export interface InterviewPrepRepository {
       }>;
       tasks: Array<{ title: string; description: string }>;
       recommendedCaseIds?: string[];
+      curationFilledCount?: number;
     }
   ): Promise<InterviewPrepPlanRecord | null>;
   replacePlanQuestion(

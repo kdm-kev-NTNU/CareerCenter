@@ -429,6 +429,7 @@ export {
   categoryForDocKind,
   normalizeQuestionKey,
   rankBankQuestions,
+  resolveCuratedSelection,
   findRepeatedStories,
   joinSoftWrappedLines,
   splitQuestionSentences,
@@ -500,7 +501,9 @@ export {
   canCancelPrepPlan,
   canDeletePrepPlan,
   prepPlanPipelineSteps,
+  researchPipelineSteps,
   parsePrepPlanPipelineStep,
+  prepPlanResumePoint,
   prepPlanStepVisual,
   isPrepPlanPipelineActive,
   MAX_CLARIFICATION_ROUNDS,
@@ -508,7 +511,13 @@ export {
   MIN_CURATED_QUESTIONS,
   MAX_CURATED_QUESTIONS
 } from "./prepPlanState.js";
-export type { PrepPlanEvent, PrepPlanPipelineStep, PrepPlanStepVisual } from "./prepPlanState.js";
+export type {
+  PrepPlanEvent,
+  PrepPlanPipelineStep,
+  PrepPlanResumePoint,
+  PrepPlanStepVisual,
+  ResearchPipelineStep
+} from "./prepPlanState.js";
 export {
   transitionVideoSim,
   canStartRecording,
@@ -536,6 +545,9 @@ export type {
   InterviewAbilityTestAttemptDto,
   InterviewVideoSettingsDto,
   InterviewVideoRunDto,
+  VideoRatingStatus,
+  VideoTranscribeResultDto,
+  VideoRateResultDto,
   VoiceSessionDto
 } from "./interviewMeccaDtos.js";
 export { rankCasesForCompany } from "./rankCases.js";

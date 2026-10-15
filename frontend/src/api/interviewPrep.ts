@@ -22,8 +22,9 @@ import type {
   QuestionDiscardReason,
   ResearchModel,
   VideoSimulatorSettings,
+  VideoRateResultDto,
+  VideoTranscribeResultDto,
   VoiceSessionDto,
-  AnswerStats,
   InterviewSessionFeedbackDto
 } from "@careercenter/shared";
 import { request, requestBlob, uploadRequest } from "./client.js";
@@ -155,6 +156,8 @@ export const interviewPrepApi = {
     request<InterviewPrepPlanDto>("/api/interview/plans", { method: "POST", body: JSON.stringify(payload) }),
   startPlanResearch: (id: string) =>
     request<InterviewPrepPlanDto>(`/api/interview/plans/${id}/research`, { method: "POST" }),
+  resumePlan: (id: string) =>
+    request<InterviewPrepPlanDto>(`/api/interview/plans/${id}/resume`, { method: "POST" }),
   cancelPlan: (id: string) =>
     request<InterviewPrepPlanDto>(`/api/interview/plans/${id}/cancel`, { method: "POST" }),
   deletePlan: (id: string) => request<void>(`/api/interview/plans/${id}`, { method: "DELETE" }),
@@ -302,14 +305,13 @@ export const interviewPrepApi = {
     if (payload.durationMs !== undefined) formData.append("durationMs", String(payload.durationMs));
     if (payload.prompt) formData.append("prompt", payload.prompt);
     formData.append("withRubric", payload.withRubric ? "true" : "false");
-    return uploadRequest<{
-      mock: boolean;
-      transcript: string;
-      stats?: AnswerStats;
-      feedback?: InterviewSessionFeedbackDto | null;
-      feedbackFallback?: boolean;
-    }>("/api/interview/video/transcribe", formData);
+    return uploadRequest<VideoTranscribeResultDto>("/api/interview/video/transcribe", formData);
   },
+  rateVideo: (payload: { prompt: string; transcript: string; durationMs?: number }) =>
+    request<VideoRateResultDto>("/api/interview/video/rate", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
 
   abilityAttempts: () => request<InterviewAbilityTestAttemptDto[]>("/api/interview/ability/attempts"),
   createAbilityAttempt: (payload: {

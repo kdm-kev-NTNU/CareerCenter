@@ -128,6 +128,7 @@ export interface InterviewPrepPlanDto {
   companyProfile?: CompanyProfile;
   companyReport?: CompanyReport;
   clarificationRound: number;
+  curationFilledCount: number;
   failureReason?: string;
   clarifications: InterviewPrepClarificationDto[];
   questions: InterviewPrepQuestionDto[];

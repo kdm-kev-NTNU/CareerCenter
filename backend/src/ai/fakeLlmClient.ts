@@ -12,8 +12,11 @@ export interface FakeLlmClientOptions {
   structuredResult?: unknown;
   structuredResults?: unknown[];
   structuredError?: Error;
+  /** Queue of errors thrown before falling back to structuredResult / structuredResults. */
+  structuredErrors?: Error[];
   webSearchResult?: string;
   transcribeResult?: string;
+  transcribeError?: Error;
 }
 
 export class FakeLlmClient implements LlmClient {
@@ -27,8 +30,10 @@ export class FakeLlmClient implements LlmClient {
   private structuredResult: unknown;
   private structuredResults: unknown[];
   private structuredError?: Error;
+  private structuredErrors: Error[];
   private webSearchResult: string;
   private transcribeResult: string;
+  private transcribeError?: Error;
 
   constructor(options: FakeLlmClientOptions = {}) {
     this.configured = options.configured ?? true;
@@ -36,8 +41,10 @@ export class FakeLlmClient implements LlmClient {
     this.structuredResult = options.structuredResult ?? { ok: true };
     this.structuredResults = options.structuredResults ?? [];
     this.structuredError = options.structuredError;
+    this.structuredErrors = options.structuredErrors ?? [];
     this.webSearchResult = options.webSearchResult ?? "fake search result";
     this.transcribeResult = options.transcribeResult ?? "fake transcript";
+    this.transcribeError = options.transcribeError;
   }
 
   isConfigured(): boolean {
@@ -60,6 +67,8 @@ export class FakeLlmClient implements LlmClient {
       throw Object.assign(new Error("Avbrutt"), { name: "AbortError" });
     }
     this.structuredCalls.push({ options, schema });
+    const queuedError = this.structuredErrors.shift();
+    if (queuedError) throw queuedError;
     if (this.structuredError) throw this.structuredError;
     const next = this.structuredResults.shift() ?? this.structuredResult;
     return schema.parse(next);
@@ -75,6 +84,7 @@ export class FakeLlmClient implements LlmClient {
 
   async transcribe(options: LlmTranscribeOptions): Promise<string> {
     this.transcribeCalls.push(options);
+    if (this.transcribeError) throw this.transcribeError;
     return this.transcribeResult;
   }
 }

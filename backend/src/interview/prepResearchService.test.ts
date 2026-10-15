@@ -32,7 +32,7 @@ describe("PrepResearchService", () => {
       }))
     );
     const bank = await repository.listBankQuestions("u1");
-    const selectedIds = bank.slice(0, 30).map((q) => q.id);
+    const selectedIds = bank.slice(0, 30);
 
     const llmClient = new FakeLlmClient({
       structuredResults: [
@@ -68,7 +68,7 @@ describe("PrepResearchService", () => {
         },
         { clarifications: [{ question: "Hvilken avdeling?" }] },
         {
-          selectedQuestionIds: selectedIds,
+          selectedRefs: selectedIds.map((_, i) => `Q${i + 1}`),
           generatedQuestions: [],
           tasks: [{ title: "Les årsrapport", description: "Noter tall." }]
         }
@@ -93,7 +93,9 @@ describe("PrepResearchService", () => {
     let updated = await repository.getPrepPlan("u1", plan.id);
     expect(updated?.status).toBe("awaiting_answers");
     expect(updated?.pipelineStep).toBe("awaiting_answers");
-    expect(steps).toEqual([
+    expect(updated?.searchSnippet.length).toBeGreaterThan(0);
+    const uniqueForward = steps.filter((step, index) => index === 0 || step !== steps[index - 1]);
+    expect(uniqueForward).toEqual([
       "searching",
       "research_notes",
       "company_profile",
@@ -181,7 +183,7 @@ describe("PrepResearchService", () => {
         },
         { clarifications: [{ question: "Team?" }] },
         {
-          selectedQuestionIds: bank.map((q) => q.id),
+          selectedRefs: bank.map((_, i) => `Q${i + 1}`),
           generatedQuestions: [],
           tasks: []
         }
@@ -253,7 +255,7 @@ describe("PrepResearchService", () => {
         },
         { clarifications: [{ question: "Format?" }] },
         {
-          selectedQuestionIds: bank.map((q) => q.id),
+          selectedRefs: bank.map((_, i) => `Q${i + 1}`),
           generatedQuestions: [],
           tasks: []
         }
@@ -330,13 +332,13 @@ describe("PrepResearchService", () => {
         emptyReport,
         { clarifications: [{ question: "Format?" }] },
         {
-          // A reverse question picked by mistake is dropped from the interviewer's list.
-          selectedQuestionIds: [...candidateIds, company.id],
+          // Extra unknown refs are dropped; reverse picks use R-aliases.
+          selectedRefs: [...candidateIds.map((_, i) => `Q${i + 1}`), "R1"],
           generatedQuestions: [],
           reverseQuestions: [
-            { text: "Hvordan ser en typisk uke ut for en intern i KI-teamet?", audience: "ask_interviewer_company", bankQuestionId: company.id },
-            { text: personal.text, audience: "ask_interviewer_personal", bankQuestionId: personal.id },
-            { text: "Hvordan måler dere effekten av KI-satsingen?", audience: "ask_interviewer_company", bankQuestionId: null }
+            { text: "Hvordan ser en typisk uke ut for en intern i KI-teamet?", audience: "ask_interviewer_company", bankRef: "R2" },
+            { text: personal.text, audience: "ask_interviewer_personal", bankRef: "R1" },
+            { text: "Hvordan måler dere effekten av KI-satsingen?", audience: "ask_interviewer_company", bankRef: null }
           ],
           tasks: []
         }
@@ -366,7 +368,7 @@ describe("PrepResearchService", () => {
     expect(toAsk.every((q) => !q.notes)).toBe(true);
 
     const curationUser = llmClient.structuredCalls[3]!.options.messages[1]!.content;
-    expect(curationUser).toContain(`${personal.id} | ask_interviewer_personal | ${personal.text}`);
+    expect(curationUser).toContain(`R1 | ask_interviewer_personal | ${personal.text}`);
     expect(curationUser).toContain("Hvordan måler dere effekten av KI-satsingen?");
     const candidateBlock = curationUser.split("Spørsmål kandidaten kan stille intervjueren")[0]!;
     expect(candidateBlock).not.toContain(personal.text);
@@ -479,6 +481,264 @@ describe("PrepResearchService", () => {
     await expect(research.startResearch("u1", plan.id)).rejects.toThrow();
     const updated = await repository.getPrepPlan("u1", plan.id);
     expect(updated?.status).toBe("failed");
+  });
+
+  it("resumes curation without re-running research LLM calls", async () => {
+    const repository = new InterviewPrepMemoryRepository();
+    const doc = await repository.createKnowledgeDoc("u1", {
+      kind: "star",
+      title: "Bank",
+      content: "x",
+      contentHash: sha256Content("resume-curate")
+    });
+    await repository.insertBankQuestions(
+      "u1",
+      doc.id,
+      Array.from({ length: 35 }, (_, i) => ({
+        text: `Resume Q ${i}?`,
+        category: "behavioral" as const,
+        tags: [],
+        origin: "rule" as const,
+        contentHash: sha256Content(`resume-q-${i}`)
+      }))
+    );
+    const bank = await repository.listBankQuestions("u1");
+    const plan = await repository.createPrepPlan("u1", {
+      companyName: "ResumeCo",
+      roleTitle: "Analyst",
+      format: "interview",
+      researchModel: "gpt-6-astra"
+    });
+    await repository.setPrepPlanPipeline("u1", plan.id, {
+      pipelineStep: "curating_questions",
+      researchNotes: "Saved notes",
+      searchSnippet: "Saved search",
+      companyProfileJson: JSON.stringify({
+        industries: [],
+        businessAreas: [],
+        interviewFormats: [],
+        caseTypes: [],
+        values: [],
+        themes: [],
+        summary: "profile"
+      }),
+      companyReportJson: JSON.stringify({
+        headline: "Rapport",
+        keyFacts: {},
+        aboutCompany: "",
+        businessAreas: [],
+        strategyAndNews: [],
+        cultureAndValues: [],
+        roleInContext: "",
+        jobAdRequirements: [],
+        nicheInsights: [],
+        companyQuestionPrep: [],
+        interviewAngles: [],
+        questionsToAsk: [],
+        sources: []
+      })
+    });
+    await repository.setPrepPlanResearch("u1", plan.id, {
+      researchNotes: "Saved notes",
+      companyProfileJson: JSON.stringify({
+        industries: [],
+        businessAreas: [],
+        interviewFormats: [],
+        caseTypes: [],
+        values: [],
+        themes: [],
+        summary: "profile"
+      }),
+      companyReportJson: JSON.stringify({
+        headline: "Rapport",
+        keyFacts: {},
+        aboutCompany: "",
+        businessAreas: [],
+        strategyAndNews: [],
+        cultureAndValues: [],
+        roleInContext: "",
+        jobAdRequirements: [],
+        nicheInsights: [],
+        companyQuestionPrep: [],
+        interviewAngles: [],
+        questionsToAsk: [],
+        sources: []
+      }),
+      clarificationRound: 1,
+      clarifications: [{ question: "Team?", sortOrder: 0 }]
+    });
+    await repository.updatePrepPlanStatus("u1", plan.id, "failed", "Kuratering feilet.");
+    await repository.setPrepPlanPipeline("u1", plan.id, { pipelineStep: "curating_questions" });
+
+    const llmClient = new FakeLlmClient({
+      structuredResults: [
+        {
+          selectedRefs: bank.slice(0, 22).map((_, i) => `Q${i + 1}`).concat(["Q999", "bogus", "Q1"]),
+          generatedQuestions: [],
+          tasks: []
+        }
+      ]
+    });
+    const research = service(llmClient, repository);
+    const resumed = await research.enqueueResume("u1", plan.id);
+    expect(resumed.status).toBe("curating");
+
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      const current = await repository.getPrepPlan("u1", plan.id);
+      if (current?.status === "ready" || current?.status === "failed") break;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+
+    const ready = await repository.getPrepPlan("u1", plan.id);
+    expect(ready?.status).toBe("ready");
+    expect(ready?.questions.filter((q) => q.audience === "candidate")).toHaveLength(30);
+    expect(ready?.curationFilledCount).toBe(8);
+    expect(llmClient.webSearchCalls).toHaveLength(0);
+    expect(llmClient.completeCalls).toHaveLength(0);
+    expect(llmClient.structuredCalls).toHaveLength(1);
+  });
+
+  it("resumes company_report using stored search snippet and notes", async () => {
+    const repository = new InterviewPrepMemoryRepository();
+    const plan = await repository.createPrepPlan("u1", {
+      companyName: "ResumeReport",
+      roleTitle: "X",
+      format: "interview",
+      researchModel: "gpt-6-astra"
+    });
+    await repository.setPrepPlanPipeline("u1", plan.id, {
+      pipelineStep: "company_report",
+      searchSnippet: "Cached nettsøk",
+      researchNotes: "Cached notes",
+      companyProfileJson: JSON.stringify({
+        industries: ["banking"],
+        businessAreas: [],
+        interviewFormats: [],
+        caseTypes: [],
+        values: [],
+        themes: [],
+        summary: "Cached profile"
+      })
+    });
+    await repository.updatePrepPlanStatus("u1", plan.id, "failed", "Rapport feilet.");
+
+    const llmClient = new FakeLlmClient({
+      structuredResults: [
+        {
+          headline: "Ny rapport",
+          keyFacts: {},
+          aboutCompany: "",
+          businessAreas: [],
+          strategyAndNews: [],
+          cultureAndValues: [],
+          roleInContext: "",
+          jobAdRequirements: [],
+          nicheInsights: [],
+          companyQuestionPrep: [],
+          interviewAngles: [],
+          questionsToAsk: [],
+          sources: []
+        },
+        { clarifications: [{ question: "Avdeling?" }] }
+      ]
+    });
+    const research = service(llmClient, repository);
+    await research.enqueueResume("u1", plan.id);
+
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      const current = await repository.getPrepPlan("u1", plan.id);
+      if (current?.status === "awaiting_answers" || current?.status === "failed") break;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+
+    const updated = await repository.getPrepPlan("u1", plan.id);
+    expect(updated?.status).toBe("awaiting_answers");
+    expect(updated?.researchNotes).toBe("Cached notes");
+    expect(updated?.searchSnippet).toBe("Cached nettsøk");
+    expect(updated?.companyReportJson).toContain("Ny rapport");
+    expect(llmClient.webSearchCalls).toHaveLength(0);
+    expect(llmClient.completeCalls).toHaveLength(0);
+    expect(llmClient.structuredCalls).toHaveLength(2);
+    const reportUser = llmClient.structuredCalls[0]!.options.messages.find((m) => m.role === "user")!.content;
+    expect(reportUser).toContain("Cached nettsøk");
+    expect(reportUser).toContain("Cached notes");
+  });
+
+  it("fails curation with a clear message when the bank is too small", async () => {
+    const repository = new InterviewPrepMemoryRepository();
+    const doc = await repository.createKnowledgeDoc("u1", {
+      kind: "star",
+      title: "Tiny",
+      content: "x",
+      contentHash: sha256Content("tiny-bank")
+    });
+    await repository.insertBankQuestions(
+      "u1",
+      doc.id,
+      Array.from({ length: 10 }, (_, i) => ({
+        text: `Tiny ${i}?`,
+        category: "behavioral" as const,
+        tags: [],
+        origin: "rule" as const,
+        contentHash: sha256Content(`tiny-${i}`)
+      }))
+    );
+    const plan = await repository.createPrepPlan("u1", {
+      companyName: "TinyCo",
+      roleTitle: "X",
+      format: "interview",
+      researchModel: "gpt-6-astra"
+    });
+    await repository.setPrepPlanPipeline("u1", plan.id, {
+      pipelineStep: "curating_questions",
+      researchNotes: "notes",
+      companyProfileJson: JSON.stringify({
+        industries: [],
+        businessAreas: [],
+        interviewFormats: [],
+        caseTypes: [],
+        values: [],
+        themes: [],
+        summary: ""
+      }),
+      companyReportJson: JSON.stringify({
+        headline: "",
+        keyFacts: {},
+        aboutCompany: "",
+        businessAreas: [],
+        strategyAndNews: [],
+        cultureAndValues: [],
+        roleInContext: "",
+        jobAdRequirements: [],
+        nicheInsights: [],
+        companyQuestionPrep: [],
+        interviewAngles: [],
+        questionsToAsk: [],
+        sources: []
+      })
+    });
+    await repository.setPrepPlanResearch("u1", plan.id, {
+      researchNotes: "notes",
+      clarificationRound: 1,
+      clarifications: [{ question: "?", sortOrder: 0 }]
+    });
+    await repository.updatePrepPlanStatus("u1", plan.id, "failed", "x");
+    await repository.setPrepPlanPipeline("u1", plan.id, { pipelineStep: "curating_questions" });
+
+    const llmClient = new FakeLlmClient({ structuredResults: [] });
+    const research = service(llmClient, repository);
+    await research.enqueueResume("u1", plan.id);
+
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      const current = await repository.getPrepPlan("u1", plan.id);
+      if (current?.status === "failed" && current.failureReason?.includes("aktive spørsmål")) break;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+
+    const failed = await repository.getPrepPlan("u1", plan.id);
+    expect(failed?.status).toBe("failed");
+    expect(failed?.failureReason).toMatch(/Spørsmålsbanken har bare 10 aktive spørsmål/);
+    expect(llmClient.structuredCalls).toHaveLength(0);
   });
 });
 
