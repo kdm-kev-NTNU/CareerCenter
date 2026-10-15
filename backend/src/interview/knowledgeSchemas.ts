@@ -1,12 +1,14 @@
 import {
   caseSourceKinds,
   caseStyles,
+  DEFAULT_RESEARCH_MODEL,
   interviewModes,
   knowledgeDocKinds,
   MAX_CLARIFICATIONS_PER_ROUND,
   MAX_CURATED_QUESTIONS,
   MIN_CURATED_QUESTIONS,
   prepFormats,
+  researchModels,
   questionCategories,
   questionTargets
 } from "@careercenter/shared";
@@ -32,7 +34,9 @@ export const caseEntryInputSchema = z.object({
 export const prepPlanIntakeSchema = z.object({
   companyName: z.string().min(1),
   roleTitle: z.string().default(""),
-  format: z.enum(prepFormats).default("interview")
+  format: z.enum(prepFormats).default("interview"),
+  researchModel: z.enum(researchModels).default(DEFAULT_RESEARCH_MODEL),
+  jobAdText: z.string().max(20_000).default("")
 });
 
 export const clarificationAnswersSchema = z.object({
@@ -72,6 +76,49 @@ export const companyProfileSchema = z.object({
   values: z.array(z.string()).default([]),
   themes: z.array(z.string()).default([]),
   summary: z.string().default("")
+});
+
+const reportText = (max: number) => z.string().max(max);
+const reportBullet = (max = 200) => z.string().min(1).max(max);
+
+export const companyReportSchema = z.object({
+  headline: reportText(120).default(""),
+  keyFacts: z
+    .object({
+      industry: reportText(80).optional(),
+      headquarters: reportText(80).optional(),
+      size: reportText(80).optional(),
+      ownership: reportText(80).optional()
+    })
+    .default({}),
+  aboutCompany: reportText(320).default(""),
+  businessAreas: z.array(reportBullet(140)).max(4).default([]),
+  strategyAndNews: z.array(reportBullet(160)).max(3).default([]),
+  cultureAndValues: z.array(reportBullet(140)).max(3).default([]),
+  roleInContext: reportText(240).default(""),
+  jobAdRequirements: z
+    .array(
+      z.object({
+        requirement: reportBullet(120),
+        howToShowFit: reportBullet(140)
+      })
+    )
+    .max(4)
+    .default([]),
+  nicheInsights: z.array(reportBullet(160)).max(4).default([]),
+  companyQuestionPrep: z
+    .array(
+      z.object({
+        question: reportBullet(140),
+        answerAngle: reportBullet(200),
+        nicheHooks: z.array(reportBullet(90)).max(2).default([])
+      })
+    )
+    .max(4)
+    .default([]),
+  interviewAngles: z.array(reportBullet(140)).max(3).default([]),
+  questionsToAsk: z.array(reportBullet(140)).max(3).default([]),
+  sources: z.array(reportBullet(140)).max(4).default([])
 });
 
 export const clarificationListSchema = z.object({

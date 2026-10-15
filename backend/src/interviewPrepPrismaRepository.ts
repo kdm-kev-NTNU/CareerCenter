@@ -16,7 +16,14 @@ import type {
   VideoSimState,
   VideoSimulatorSettings
 } from "@careercenter/shared";
-import { defaultVideoSimulatorSettings, parsePrepPlanPipelineStep } from "@careercenter/shared";
+import {
+  canDeleteImportJob,
+  DEFAULT_RESEARCH_MODEL,
+  defaultVideoSimulatorSettings,
+  deletableImportJobStatuses,
+  isResearchModel,
+  parsePrepPlanPipelineStep
+} from "@careercenter/shared";
 import { ensureInterviewBibleCatalog } from "./interview/bibleCatalog.js";
 import type {
   AbilityAttemptInput,
@@ -312,6 +319,8 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
         companyName: input.companyName,
         roleTitle: input.roleTitle,
         format: input.format,
+        researchModel: input.researchModel,
+        jobAdText: input.jobAdText ?? "",
         status: "draft"
       },
       include: planIncludes
@@ -342,6 +351,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       pipelineStep: InterviewPrepPlanRecord["pipelineStep"];
       researchNotes?: string;
       companyProfileJson?: string;
+      companyReportJson?: string;
     }
   ): Promise<InterviewPrepPlanRecord | null> {
     const existing = await this.prisma.interviewPrepPlan.findFirst({ where: { id, userId } });
@@ -351,7 +361,8 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       data: {
         pipelineStep: input.pipelineStep,
         ...(input.researchNotes !== undefined ? { researchNotes: input.researchNotes } : {}),
-        ...(input.companyProfileJson !== undefined ? { companyProfileJson: input.companyProfileJson } : {})
+        ...(input.companyProfileJson !== undefined ? { companyProfileJson: input.companyProfileJson } : {}),
+        ...(input.companyReportJson !== undefined ? { companyReportJson: input.companyReportJson } : {})
       },
       include: planIncludes
     });
@@ -365,6 +376,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       researchNotes: string;
       clarifications: Array<{ question: string; sortOrder: number }>;
       companyProfileJson?: string;
+      companyReportJson?: string;
       clarificationRound?: number;
     }
   ): Promise<InterviewPrepPlanRecord | null> {
@@ -380,6 +392,9 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
           clarificationRound: round,
           ...(input.companyProfileJson !== undefined
             ? { companyProfileJson: input.companyProfileJson }
+            : {}),
+          ...(input.companyReportJson !== undefined
+            ? { companyReportJson: input.companyReportJson }
             : {}),
           clarifications: {
             create: input.clarifications.map((item) => ({
@@ -450,6 +465,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
         bankQuestionId?: string;
         storyId?: string;
         gapReason?: string;
+        notes?: string;
       }>;
       tasks: Array<{ title: string; description: string }>;
       recommendedCaseIds?: string[];
@@ -473,7 +489,8 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
               source: item.source ?? "generated",
               bankQuestionId: item.bankQuestionId,
               storyId: item.storyId,
-              gapReason: item.gapReason
+              gapReason: item.gapReason,
+              notes: item.notes ?? ""
             }))
           },
           tasks: {
@@ -887,6 +904,15 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
     return this.mapImportJob(row);
   }
 
+  async deleteImportJob(userId: string, id: string): Promise<boolean> {
+    const existing = await this.getImportJob(userId, id);
+    if (!existing || !canDeleteImportJob(existing.status)) return false;
+    const result = await this.prisma.interviewImportJob.deleteMany({
+      where: { id, userId, status: { in: [...deletableImportJobStatuses] } }
+    });
+    return result.count > 0;
+  }
+
   async failInterruptedImportJobs(message: string): Promise<number> {
     const result = await this.prisma.interviewImportJob.updateMany({
       where: { status: { in: ["queued", "running"] } },
@@ -994,10 +1020,13 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       companyName: row.companyName,
       roleTitle: row.roleTitle,
       format: row.format as PrepFormat,
+      researchModel: isResearchModel(row.researchModel) ? row.researchModel : DEFAULT_RESEARCH_MODEL,
       status: row.status as PrepPlanStatus,
       pipelineStep: parsePrepPlanPipelineStep(row.pipelineStep),
+      jobAdText: row.jobAdText,
       researchNotes: row.researchNotes,
       companyProfileJson: row.companyProfileJson,
+      companyReportJson: row.companyReportJson,
       clarificationRound: row.clarificationRound,
       failureReason: row.failureReason ?? undefined,
       clarifications: row.clarifications
@@ -1211,10 +1240,13 @@ type PlanRow = {
   companyName: string;
   roleTitle: string;
   format: string;
+  researchModel: string;
   status: string;
   pipelineStep: string;
+  jobAdText: string;
   researchNotes: string;
   companyProfileJson: string;
+  companyReportJson: string;
   clarificationRound: number;
   failureReason: string | null;
   createdAt: Date;

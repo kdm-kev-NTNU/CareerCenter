@@ -1,4 +1,5 @@
 import type { CompanyProfile } from "./companyProfile.js";
+import type { CompanyReport } from "./companyReport.js";
 import type { PrepPlanPipelineStep } from "./prepPlanState.js";
 import type {
   CaseApprovalStatus,
@@ -13,6 +14,7 @@ import type {
   PrepQuestionSource,
   QuestionCategory,
   QuestionTarget,
+  ResearchModel,
   StarRubricCriterion
 } from "./interviewPrep.js";
 
@@ -99,10 +101,13 @@ export interface InterviewPrepPlanDto {
   companyName: string;
   roleTitle: string;
   format: PrepFormat;
+  researchModel: ResearchModel;
   status: PrepPlanStatus;
   pipelineStep: PrepPlanPipelineStep;
+  jobAdText: string;
   researchNotes: string;
   companyProfile?: CompanyProfile;
+  companyReport?: CompanyReport;
   clarificationRound: number;
   failureReason?: string;
   clarifications: InterviewPrepClarificationDto[];

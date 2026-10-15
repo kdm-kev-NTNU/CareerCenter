@@ -37,7 +37,7 @@ export class OpenAiLlmClient implements LlmClient {
     throwIfAborted(options.signal);
     const response = await client.responses.create(
       {
-        model: this.textModel,
+        model: options.model ?? this.textModel,
         input: toResponsesInput(options),
         reasoning: { effort: this.reasoningEffort },
         ...(this.fastMode ? { service_tier: "priority" as const } : {})
@@ -58,7 +58,7 @@ export class OpenAiLlmClient implements LlmClient {
     throwIfAborted(options.signal);
     const response = await client.responses.parse(
       {
-        model: this.textModel,
+        model: options.model ?? this.textModel,
         input: toResponsesInput(options),
         reasoning: { effort: this.reasoningEffort },
         text: { format: zodTextFormat(schema, "structured_response") },
@@ -74,20 +74,20 @@ export class OpenAiLlmClient implements LlmClient {
     return parsed;
   }
 
-  async webSearch(query: string, signal?: AbortSignal): Promise<string> {
+  async webSearch(query: string, options?: { model?: string; signal?: AbortSignal }): Promise<string> {
     const client = this.requireClient();
-    throwIfAborted(signal);
+    throwIfAborted(options?.signal);
     const response = await client.responses.create(
       {
-        model: this.textModel,
+        model: options?.model ?? this.textModel,
         tools: [{ type: "web_search" }],
         input: query,
         reasoning: { effort: this.reasoningEffort },
         ...(this.fastMode ? { service_tier: "priority" as const } : {})
       },
-      requestOptions(signal)
+      requestOptions(options?.signal)
     );
-    throwIfAborted(signal);
+    throwIfAborted(options?.signal);
     const text = response.output_text?.trim();
     if (!text) throw new Error("OpenAI web search returnerte tomt svar.");
     return text;

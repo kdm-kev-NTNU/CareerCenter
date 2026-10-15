@@ -14,12 +14,13 @@ import type {
   InterviewVideoSettingsDto,
   InterviewMode,
   PrepFormat,
+  ResearchModel,
   VideoSimulatorSettings,
   VoiceSessionDto,
   AnswerStats,
   InterviewSessionFeedbackDto
 } from "@careercenter/shared";
-import { request, uploadRequest } from "./client.js";
+import { request, requestBlob, uploadRequest } from "./client.js";
 
 export interface InterviewAiStatus {
   aiConfigured: boolean;
@@ -99,15 +100,37 @@ export const interviewPrepApi = {
     request<InterviewImportJobDto>(`/api/interview/import-jobs/${id}/retry`, { method: "POST" }),
   cancelImportJob: (id: string) =>
     request<InterviewImportJobDto>(`/api/interview/import-jobs/${id}/cancel`, { method: "POST" }),
+  deleteImportJob: (id: string) => request<void>(`/api/interview/import-jobs/${id}`, { method: "DELETE" }),
 
   plans: () => request<InterviewPrepPlanDto[]>("/api/interview/plans"),
   plan: (id: string) => request<PrepPlanDetail>(`/api/interview/plans/${id}`),
-  createPlan: (payload: { companyName: string; roleTitle?: string; format?: PrepFormat }) =>
+  createPlan: (payload: {
+    companyName: string;
+    roleTitle?: string;
+    format?: PrepFormat;
+    researchModel?: ResearchModel;
+    jobAdText?: string;
+  }) =>
     request<InterviewPrepPlanDto>("/api/interview/plans", { method: "POST", body: JSON.stringify(payload) }),
   startPlanResearch: (id: string) =>
     request<InterviewPrepPlanDto>(`/api/interview/plans/${id}/research`, { method: "POST" }),
   cancelPlan: (id: string) =>
     request<InterviewPrepPlanDto>(`/api/interview/plans/${id}/cancel`, { method: "POST" }),
+  downloadCompanyReport: async (planId: string, companyName: string) => {
+    const blob = await requestBlob(`/api/interview/plans/${planId}/company-report.pdf`);
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    const safeName = companyName
+      .replace(/[^\w\s-]/g, "")
+      .trim()
+      .replace(/\s+/g, "-")
+      .toLowerCase()
+      .slice(0, 60);
+    anchor.href = url;
+    anchor.download = `${safeName || "bedrift"}-bedriftsrapport.pdf`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  },
   submitClarifications: (
     id: string,
     answers: Array<{ id: string; answer: string }>,

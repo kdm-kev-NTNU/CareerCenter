@@ -67,6 +67,30 @@ export type PrepPlanStatus = (typeof prepPlanStatuses)[number];
 export const prepFormats = ["interview", "video_application", "case", "ability_test"] as const;
 export type PrepFormat = (typeof prepFormats)[number];
 
+/** Reasoning models that support Responses API web_search for prep-plan research. */
+export const researchModels = [
+  "gpt-6-astra",
+  "gpt-6.1-sol",
+  "gpt-6-luna",
+  "gpt-5.5",
+  "gpt-5.4"
+] as const;
+export type ResearchModel = (typeof researchModels)[number];
+
+export const DEFAULT_RESEARCH_MODEL: ResearchModel = "gpt-6-astra";
+
+export const researchModelLabels: Record<ResearchModel, string> = {
+  "gpt-6-astra": "GPT-6 Astra — mest kapabel",
+  "gpt-6.1-sol": "GPT-6.1 Sol — nær Astra, lavere kostnad",
+  "gpt-6-luna": "GPT-6 Luna — rask og billig",
+  "gpt-5.5": "GPT-5.5 — dypere nettsøk",
+  "gpt-5.4": "GPT-5.4 — reasoning med web search"
+};
+
+export function isResearchModel(value: string): value is ResearchModel {
+  return (researchModels as readonly string[]).includes(value);
+}
+
 export const questionTargets = ["interview", "video", "both"] as const;
 export type QuestionTarget = (typeof questionTargets)[number];
 
@@ -87,6 +111,15 @@ export type CaseApprovalStatus = (typeof caseApprovalStatuses)[number];
 
 export const importJobStatuses = ["queued", "running", "review", "done", "failed", "cancelled"] as const;
 export type ImportJobStatus = (typeof importJobStatuses)[number];
+
+/** Worker is finished. Queued and running jobs must be cancelled before they can be removed. */
+export const deletableImportJobStatuses = ["review", "done", "failed", "cancelled"] as const satisfies readonly ImportJobStatus[];
+
+const deletableImportJobStatusSet = new Set<ImportJobStatus>(deletableImportJobStatuses);
+
+export function canDeleteImportJob(status: ImportJobStatus): boolean {
+  return deletableImportJobStatusSet.has(status);
+}
 
 export const importJobKinds = ["cases", "questions"] as const;
 export type ImportJobKind = (typeof importJobKinds)[number];

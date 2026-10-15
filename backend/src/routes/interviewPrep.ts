@@ -1,5 +1,6 @@
 import {
   answerStats,
+  canDeleteImportJob,
   canStartSimulators,
   classifyCaseSource,
   defaultVideoSimulatorSettings,
@@ -40,9 +41,14 @@ import {
 import { JobCancellationRegistry } from "../interview/jobCancellationRegistry.js";
 import { buildInterviewStoragePath, writeInterviewFile } from "../interview/interviewFileStorage.js";
 import {
+  renderCompanyReportPdf,
+  sanitizeReportFilename
+} from "../interview/companyReportPdf.js";
+import {
   addPlanQuestionSchema,
   caseEntryInputSchema,
   clarificationAnswersSchema,
+  companyReportSchema,
   createSessionSchema,
   knowledgeDocInputSchema,
   patchPlanQuestionSchema,
@@ -310,6 +316,20 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
     return queued ? toImportJobDto(queued) : toImportJobDto(job);
   });
 
+  app.delete("/api/interview/import-jobs/:id", async (request, reply) => {
+    const jobId = (request.params as { id: string }).id;
+    const job = await deps.interviewPrepRepository.getImportJob(request.user.id, jobId);
+    if (!job) return reply.code(404).send({ message: "Jobb ikke funnet." });
+    if (!canDeleteImportJob(job.status)) {
+      return reply.code(409).send({ message: "Jobben kan bare slettes når den er stoppet eller ferdig." });
+    }
+    const deleted = await deps.interviewPrepRepository.deleteImportJob(request.user.id, jobId);
+    if (!deleted) {
+      return reply.code(409).send({ message: "Jobben kan bare slettes når den er stoppet eller ferdig." });
+    }
+    return reply.code(204).send();
+  });
+
   app.post("/api/interview/import-jobs/:id/cancel", async (request, reply) => {
     const result = await cancelImportJob(importDeps, request.user.id, (request.params as { id: string }).id);
     if (!result.ok) return reply.code(result.status).send({ message: result.message });
@@ -383,6 +403,34 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
     );
     if (!plan) return reply.code(404).send({ message: "Plan ikke funnet." });
     return { plan: toPrepPlanDto(plan), rankedCases: plan.recommendedCases };
+  });
+
+  app.get("/api/interview/plans/:id/company-report.pdf", async (request, reply) => {
+    const plan = await deps.interviewPrepRepository.getPrepPlan(
+      request.user.id,
+      (request.params as { id: string }).id
+    );
+    if (!plan) return reply.code(404).send({ message: "Plan ikke funnet." });
+    const raw = plan.companyReportJson?.trim();
+    if (!raw || raw === "{}") {
+      return reply.code(404).send({ message: "Bedriftsrapport er ikke klar ennå." });
+    }
+    let report;
+    try {
+      report = companyReportSchema.parse(JSON.parse(raw));
+    } catch {
+      return reply.code(404).send({ message: "Bedriftsrapport er ikke klar ennå." });
+    }
+    const pdf = await renderCompanyReportPdf(report, {
+      companyName: plan.companyName,
+      roleTitle: plan.roleTitle,
+      generatedAt: plan.updatedAt
+    });
+    const filename = sanitizeReportFilename(plan.companyName);
+    return reply
+      .header("content-type", "application/pdf")
+      .header("content-disposition", `attachment; filename="${filename}"`)
+      .send(pdf);
   });
 
   app.put("/api/interview/plans/:id/questions/order", async (request, reply) => {

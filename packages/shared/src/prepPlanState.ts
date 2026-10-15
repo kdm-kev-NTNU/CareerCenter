@@ -17,6 +17,7 @@ export const prepPlanPipelineSteps = [
   "searching",
   "research_notes",
   "company_profile",
+  "company_report",
   "clarifications",
   "awaiting_answers",
   "curating_questions",
@@ -63,6 +64,7 @@ export function isPrepPlanPipelineActive(step: PrepPlanPipelineStep, status: Pre
     step === "searching" ||
     step === "research_notes" ||
     step === "company_profile" ||
+    step === "company_report" ||
     step === "clarifications" ||
     step === "curating_questions" ||
     step === "curating_cases"

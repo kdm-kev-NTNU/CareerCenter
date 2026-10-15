@@ -7,7 +7,12 @@ import type {
   PrepPlanPipelineStep,
   QuestionCategory
 } from "@careercenter/shared";
-import { canCancelPrepPlan, canStartSimulators, isPrepPlanPipelineActive } from "@careercenter/shared";
+import {
+  canCancelPrepPlan,
+  canStartSimulators,
+  isPrepPlanPipelineActive,
+  researchModelLabels
+} from "@careercenter/shared";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { interviewPrepApi } from "../../api/interviewPrep.js";
@@ -45,6 +50,8 @@ const pipelineActive = computed(() =>
 );
 const canCancel = computed(() => (plan.value ? canCancelPrepPlan(plan.value.status) : false));
 const canPractice = computed(() => (plan.value ? canStartSimulators(plan.value.status) : false));
+const canDownloadReport = computed(() => Boolean(plan.value?.companyReport));
+const downloadingReport = ref(false);
 const includedCount = computed(
   () => plan.value?.questions.filter((q) => q.included).length ?? 0
 );
@@ -254,6 +261,19 @@ function practiceWithPlan() {
   if (!plan.value) return;
   void router.push({ name: "interview-simulator", query: { planId: plan.value.id } });
 }
+
+async function downloadCompanyReport() {
+  if (!plan.value) return;
+  downloadingReport.value = true;
+  error.value = null;
+  try {
+    await interviewPrepApi.downloadCompanyReport(plan.value.id, plan.value.companyName);
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : "Kunne ikke laste ned bedriftsrapport.";
+  } finally {
+    downloadingReport.value = false;
+  }
+}
 </script>
 
 <template>
@@ -267,11 +287,23 @@ function practiceWithPlan() {
           <StatusBadge v-if="statusTone" :label="statusTone.label" :variant="statusTone.variant" />
         </template>
         <template #actions>
+          <AppButton
+            v-if="canDownloadReport"
+            variant="secondary"
+            :loading="downloadingReport"
+            @click="downloadCompanyReport"
+          >
+            Last ned bedriftsrapport (PDF)
+          </AppButton>
           <AppButton v-if="canPractice" :disabled="includedCount === 0" @click="practiceWithPlan">
             Øv med denne planen
           </AppButton>
         </template>
       </PageHeader>
+
+      <p class="muted-hint">
+        Reasoning-modell: {{ researchModelLabels[plan.researchModel] ?? plan.researchModel }}
+      </p>
 
       <article class="panel stack">
         <div class="panel-heading-row">
@@ -289,6 +321,8 @@ function practiceWithPlan() {
 
           <template v-if="selectedStep === 'created'">
             <p>{{ plan.companyName }}<template v-if="plan.roleTitle"> — {{ plan.roleTitle }}</template></p>
+            <p v-if="plan.jobAdText" class="field-hint">Stillingsannonse er limt inn ({{ plan.jobAdText.length }} tegn).</p>
+            <p v-else class="field-hint">Ingen stillingsannonse limt inn.</p>
           </template>
           <template v-else-if="selectedStep === 'searching'">
             <p>Søker etter intervju, kultur og rolle for {{ plan.companyName }}.</p>
@@ -306,6 +340,40 @@ function practiceWithPlan() {
             <p v-if="plan.companyProfile?.themes.length" class="field-hint">
               Temaer: {{ plan.companyProfile.themes.join(", ") }}
             </p>
+          </template>
+          <template v-else-if="selectedStep === 'company_report'">
+            <template v-if="plan.companyReport">
+              <p class="plan-step-prose">{{ plan.companyReport.headline || "Bedriftsrapport klar." }}</p>
+              <p v-if="plan.companyReport.aboutCompany" class="field-hint">
+                {{ plan.companyReport.aboutCompany }}
+              </p>
+              <div v-if="plan.companyReport.nicheInsights?.length" class="stack">
+                <h4>Nisje-info til bedriftsspesifikke svar</h4>
+                <ul class="plain-list">
+                  <li v-for="(insight, i) in plan.companyReport.nicheInsights" :key="i">{{ insight }}</li>
+                </ul>
+              </div>
+              <div v-if="plan.companyReport.companyQuestionPrep?.length" class="stack">
+                <h4>Svarforslag</h4>
+                <ul class="plain-list">
+                  <li
+                    v-for="(prep, i) in plan.companyReport.companyQuestionPrep"
+                    :key="i"
+                    class="stack"
+                  >
+                    <strong>{{ prep.question }}</strong>
+                    <span class="field-hint">{{ prep.answerAngle }}</span>
+                    <span v-if="prep.nicheHooks?.length" class="field-hint">
+                      Hooks: {{ prep.nicheHooks.join("; ") }}
+                    </span>
+                  </li>
+                </ul>
+              </div>
+              <AppButton variant="secondary" :loading="downloadingReport" @click="downloadCompanyReport">
+                Last ned bedriftsrapport (PDF)
+              </AppButton>
+            </template>
+            <p v-else>Skriver bedriftsrapport med nisje-info og svarforslag …</p>
           </template>
           <template v-else-if="selectedStep === 'clarifications'">
             <p v-if="plan.clarifications.length">

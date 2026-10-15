@@ -166,6 +166,27 @@ describe("interview prep routes", () => {
           themes: ["leadership"],
           summary: "profile"
         },
+        {
+          headline: "DNB",
+          keyFacts: {},
+          aboutCompany: "",
+          businessAreas: [],
+          strategyAndNews: [],
+          cultureAndValues: [],
+          roleInContext: "",
+          jobAdRequirements: [],
+          nicheInsights: ["Nordisk markets"],
+          companyQuestionPrep: [
+            {
+              question: "Hvorfor DNB?",
+              answerAngle: "Koble til nordisk franchise.",
+              nicheHooks: ["Nordisk markets"]
+            }
+          ],
+          interviewAngles: [],
+          questionsToAsk: [],
+          sources: []
+        },
         { clarifications: [{ question: "Hvilken rolle?" }] },
         {
           selectedQuestionIds: bank.map((q) => q.id),
@@ -185,8 +206,17 @@ describe("interview prep routes", () => {
     const planRes = await app.inject({
       method: "POST",
       url: "/api/interview/plans",
-      payload: { companyName: "DNB", roleTitle: "Associate", format: "interview" }
+      payload: {
+        companyName: "DNB",
+        roleTitle: "Associate",
+        format: "interview",
+        researchModel: "gpt-5.5",
+        jobAdText: "Vi søker en associate i Markets."
+      }
     });
+    expect(planRes.statusCode).toBe(201);
+    expect(planRes.json().researchModel).toBe("gpt-5.5");
+    expect(planRes.json().jobAdText).toContain("Markets");
     const planId = planRes.json().id as string;
 
     const research = await app.inject({ method: "POST", url: `/api/interview/plans/${planId}/research` });
@@ -196,6 +226,7 @@ describe("interview prep routes", () => {
         ? research.json()
         : await waitForPlanStatus(app, planId, "awaiting_answers");
     expect(researched.pipelineStep).toBe("awaiting_answers");
+    expect(researched.companyReport?.headline).toBe("DNB");
 
     const clarifications = researched.clarifications as Array<{ id: string }>;
     const curated = await app.inject({
@@ -367,6 +398,52 @@ describe("interview prep routes", () => {
     await app.close();
   });
 
+  it("deletes stopped and finished import jobs and keeps the document", async () => {
+    const mainRepo = new MemoryRepository();
+    const repo = new InterviewPrepMemoryRepository();
+    const user = await mainRepo.createUser("__test__", "x");
+    const doc = await repo.createKnowledgeDoc(user.id, {
+      kind: "case",
+      title: "Official Casebook",
+      content: "Case 1: Alpha",
+      contentHash: sha256Content("delete-doc"),
+      sourceFilename: "book.pdf"
+    });
+    const running = await repo.createImportJob(user.id, { knowledgeDocId: doc.id });
+    await repo.updateImportJob(user.id, running.id, { status: "running" });
+    const cancelled = await repo.createImportJob(user.id, { knowledgeDocId: doc.id, kind: "questions" });
+    await repo.updateImportJob(user.id, cancelled.id, { status: "cancelled", message: "Stoppet av bruker" });
+    const done = await repo.createImportJob(user.id, { knowledgeDocId: doc.id });
+    await repo.updateImportJob(user.id, done.id, { status: "done", progress: 100 });
+
+    const app = await buildServer({
+      repository: mainRepo,
+      authDisabled: true,
+      skipJobRecovery: true,
+      interviewPrepRepository: repo
+    });
+    await app.ready();
+
+    const blocked = await app.inject({ method: "DELETE", url: `/api/interview/import-jobs/${running.id}` });
+    expect(blocked.statusCode).toBe(409);
+    expect(await repo.getImportJob(user.id, running.id)).toBeTruthy();
+
+    const missing = await app.inject({ method: "DELETE", url: "/api/interview/import-jobs/missing" });
+    expect(missing.statusCode).toBe(404);
+
+    const removedCancelled = await app.inject({ method: "DELETE", url: `/api/interview/import-jobs/${cancelled.id}` });
+    expect(removedCancelled.statusCode).toBe(204);
+    expect(await repo.getImportJob(user.id, cancelled.id)).toBeNull();
+
+    const removedDone = await app.inject({ method: "DELETE", url: `/api/interview/import-jobs/${done.id}` });
+    expect(removedDone.statusCode).toBe(204);
+    expect(await repo.getImportJob(user.id, done.id)).toBeNull();
+
+    const docs = await repo.listKnowledgeDocs(user.id);
+    expect(docs.map((item) => item.id)).toContain(doc.id);
+    await app.close();
+  });
+
   it("starts a practice session from a ready plan and rejects non-ready plans", async () => {
     const main = new MemoryRepository();
     const interviewRepo = new InterviewPrepMemoryRepository();
@@ -384,7 +461,8 @@ describe("interview prep routes", () => {
     const plan = await interviewRepo.createPrepPlan(user!.id, {
       companyName: "DNB",
       roleTitle: "Analyst",
-      format: "interview"
+      format: "interview",
+      researchModel: "gpt-6-astra"
     });
     await interviewRepo.setPrepPlanCurated(user!.id, plan.id, {
       questions: [
@@ -417,7 +495,8 @@ describe("interview prep routes", () => {
     const draftPlan = await interviewRepo.createPrepPlan(user!.id, {
       companyName: "X",
       roleTitle: "Y",
-      format: "interview"
+      format: "interview",
+      researchModel: "gpt-6-astra"
     });
     const notReady = await app.inject({
       method: "POST",
@@ -453,7 +532,8 @@ describe("interview prep routes", () => {
     const plan = await repo.createPrepPlan(user!.id, {
       companyName: "DNB",
       roleTitle: "Analyst",
-      format: "interview"
+      format: "interview",
+      researchModel: "gpt-6-astra"
     });
     await repo.setPrepPlanCurated(user!.id, plan.id, {
       questions: [
@@ -495,6 +575,102 @@ describe("interview prep routes", () => {
     await app.close();
   });
 
+  it("serves company report PDF when report exists and 404 otherwise", async () => {
+    const main = new MemoryRepository();
+    const repo = new InterviewPrepMemoryRepository();
+    const app = await buildServer({
+      repository: main,
+      authDisabled: true,
+      llmClient: new FakeLlmClient({ configured: true }),
+      interviewPrepRepository: repo
+    });
+    await app.ready();
+    await app.inject({ method: "GET", url: "/api/interview/status" });
+    const user = await main.findUserByName("__test__");
+    expect(user).toBeTruthy();
+
+    const plan = await repo.createPrepPlan(user!.id, {
+      companyName: "DNB ASA",
+      roleTitle: "Associate",
+      format: "interview",
+      researchModel: "gpt-6-astra",
+      jobAdText: "Vi søker en associate."
+    });
+
+    const missing = await app.inject({
+      method: "GET",
+      url: `/api/interview/plans/${plan.id}/company-report.pdf`
+    });
+    expect(missing.statusCode).toBe(404);
+
+    await repo.setPrepPlanPipeline(user!.id, plan.id, {
+      pipelineStep: "awaiting_answers",
+      companyReportJson: JSON.stringify({
+        headline: "DNB – kort oversikt",
+        keyFacts: { industry: "Bank" },
+        aboutCompany: "Norges største bank.",
+        businessAreas: ["Privat"],
+        strategyAndNews: [],
+        cultureAndValues: ["Integritet"],
+        roleInContext: "Associate",
+        jobAdRequirements: [],
+        nicheInsights: ["Nordisk markets"],
+        companyQuestionPrep: [
+          {
+            question: "Hvorfor DNB?",
+            answerAngle: "Koble til nordisk franchise.",
+            nicheHooks: ["Nordisk markets"]
+          }
+        ],
+        interviewAngles: [],
+        questionsToAsk: [],
+        sources: []
+      })
+    });
+
+    const pdf = await app.inject({
+      method: "GET",
+      url: `/api/interview/plans/${plan.id}/company-report.pdf`
+    });
+    expect(pdf.statusCode).toBe(200);
+    expect(pdf.headers["content-type"]).toContain("application/pdf");
+    expect(pdf.headers["content-disposition"]).toMatch(/attachment; filename=".*bedriftsrapport\.pdf"/);
+    expect(pdf.rawPayload.subarray(0, 4).toString("utf8")).toBe("%PDF");
+
+    // authDisabled uses __test__; a plan owned by another user must 404.
+    const otherUser = await main.createUser("other", "x");
+    const otherPlan = await repo.createPrepPlan(otherUser.id, {
+      companyName: "Secret",
+      roleTitle: "X",
+      format: "interview",
+      researchModel: "gpt-6-astra"
+    });
+    await repo.setPrepPlanPipeline(otherUser.id, otherPlan.id, {
+      pipelineStep: "ready",
+      companyReportJson: JSON.stringify({
+        headline: "Secret",
+        keyFacts: {},
+        aboutCompany: "",
+        businessAreas: [],
+        strategyAndNews: [],
+        cultureAndValues: [],
+        roleInContext: "",
+        jobAdRequirements: [],
+        nicheInsights: [],
+        companyQuestionPrep: [],
+        interviewAngles: [],
+        questionsToAsk: [],
+        sources: []
+      })
+    });
+    const denied = await app.inject({
+      method: "GET",
+      url: `/api/interview/plans/${otherPlan.id}/company-report.pdf`
+    });
+    expect(denied.statusCode).toBe(404);
+    await app.close();
+  });
+
   it("recovers interrupted import jobs on server start", async () => {
     const mainRepo = new MemoryRepository();
     const repo = new InterviewPrepMemoryRepository();
@@ -510,7 +686,8 @@ describe("interview prep routes", () => {
     const plan = await repo.createPrepPlan(user.id, {
       companyName: "Y",
       roleTitle: "Z",
-      format: "interview"
+      format: "interview",
+      researchModel: "gpt-6-luna"
     });
     await repo.updatePrepPlanStatus(user.id, plan.id, "researching");
 

@@ -2,21 +2,25 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./client.js", () => ({
   request: vi.fn(),
+  requestBlob: vi.fn(),
   uploadRequest: vi.fn()
 }));
 
-import { request, uploadRequest } from "./client.js";
+import { request, requestBlob, uploadRequest } from "./client.js";
 import { interviewPrepApi } from "./interviewPrep.js";
 
 const mockedRequest = vi.mocked(request);
 const mockedUpload = vi.mocked(uploadRequest);
+const mockedRequestBlob = vi.mocked(requestBlob);
 
 describe("interviewPrepApi", () => {
   beforeEach(() => {
     mockedRequest.mockReset();
     mockedUpload.mockReset();
+    mockedRequestBlob.mockReset();
     mockedRequest.mockResolvedValue({});
     mockedUpload.mockResolvedValue({});
+    mockedRequestBlob.mockResolvedValue(new Blob(["%PDF"], { type: "application/pdf" }));
   });
 
   it("calls status and knowledge endpoints", async () => {
@@ -64,7 +68,13 @@ describe("interviewPrepApi", () => {
   });
 
   it("covers prep plan and voice helpers", async () => {
-    await interviewPrepApi.createPlan({ companyName: "DNB", roleTitle: "Analyst", format: "interview" });
+    await interviewPrepApi.createPlan({
+      companyName: "DNB",
+      roleTitle: "Analyst",
+      format: "interview",
+      researchModel: "gpt-6.1-sol",
+      jobAdText: "Vi søker en analyst."
+    });
     await interviewPrepApi.plan("p1");
     await interviewPrepApi.submitClarifications("p1", [], true);
     await interviewPrepApi.replacePlanQuestion("p1", "q1", { text: "Alt?" });
@@ -73,7 +83,10 @@ describe("interviewPrepApi", () => {
 
     expect(mockedRequest).toHaveBeenCalledWith(
       "/api/interview/plans",
-      expect.objectContaining({ method: "POST" })
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining("jobAdText")
+      })
     );
     expect(mockedRequest).toHaveBeenCalledWith("/api/interview/plans/p1");
     expect(mockedRequest).toHaveBeenCalledWith(
@@ -92,5 +105,21 @@ describe("interviewPrepApi", () => {
       "/api/interview/video/transcribe",
       expect.objectContaining({ method: "POST" })
     );
+  });
+
+  it("downloads company report PDF via requestBlob", async () => {
+    const click = vi.fn();
+    const anchor = { href: "", download: "", click } as unknown as HTMLAnchorElement;
+    vi.spyOn(document, "createElement").mockReturnValue(anchor);
+    const createObjectURL = vi.fn(() => "blob:report");
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", { createObjectURL, revokeObjectURL });
+
+    await interviewPrepApi.downloadCompanyReport("p1", "DNB ASA");
+
+    expect(mockedRequestBlob).toHaveBeenCalledWith("/api/interview/plans/p1/company-report.pdf");
+    expect(anchor.download).toBe("dnb-asa-bedriftsrapport.pdf");
+    expect(click).toHaveBeenCalled();
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:report");
   });
 });

@@ -14,6 +14,7 @@ import { useRoute } from "vue-router";
 import { interviewPrepApi } from "../../api/interviewPrep.js";
 import MediaDeviceCheck from "../../components/interview/MediaDeviceCheck.vue";
 import { useMediaStream } from "../../composables/useMediaStream.js";
+import { printEssentialsSheet } from "../../lib/printEssentials.js";
 import { connectRealtimeVoice } from "../../lib/voiceRealtime.js";
 import AppButton from "../../components/ui/AppButton.vue";
 import ChatMessage from "../../components/ui/ChatMessage.vue";
@@ -212,7 +213,12 @@ function chatRole(role: string): "user" | "assistant" {
 }
 
 function printEssentials() {
-  window.print();
+  const sheet = settings.value?.essentialsSheet ?? "";
+  if (!printEssentialsSheet(sheet)) {
+    error.value = sheet.trim()
+      ? "Tillat sprettoppvindu for å skrive ut essentials."
+      : "Skriv noe i essentials-arket først.";
+  }
 }
 </script>
 
@@ -221,7 +227,7 @@ function printEssentials() {
     <PageHeader title="Intervjussimulator" lead="Øv PEI og case med tekst eller stemme." />
     <p v-if="planLabel" class="field-hint" data-test="plan-practice-label">{{ planLabel }}</p>
 
-    <article class="panel stack no-print">
+    <article class="panel stack">
       <div class="toolbar">
         <button type="button" :class="{ active: channel === 'text' }" @click="channel = 'text'">Tekst</button>
         <button type="button" :class="{ active: channel === 'voice' }" @click="channel = 'voice'">Stemme</button>
@@ -245,8 +251,13 @@ function printEssentials() {
         <label>Språk <input v-model="settings.language" /></label>
         <label>
           Essentials-ark
-          <textarea v-model="settings.essentialsSheet" rows="4" placeholder="Nøkkelpunkter til intervjueren …" />
+          <textarea
+            v-model="settings.essentialsSheet"
+            rows="4"
+            placeholder="Nøkkelpunkter du vil ha på papir under intervjuet …"
+          />
         </label>
+        <p class="field-hint">Skriv ut essentials åpner bare dette arket, ikke hele siden.</p>
         <div class="form-grid">
           <AppButton variant="secondary" @click="saveSettings">Lagre innstillinger</AppButton>
           <AppButton variant="ghost" @click="printEssentials">Skriv ut essentials</AppButton>
@@ -255,14 +266,8 @@ function printEssentials() {
       <AppButton :loading="loading" @click="startSession">Start ny sesjon</AppButton>
     </article>
 
-    <article v-if="settings?.essentialsSheet" class="panel essentials-print-only">
-      <h3>Essentials</h3>
-      <pre>{{ settings.essentialsSheet }}</pre>
-    </article>
-
     <MediaDeviceCheck
       v-if="channel === 'voice' && session && !session.finishedAt"
-      class="no-print"
       :stream="voiceStream"
       :need-camera="false"
       @ready="onVoiceDevicesReady"
@@ -270,7 +275,7 @@ function printEssentials() {
       @failed="onVoiceDevicesFailed"
     />
 
-    <article v-if="session && channel === 'voice' && voiceSession" class="panel stack no-print">
+    <article v-if="session && channel === 'voice' && voiceSession" class="panel stack">
       <h3>Stemme-sesjon</h3>
       <p class="field-hint">
         Modell {{ voiceSession.model }} · {{ voiceSession.mock ? "mock" : "live" }} · utløper
@@ -288,7 +293,7 @@ function printEssentials() {
       </template>
     </article>
 
-    <article v-if="session" class="panel stack no-print">
+    <article v-if="session" class="panel stack">
       <h3>Samtale</h3>
       <div class="stack">
         <ChatMessage
@@ -314,21 +319,3 @@ function printEssentials() {
     <StateView v-if="error" state="error" :message="error" />
   </section>
 </template>
-
-<style scoped>
-.essentials-print-only {
-  display: none;
-}
-@media print {
-  .no-print {
-    display: none !important;
-  }
-  .essentials-print-only {
-    display: block;
-  }
-  pre {
-    white-space: pre-wrap;
-    font-family: inherit;
-  }
-}
-</style>

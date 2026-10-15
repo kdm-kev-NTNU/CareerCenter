@@ -33,6 +33,6 @@ describe("FakeLlmClient", () => {
   it("supports webSearch", async () => {
     const client = new FakeLlmClient({ webSearchResult: "results" });
     await expect(client.webSearch!("firm news")).resolves.toBe("results");
-    expect(client.webSearchCalls).toEqual(["firm news"]);
+    expect(client.webSearchCalls).toEqual([{ query: "firm news", options: undefined }]);
   });
 });

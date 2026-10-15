@@ -23,6 +23,7 @@ import type {
   VideoRunInput
 } from "./interviewPrepRepository.js";
 import type { InterviewFeedbackRubric } from "./interview/feedbackRubric.js";
+import { canDeleteImportJob } from "@careercenter/shared";
 import type {
   ImportJobKind,
   InterviewMode,
@@ -299,10 +300,13 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       companyName: input.companyName,
       roleTitle: input.roleTitle,
       format: input.format,
+      researchModel: input.researchModel,
       status: "draft",
       pipelineStep: "created",
+      jobAdText: input.jobAdText ?? "",
       researchNotes: "",
       companyProfileJson: "{}",
+      companyReportJson: "",
       clarificationRound: 0,
       clarifications: [],
       questions: [],
@@ -335,6 +339,7 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       pipelineStep: InterviewPrepPlanRecord["pipelineStep"];
       researchNotes?: string;
       companyProfileJson?: string;
+      companyReportJson?: string;
     }
   ): Promise<InterviewPrepPlanRecord | null> {
     const plan = await this.getPrepPlan(userId, id);
@@ -344,6 +349,7 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       pipelineStep: input.pipelineStep,
       researchNotes: input.researchNotes ?? plan.researchNotes,
       companyProfileJson: input.companyProfileJson ?? plan.companyProfileJson,
+      companyReportJson: input.companyReportJson ?? plan.companyReportJson,
       updatedAt: nowIso()
     };
     this.prepPlans.set(id, updated);
@@ -357,6 +363,7 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       researchNotes: string;
       clarifications: Array<{ question: string; sortOrder: number }>;
       companyProfileJson?: string;
+      companyReportJson?: string;
       clarificationRound?: number;
     }
   ): Promise<InterviewPrepPlanRecord | null> {
@@ -366,6 +373,7 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       ...plan,
       researchNotes: input.researchNotes,
       companyProfileJson: input.companyProfileJson ?? plan.companyProfileJson,
+      companyReportJson: input.companyReportJson ?? plan.companyReportJson,
       clarificationRound: input.clarificationRound ?? 1,
       clarifications: input.clarifications.map((item) => ({
         id: nanoid(),
@@ -452,6 +460,7 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
         bankQuestionId?: string;
         storyId?: string;
         gapReason?: string;
+        notes?: string;
       }>;
       tasks: Array<{ title: string; description: string }>;
       recommendedCaseIds?: string[];
@@ -472,7 +481,7 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
         storyId: item.storyId,
         gapReason: item.gapReason,
         included: true,
-        notes: ""
+        notes: item.notes ?? ""
       })),
       tasks: input.tasks.map((item, index) => ({
         id: nanoid(),
@@ -842,6 +851,13 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
     };
     this.importJobs.set(id, updated);
     return updated;
+  }
+
+  async deleteImportJob(userId: string, id: string): Promise<boolean> {
+    const existing = await this.getImportJob(userId, id);
+    if (!existing || !canDeleteImportJob(existing.status)) return false;
+    this.importJobs.delete(id);
+    return true;
   }
 
   async failInterruptedImportJobs(message: string): Promise<number> {
