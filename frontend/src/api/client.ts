@@ -1,6 +1,8 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
 export const UPLOAD_TIMEOUT_MS = 120_000;
+/** Finish/rate endpoints wait on an LLM call; 15s is too short and surfaces as a false "server down". */
+export const LLM_REQUEST_TIMEOUT_MS = 120_000;
 export const MAX_BACHELOR_FILE_BYTES = 50 * 1024 * 1024;
 
 function timeoutErrorMessage(): string {
