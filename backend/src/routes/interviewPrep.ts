@@ -811,8 +811,7 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
       title: body.title || `${body.mode} simulering`,
       prepPlanId: body.prepPlanId,
       caseEntryId: body.caseEntryId,
-      systemPrompt,
-      practice: body.practice
+      systemPrompt
     });
     return reply.code(201).send(toSessionDto(session));
   });
@@ -860,12 +859,6 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
     const session = await deps.interviewPrepRepository.getSession(request.user.id, sessionId);
     if (!session) return reply.code(404).send({ message: "Sesjon ikke funnet." });
     if (session.finishedAt) return reply.code(409).send({ message: "Sesjonen er allerede avsluttet." });
-
-    if (session.practice) {
-      const finished = await deps.interviewPrepRepository.finishSession(request.user.id, sessionId, null);
-      if (!finished) return reply.code(409).send({ message: "Sesjonen er allerede avsluttet." });
-      return toSessionDto(finished);
-    }
 
     if (!deps.llmClient.isConfigured()) {
       return reply.code(503).send({ message: "AI er ikke konfigurert." });

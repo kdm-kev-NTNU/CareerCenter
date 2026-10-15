@@ -780,7 +780,6 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       prepPlanId?: string;
       caseEntryId?: string;
       systemPrompt: string;
-      practice?: boolean;
     }
   ): Promise<InterviewSessionRecord> {
     const row = await this.prisma.interviewSession.create({
@@ -790,7 +789,6 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
         title: input.title,
         prepPlanId: input.prepPlanId,
         caseEntryId: input.caseEntryId,
-        practice: Boolean(input.practice),
         messages: {
           create: { role: "system", content: input.systemPrompt }
         }
@@ -830,14 +828,14 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
   async finishSession(
     userId: string,
     sessionId: string,
-    feedback: InterviewFeedbackRubric | null
+    feedback: InterviewFeedbackRubric
   ): Promise<InterviewSessionRecord | null> {
     const session = await this.getSession(userId, sessionId);
     if (!session) return null;
     const result = await this.prisma.interviewSession.updateMany({
       where: { id: sessionId, userId, finishedAt: null },
       data: {
-        feedbackJson: feedback ? JSON.stringify(feedback) : null,
+        feedbackJson: JSON.stringify(feedback),
         finishedAt: new Date()
       }
     });
@@ -1175,7 +1173,6 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
     title: string;
     prepPlanId: string | null;
     caseEntryId: string | null;
-    practice: boolean;
     feedbackJson: string | null;
     finishedAt: Date | null;
     createdAt: Date;
@@ -1188,7 +1185,6 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       title: row.title,
       prepPlanId: row.prepPlanId ?? undefined,
       caseEntryId: row.caseEntryId ?? undefined,
-      practice: row.practice,
       feedback: row.feedbackJson ? (JSON.parse(row.feedbackJson) as InterviewFeedbackRubric) : undefined,
       finishedAt: row.finishedAt?.toISOString(),
       createdAt: row.createdAt.toISOString(),

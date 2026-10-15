@@ -337,7 +337,7 @@ describe("interview prep routes", () => {
     await app.close();
   });
 
-  it("finishes practice sessions without AI rubric even when AI is off", async () => {
+  it("refuses to finish a session without AI, so every session stays scored", async () => {
     const { app, llmClient } = await buildInterviewApp({ configured: false });
     const session = await app.inject({
       method: "POST",
@@ -345,14 +345,18 @@ describe("interview prep routes", () => {
       payload: { mode: "behavioral_mock", title: "Test", practice: true }
     });
     expect(session.statusCode).toBe(201);
-    expect(session.json().practice).toBe(true);
+    expect(session.json()).not.toHaveProperty("practice");
     const sessionId = session.json().id as string;
 
     const finished = await app.inject({ method: "POST", url: `/api/interview/sessions/${sessionId}/finish` });
-    expect(finished.statusCode).toBe(200);
-    expect(finished.json().feedback).toBeUndefined();
-    expect(finished.json().finishedAt).toBeTruthy();
+    expect(finished.statusCode).toBe(503);
     expect(llmClient.structuredCalls).toHaveLength(0);
+    const stored = await app.inject({ method: "GET", url: "/api/interview/sessions" });
+    const row = (stored.json() as Array<{ id: string; finishedAt?: string; feedback?: unknown }>).find(
+      (item) => item.id === sessionId
+    );
+    expect(row?.finishedAt).toBeUndefined();
+    expect(row?.feedback).toBeUndefined();
     await app.close();
   });
 
