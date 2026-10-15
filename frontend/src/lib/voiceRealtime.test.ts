@@ -64,7 +64,7 @@ describe("connectRealtimeVoice", () => {
 
     const session = await connectRealtimeVoice({
       clientSecret: "ephemeral",
-      model: "gpt-live-1",
+      model: "gpt-realtime-2.1",
       stream,
       onTranscript: (role, text) => transcripts.push({ role, text }),
       onToolCall: (name) => tools.push(name)
@@ -137,7 +137,7 @@ describe("connectRealtimeVoice", () => {
     await expect(
       connectRealtimeVoice({
         clientSecret: "bad",
-        model: "gpt-live-1",
+        model: "gpt-realtime-2.1",
         stream: { getTracks: () => [] } as unknown as MediaStream
       })
     ).rejects.toThrow(/Realtime-tilkobling feilet \(401\): nope/);
