@@ -79,7 +79,12 @@ describe("interviewPrepApi", () => {
     await interviewPrepApi.submitClarifications("p1", [], true);
     await interviewPrepApi.replacePlanQuestion("p1", "q1", { text: "Alt?" });
     await interviewPrepApi.createVoiceSession("s1");
-    await interviewPrepApi.transcribeVideo({ transcript: "hi" } as never);
+    await interviewPrepApi.transcribeVideo({
+      file: new Blob(["audio"], { type: "audio/webm" }),
+      prompt: "Fortell om en utfordring",
+      withRubric: true,
+      durationMs: 12_000
+    });
 
     expect(mockedRequest).toHaveBeenCalledWith(
       "/api/interview/plans",
@@ -101,10 +106,16 @@ describe("interviewPrepApi", () => {
       "/api/interview/voice/session",
       expect.objectContaining({ method: "POST", body: JSON.stringify({ sessionId: "s1" }) })
     );
-    expect(mockedRequest).toHaveBeenCalledWith(
+    expect(mockedUpload).toHaveBeenCalledWith(
       "/api/interview/video/transcribe",
-      expect.objectContaining({ method: "POST" })
+      expect.any(FormData)
     );
+    const formData = mockedUpload.mock.calls.find((call) => call[0] === "/api/interview/video/transcribe")?.[1] as
+      | FormData
+      | undefined;
+    expect(formData?.get("withRubric")).toBe("true");
+    expect(formData?.get("prompt")).toBe("Fortell om en utfordring");
+    expect(formData?.get("file")).toBeInstanceOf(Blob);
   });
 
   it("downloads company report PDF via requestBlob", async () => {

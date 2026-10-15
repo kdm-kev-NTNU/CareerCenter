@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createVideoRecorder, loadVideoBlob, mergeChunks, saveVideoBlob } from "./videoRecording.js";
+import {
+  createAudioRecorder,
+  createVideoRecorder,
+  loadVideoBlob,
+  mergeChunks,
+  saveVideoBlob
+} from "./videoRecording.js";
 
 describe("videoRecording helpers", () => {
   afterEach(() => {
@@ -33,6 +39,39 @@ describe("videoRecording helpers", () => {
     expect(recorder.options.mimeType).toContain("vp8");
     recorder.ondataavailable?.({ data: new Blob(["x"], { type: "video/webm" }) } as BlobEvent);
     recorder.ondataavailable?.({ data: new Blob([], { type: "video/webm" }) } as BlobEvent);
+    expect(chunks).toHaveLength(1);
+  });
+
+  it("creates an audio-only recorder from stream audio tracks", () => {
+    const chunks: Blob[] = [];
+    const audioTrack = { kind: "audio", id: "a1" };
+    const stream = {
+      getAudioTracks: () => [audioTrack]
+    } as unknown as MediaStream;
+
+    class FakeMediaRecorder {
+      ondataavailable: ((event: BlobEvent) => void) | null = null;
+      constructor(
+        public stream: MediaStream,
+        public options: { mimeType: string }
+      ) {}
+      static isTypeSupported(type: string) {
+        return type.includes("opus");
+      }
+    }
+    class FakeMediaStream {
+      constructor(public tracks: unknown[]) {}
+    }
+    vi.stubGlobal("MediaRecorder", FakeMediaRecorder);
+    vi.stubGlobal("MediaStream", FakeMediaStream);
+
+    const recorder = createAudioRecorder(stream, (blob) => chunks.push(blob)) as MediaRecorder & {
+      options: { mimeType: string };
+      stream: { tracks: unknown[] };
+    };
+    expect(recorder.options.mimeType).toContain("opus");
+    expect(recorder.stream.tracks).toEqual([audioTrack]);
+    recorder.ondataavailable?.({ data: new Blob(["a"], { type: "audio/webm" }) } as BlobEvent);
     expect(chunks).toHaveLength(1);
   });
 

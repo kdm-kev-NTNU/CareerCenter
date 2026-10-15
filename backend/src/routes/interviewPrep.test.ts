@@ -59,18 +59,23 @@ describe("interview prep routes", () => {
   async function buildInterviewApp(options: {
     structuredResult?: unknown;
     structuredResults?: unknown[];
+    structuredError?: Error;
+    configured?: boolean;
+    transcribeResult?: string;
     repo?: InterviewPrepMemoryRepository;
   } = {}) {
     const interviewPrepRepository = options.repo ?? new InterviewPrepMemoryRepository();
     const llmClient = new FakeLlmClient({
-      configured: true,
+      configured: options.configured ?? true,
+      transcribeResult: options.transcribeResult ?? "Jeg ledet et prosjekt som reduserte feil med 20%.",
       structuredResult: options.structuredResult ?? {
         clarifications: [{ question: "Hvilken rolle?" }],
         scores: Object.fromEntries(starRubricCriteria.map((key) => [key, 3])),
         sum: 24,
         improvement: "ok"
       },
-      structuredResults: options.structuredResults
+      structuredResults: options.structuredResults,
+      structuredError: options.structuredError
     });
     const app = await buildServer({
       repository: new MemoryRepository(),
@@ -79,7 +84,30 @@ describe("interview prep routes", () => {
       interviewPrepRepository
     });
     await app.ready();
-    return { app, interviewPrepRepository };
+    return { app, interviewPrepRepository, llmClient };
+  }
+
+  function multipartPayload(
+    boundary: string,
+    fields: Record<string, string>,
+    file?: { filename: string; contentType: string; body: string }
+  ) {
+    let payload = "";
+    for (const [name, value] of Object.entries(fields)) {
+      payload +=
+        `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="${name}"\r\n\r\n` +
+        `${value}\r\n`;
+    }
+    if (file) {
+      payload +=
+        `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="file"; filename="${file.filename}"\r\n` +
+        `Content-Type: ${file.contentType}\r\n\r\n` +
+        `${file.body}\r\n`;
+    }
+    payload += `--${boundary}--\r\n`;
+    return payload;
   }
 
   it("returns AI configuration status", async () => {
@@ -305,6 +333,84 @@ describe("interview prep routes", () => {
     expect(userContent).toContain("Intervjuer: Fortell om en gang du gjorde en feil.");
     expect(userContent).toContain("Kandidat: Jeg glemte en deadline i SpareBank 1.");
     expect(userContent).not.toBe("Jeg glemte en deadline i SpareBank 1.");
+    await app.close();
+  });
+
+  it("finishes practice sessions without AI rubric even when AI is off", async () => {
+    const { app, llmClient } = await buildInterviewApp({ configured: false });
+    const session = await app.inject({
+      method: "POST",
+      url: "/api/interview/sessions",
+      payload: { mode: "behavioral_mock", title: "Test", practice: true }
+    });
+    expect(session.statusCode).toBe(201);
+    expect(session.json().practice).toBe(true);
+    const sessionId = session.json().id as string;
+
+    const finished = await app.inject({ method: "POST", url: `/api/interview/sessions/${sessionId}/finish` });
+    expect(finished.statusCode).toBe(200);
+    expect(finished.json().feedback).toBeUndefined();
+    expect(finished.json().finishedAt).toBeTruthy();
+    expect(llmClient.structuredCalls).toHaveLength(0);
+    await app.close();
+  });
+
+  it("transcribes multipart audio and rates with prompt context", async () => {
+    const rubric = {
+      scores: Object.fromEntries(starRubricCriteria.map((key) => [key, 4])),
+      sum: 32,
+      improvement: "Bra tempo."
+    };
+    const { app, llmClient } = await buildInterviewApp({
+      structuredResult: rubric,
+      transcribeResult: "Jeg leverte funksjonen før deadline."
+    });
+    const boundary = "----VideoTranscribeBoundary";
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/interview/video/transcribe",
+      headers: { "content-type": `multipart/form-data; boundary=${boundary}` },
+      payload: multipartPayload(
+        boundary,
+        {
+          prompt: "Fortell om en gang du leverte under press.",
+          withRubric: "true",
+          durationMs: "45000"
+        },
+        { filename: "answer.webm", contentType: "audio/webm", body: "fake-audio-bytes" }
+      )
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().transcript).toBe("Jeg leverte funksjonen før deadline.");
+    expect(response.json().feedback.sum).toBe(32);
+    expect(response.json().feedbackFallback).toBe(false);
+    expect(llmClient.transcribeCalls).toHaveLength(1);
+    expect(llmClient.transcribeCalls[0]!.buffer.toString()).toContain("fake-audio-bytes");
+    const rubricUser = llmClient.structuredCalls.at(-1)?.options.messages.find((m) => m.role === "user")?.content;
+    expect(rubricUser).toContain("Spørsmål: Fortell om en gang du leverte under press.");
+    expect(rubricUser).toContain("Svar: Jeg leverte funksjonen før deadline.");
+    await app.close();
+  });
+
+  it("marks feedbackFallback when rubric AI fails", async () => {
+    const { app } = await buildInterviewApp({
+      structuredError: new Error("rubric down"),
+      transcribeResult: "Et kort svar."
+    });
+    const boundary = "----VideoFallbackBoundary";
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/interview/video/transcribe",
+      headers: { "content-type": `multipart/form-data; boundary=${boundary}` },
+      payload: multipartPayload(
+        boundary,
+        { prompt: "Hvorfor deg?", withRubric: "true" },
+        { filename: "answer.webm", contentType: "audio/webm", body: "audio" }
+      )
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().feedbackFallback).toBe(true);
+    expect(response.json().feedback.sum).toBe(24);
     await app.close();
   });
 
