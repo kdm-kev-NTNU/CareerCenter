@@ -53,6 +53,14 @@ describe("PrepResearchService", () => {
           cultureAndValues: ["integrity"],
           roleInContext: "Consultant",
           jobAdRequirements: [],
+          nicheInsights: ["Nordisk markets-franchise"],
+          companyQuestionPrep: [
+            {
+              question: "Hvorfor DNB?",
+              answerAngle: "Koble egen erfaring til DNBs nordiske franchise.",
+              nicheHooks: ["Nordisk markets-franchise"]
+            }
+          ],
           interviewAngles: [],
           questionsToAsk: [],
           sources: []
@@ -150,6 +158,8 @@ describe("PrepResearchService", () => {
           cultureAndValues: [],
           roleInContext: "",
           jobAdRequirements: [],
+          nicheInsights: [],
+          companyQuestionPrep: [],
           interviewAngles: [],
           questionsToAsk: [],
           sources: []
@@ -197,6 +207,14 @@ describe("PrepResearchService", () => {
           cultureAndValues: [],
           roleInContext: "Rolle",
           jobAdRequirements: [{ requirement: "Python", howToShowFit: "Vis prosjekt" }],
+          nicheInsights: ["Skyplattform X"],
+          companyQuestionPrep: [
+            {
+              question: "Hvorfor Acme?",
+              answerAngle: "Koble Python-erfaring til skyplattform X.",
+              nicheHooks: ["Skyplattform X"]
+            }
+          ],
           interviewAngles: [],
           questionsToAsk: [],
           sources: []
@@ -255,6 +273,8 @@ describe("PrepResearchService", () => {
           cultureAndValues: [],
           roleInContext: "",
           jobAdRequirements: [],
+          nicheInsights: [],
+          companyQuestionPrep: [],
           interviewAngles: [],
           questionsToAsk: [],
           sources: []

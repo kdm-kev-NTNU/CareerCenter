@@ -175,6 +175,14 @@ describe("interview prep routes", () => {
           cultureAndValues: [],
           roleInContext: "",
           jobAdRequirements: [],
+          nicheInsights: ["Nordisk markets"],
+          companyQuestionPrep: [
+            {
+              question: "Hvorfor DNB?",
+              answerAngle: "Koble til nordisk franchise.",
+              nicheHooks: ["Nordisk markets"]
+            }
+          ],
           interviewAngles: [],
           questionsToAsk: [],
           sources: []
@@ -606,6 +614,14 @@ describe("interview prep routes", () => {
         cultureAndValues: ["Integritet"],
         roleInContext: "Associate",
         jobAdRequirements: [],
+        nicheInsights: ["Nordisk markets"],
+        companyQuestionPrep: [
+          {
+            question: "Hvorfor DNB?",
+            answerAngle: "Koble til nordisk franchise.",
+            nicheHooks: ["Nordisk markets"]
+          }
+        ],
         interviewAngles: [],
         questionsToAsk: [],
         sources: []
@@ -640,6 +656,8 @@ describe("interview prep routes", () => {
         cultureAndValues: [],
         roleInContext: "",
         jobAdRequirements: [],
+        nicheInsights: [],
+        companyQuestionPrep: [],
         interviewAngles: [],
         questionsToAsk: [],
         sources: []

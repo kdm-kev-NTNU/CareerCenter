@@ -347,11 +347,33 @@ async function downloadCompanyReport() {
               <p v-if="plan.companyReport.aboutCompany" class="field-hint">
                 {{ plan.companyReport.aboutCompany }}
               </p>
+              <div v-if="plan.companyReport.nicheInsights?.length" class="stack">
+                <h4>Nisje-info til bedriftsspesifikke svar</h4>
+                <ul class="plain-list">
+                  <li v-for="(insight, i) in plan.companyReport.nicheInsights" :key="i">{{ insight }}</li>
+                </ul>
+              </div>
+              <div v-if="plan.companyReport.companyQuestionPrep?.length" class="stack">
+                <h4>Svarforslag</h4>
+                <ul class="plain-list">
+                  <li
+                    v-for="(prep, i) in plan.companyReport.companyQuestionPrep"
+                    :key="i"
+                    class="stack"
+                  >
+                    <strong>{{ prep.question }}</strong>
+                    <span class="field-hint">{{ prep.answerAngle }}</span>
+                    <span v-if="prep.nicheHooks?.length" class="field-hint">
+                      Hooks: {{ prep.nicheHooks.join("; ") }}
+                    </span>
+                  </li>
+                </ul>
+              </div>
               <AppButton variant="secondary" :loading="downloadingReport" @click="downloadCompanyReport">
                 Last ned bedriftsrapport (PDF)
               </AppButton>
             </template>
-            <p v-else>Skriver bedriftsrapport …</p>
+            <p v-else>Skriver bedriftsrapport med nisje-info og svarforslag …</p>
           </template>
           <template v-else-if="selectedStep === 'clarifications'">
             <p v-if="plan.clarifications.length">

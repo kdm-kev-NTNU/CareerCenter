@@ -25,6 +25,12 @@ function maxReport(): CompanyReport {
       requirement: fillWords(160),
       howToShowFit: fillWords(200)
     })),
+    nicheInsights: Array.from({ length: 6 }, () => fillWords(220)),
+    companyQuestionPrep: Array.from({ length: 6 }, () => ({
+      question: fillWords(180),
+      answerAngle: fillWords(280),
+      nicheHooks: [fillWords(120), fillWords(120)]
+    })),
     interviewAngles: Array.from({ length: 5 }, () => fillWords(220)),
     questionsToAsk: Array.from({ length: 5 }, () => fillWords(180)),
     sources: Array.from({ length: 6 }, () => fillWords(200))
@@ -51,6 +57,14 @@ describe("renderCompanyReportPdf", () => {
         jobAdRequirements: [
           { requirement: "Analytisk", howToShowFit: "Vis STAR-historie om modellering." }
         ],
+        nicheInsights: ["Sterk posisjon i nordisk verdipapirhandel"],
+        companyQuestionPrep: [
+          {
+            question: "Hvorfor DNB?",
+            answerAngle: "Koble egen markets-erfaring til DNBs nordiske franchise.",
+            nicheHooks: ["nordisk verdipapirhandel"]
+          }
+        ],
         interviewAngles: ["Kundeinnsikt"],
         questionsToAsk: ["Hvordan måles suksess i rollen?"],
         sources: ["dnb.no"]
@@ -72,6 +86,14 @@ describe("renderCompanyReportPdf", () => {
         cultureAndValues: ["Sikkerhet først"],
         roleInContext: "Rådgiver for energihandel.",
         jobAdRequirements: [{ requirement: "Norsk muntlig", howToShowFit: "Øv på case på norsk." }],
+        nicheInsights: ["Ny plattform i Nordsjøen"],
+        companyQuestionPrep: [
+          {
+            question: "Hvorfor Equinor?",
+            answerAngle: "Koble energiinteresse til konkret prosjekt.",
+            nicheHooks: ["Nordsjøen"]
+          }
+        ],
         interviewAngles: ["Markedskunnskap"],
         questionsToAsk: ["Hvordan jobber teamet med ærlige feil?"],
         sources: ["equinor.no"]

@@ -45,7 +45,7 @@ async function submit() {
   <section class="stack">
     <PageHeader
       title="Ny prep-plan"
-      lead="Oppgi bedrift, stilling og lim inn stillingsannonsen. Du følger hvert steg på neste side mens research kjører."
+      lead="Oppgi bedrift, stilling og lim inn stillingsannonsen. Researchen lager en bedriftsrapport med nisje-info og svarforslag til bedriftsspesifikke spørsmål."
     />
     <form class="panel stack" @submit.prevent="submit">
       <label>
