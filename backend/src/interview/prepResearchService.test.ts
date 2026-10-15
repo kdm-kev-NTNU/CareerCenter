@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { FakeLlmClient } from "../ai/fakeLlmClient.js";
 import { InterviewPrepMemoryRepository } from "../interviewPrepMemoryRepository.js";
 import { JobCancellationRegistry } from "./jobCancellationRegistry.js";
-import { PrepResearchService } from "./prepResearchService.js";
+import { buildReverseQuestions, PrepResearchService } from "./prepResearchService.js";
 import { sha256Content } from "./contentHash.js";
 
 function service(llmClient: FakeLlmClient, repository: InterviewPrepMemoryRepository) {
@@ -20,13 +20,14 @@ describe("PrepResearchService", () => {
       ),
       contentHash: sha256Content("bank-doc")
     });
-    await repository.replaceBankQuestionsForDoc(
+    await repository.insertBankQuestions(
       "u1",
       doc.id,
       Array.from({ length: 35 }, (_, i) => ({
         text: `Question number ${i + 1} about leadership?`,
         category: "behavioral" as const,
         tags: ["star"],
+        origin: "rule" as const,
         contentHash: sha256Content(`q-${i}`)
       }))
     );
@@ -134,13 +135,14 @@ describe("PrepResearchService", () => {
       content: "x",
       contentHash: sha256Content("bank-company-notes")
     });
-    await repository.replaceBankQuestionsForDoc(
+    await repository.insertBankQuestions(
       "u1",
       doc.id,
       Array.from({ length: 30 }, (_, i) => ({
         text: i === 0 ? "Hvorfor vil du jobbe her?" : `Q ${i}?`,
         category: (i === 0 ? "company" : "behavioral") as "company" | "behavioral",
         tags: [],
+        origin: "rule" as const,
         contentHash: sha256Content(`company-note-q-${i}`)
       }))
     );
@@ -211,13 +213,14 @@ describe("PrepResearchService", () => {
       content: "x",
       contentHash: sha256Content("bank-doc-2")
     });
-    await repository.replaceBankQuestionsForDoc(
+    await repository.insertBankQuestions(
       "u1",
       doc.id,
       Array.from({ length: 30 }, (_, i) => ({
         text: `Q ${i}?`,
         category: "behavioral" as const,
         tags: [],
+        origin: "rule" as const,
         contentHash: sha256Content(`skip-q-${i}`)
       }))
     );
@@ -267,6 +270,106 @@ describe("PrepResearchService", () => {
     await research.submitClarificationsAndCurate("u1", plan.id, [], true);
     const updated = await repository.getPrepPlan("u1", plan.id);
     expect(updated?.status).toBe("ready");
+  });
+
+  it("stores questions the candidate asks separately and keeps them out of the interviewer's list", async () => {
+    const repository = new InterviewPrepMemoryRepository();
+    const doc = await repository.createKnowledgeDoc("u1", {
+      kind: "company",
+      title: "Bank",
+      content: "x",
+      contentHash: sha256Content("bank-reverse")
+    });
+    await repository.insertBankQuestions("u1", doc.id, [
+      ...Array.from({ length: 30 }, (_, i) => ({
+        text: `Q ${i}?`,
+        category: "behavioral" as const,
+        tags: [],
+        origin: "rule" as const,
+        contentHash: sha256Content(`reverse-q-${i}`)
+      })),
+      {
+        text: "Hva overrasket deg mest det første året ditt her?",
+        category: "personal" as const,
+        audience: "ask_interviewer_personal" as const,
+        tags: [],
+        origin: "rule" as const,
+        contentHash: sha256Content("reverse-personal")
+      },
+      {
+        text: "Hvordan ser en typisk uke ut?",
+        category: "company" as const,
+        audience: "ask_interviewer_company" as const,
+        tags: [],
+        origin: "rule" as const,
+        contentHash: sha256Content("reverse-company")
+      }
+    ]);
+    const bank = await repository.listBankQuestions("u1");
+    const candidateIds = bank.filter((q) => q.audience === "candidate").map((q) => q.id);
+    const personal = bank.find((q) => q.audience === "ask_interviewer_personal")!;
+    const company = bank.find((q) => q.audience === "ask_interviewer_company")!;
+    const emptyReport = {
+      headline: "",
+      keyFacts: {},
+      aboutCompany: "",
+      businessAreas: [],
+      strategyAndNews: [],
+      cultureAndValues: [],
+      roleInContext: "",
+      jobAdRequirements: [],
+      nicheInsights: ["Satser på KI i kundeservice"],
+      companyQuestionPrep: [{ question: "Hva vet du om oss?", answerAngle: "Nevn KI-satsingen", nicheHooks: [] }],
+      interviewAngles: [],
+      questionsToAsk: ["Hvordan måler dere effekten av KI-satsingen?"],
+      sources: []
+    };
+    const llmClient = new FakeLlmClient({
+      structuredResults: [
+        { industries: [], businessAreas: [], interviewFormats: [], caseTypes: [], values: [], themes: [], summary: "" },
+        emptyReport,
+        { clarifications: [{ question: "Format?" }] },
+        {
+          // A reverse question picked by mistake is dropped from the interviewer's list.
+          selectedQuestionIds: [...candidateIds, company.id],
+          generatedQuestions: [],
+          reverseQuestions: [
+            { text: "Hvordan ser en typisk uke ut for en intern i KI-teamet?", audience: "ask_interviewer_company", bankQuestionId: company.id },
+            { text: personal.text, audience: "ask_interviewer_personal", bankQuestionId: personal.id },
+            { text: "Hvordan måler dere effekten av KI-satsingen?", audience: "ask_interviewer_company", bankQuestionId: null }
+          ],
+          tasks: []
+        }
+      ]
+    });
+    const research = service(llmClient, repository);
+    const plan = await repository.createPrepPlan("u1", {
+      companyName: "Bank",
+      roleTitle: "Intern",
+      format: "interview",
+      researchModel: "gpt-6-astra"
+    });
+    await research.startResearch("u1", plan.id);
+    await research.submitClarificationsAndCurate("u1", plan.id, [], true);
+
+    const updated = await repository.getPrepPlan("u1", plan.id);
+    expect(updated?.status).toBe("ready");
+    const asked = updated!.questions.filter((q) => q.audience === "candidate");
+    const toAsk = updated!.questions.filter((q) => q.audience !== "candidate");
+    expect(asked).toHaveLength(30);
+    expect(asked.some((q) => q.bankQuestionId === company.id)).toBe(false);
+    expect(toAsk.map((q) => [q.audience, q.category, q.source])).toEqual([
+      ["ask_interviewer_company", "company", "edited"],
+      ["ask_interviewer_personal", "personal", "bank"],
+      ["ask_interviewer_company", "company", "generated"]
+    ]);
+    expect(toAsk.every((q) => !q.notes)).toBe(true);
+
+    const curationUser = llmClient.structuredCalls[3]!.options.messages[1]!.content;
+    expect(curationUser).toContain(`${personal.id} | ask_interviewer_personal | ${personal.text}`);
+    expect(curationUser).toContain("Hvordan måler dere effekten av KI-satsingen?");
+    const candidateBlock = curationUser.split("Spørsmål kandidaten kan stille intervjueren")[0]!;
+    expect(candidateBlock).not.toContain(personal.text);
   });
 
   it("includes jobAdText in research prompts and stores the company report", async () => {
@@ -376,5 +479,71 @@ describe("PrepResearchService", () => {
     await expect(research.startResearch("u1", plan.id)).rejects.toThrow();
     const updated = await repository.getPrepPlan("u1", plan.id);
     expect(updated?.status).toBe("failed");
+  });
+});
+
+describe("buildReverseQuestions", () => {
+  const bankRow = (id: string, text: string, audience: "ask_interviewer_company" | "ask_interviewer_personal") => ({
+    id,
+    userId: "u1",
+    knowledgeDocId: "d",
+    text,
+    category: audience === "ask_interviewer_company" ? ("company" as const) : ("personal" as const),
+    audience,
+    status: "active" as const,
+    origin: "rule" as const,
+    sourceText: text,
+    tags: [],
+    contentHash: id,
+    createdAt: ""
+  });
+
+  it("caps company and personal questions and drops duplicates", () => {
+    const picks = [
+      ...Array.from({ length: 7 }, (_, i) => ({
+        text: `Om selskapet ${i}?`,
+        audience: "ask_interviewer_company" as const,
+        bankQuestionId: null
+      })),
+      ...Array.from({ length: 5 }, (_, i) => ({
+        text: `Personlig ${i}?`,
+        audience: "ask_interviewer_personal" as const,
+        bankQuestionId: null
+      })),
+      { text: "Om selskapet 0?", audience: "ask_interviewer_company" as const, bankQuestionId: null }
+    ];
+    const out = buildReverseQuestions(picks, [], []);
+    expect(out.filter((q) => q.audience === "ask_interviewer_company")).toHaveLength(5);
+    expect(out.filter((q) => q.audience === "ask_interviewer_personal")).toHaveLength(3);
+  });
+
+  it("ignores unknown bank ids", () => {
+    const [question] = buildReverseQuestions(
+      [{ text: "Hva er neste steg?", audience: "ask_interviewer_company", bankQuestionId: "nope" }],
+      [],
+      []
+    );
+    expect(question).toMatchObject({ source: "generated", bankQuestionId: undefined, category: "company" });
+  });
+
+  it("falls back to report suggestions and personal bank questions", () => {
+    const out = buildReverseQuestions(
+      [],
+      [
+        bankRow("p1", "Hva overrasket deg?", "ask_interviewer_personal"),
+        bankRow("c1", "Hva er neste steg?", "ask_interviewer_company"),
+        bankRow("p2", "Hva fikk deg til å bli?", "ask_interviewer_personal"),
+        bankRow("p3", "Hva gjør du nå?", "ask_interviewer_personal")
+      ],
+      ["Forslag 1?", "Forslag 2?", "Forslag 3?", "Forslag 4?"]
+    );
+    expect(out.map((q) => q.text)).toEqual([
+      "Forslag 1?",
+      "Forslag 2?",
+      "Forslag 3?",
+      "Hva overrasket deg?",
+      "Hva fikk deg til å bli?"
+    ]);
+    expect(out[3]).toMatchObject({ source: "bank", bankQuestionId: "p1", category: "personal" });
   });
 });

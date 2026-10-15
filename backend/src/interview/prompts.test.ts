@@ -59,6 +59,42 @@ describe("buildSimulatorSystemPrompt", () => {
   });
 });
 
+describe("closing round", () => {
+  it("asks for the candidate's questions in behavioral and case modes, not in tutor mode", () => {
+    for (const mode of ["behavioral_mock", "case_oral"] as const) {
+      const prompt = buildSimulatorSystemPrompt({ ...baseInput, mode });
+      expect(prompt).toContain("Avslutning: spørsmålsrunde");
+      expect(prompt).toContain("Har du noen spørsmål til oss?");
+      expect(prompt).toContain("end_interview");
+    }
+    const tutor = buildSimulatorSystemPrompt({ ...baseInput, mode: "concept_tutor" });
+    expect(tutor).not.toContain("Har du noen spørsmål til oss?");
+  });
+
+  it("lists prepared questions in a hidden section", () => {
+    const prompt = buildSimulatorSystemPrompt({
+      ...baseInput,
+      mode: "behavioral_mock",
+      questionsToAsk: [
+        { text: "Hvordan jobber dere med KI?", audience: "ask_interviewer_company" },
+        { text: "Hva overrasket deg mest?", audience: "ask_interviewer_personal" }
+      ]
+    });
+    expect(prompt).toContain("SKJULT: Spørsmål kandidaten har forberedt");
+    expect(prompt).toContain("Om selskapet:\n- Hvordan jobber dere med KI?");
+    expect(prompt).toContain("Til deg personlig:\n- Hva overrasket deg mest?");
+  });
+});
+
+describe("essentials in the simulator prompt", () => {
+  it("includes a custom sheet and leaves out an empty one", () => {
+    const custom = buildSimulatorSystemPrompt({ ...baseInput, mode: "behavioral_mock", essentialsSheet: "Mine stikkord" });
+    expect(custom).toContain("Kandidatens essentials-ark (bakgrunn, ikke les det opp):\nMine stikkord");
+    const empty = buildSimulatorSystemPrompt({ ...baseInput, mode: "behavioral_mock", essentialsSheet: "  " });
+    expect(empty).not.toContain("essentials-ark");
+  });
+});
+
 describe("buildPlanPracticeScript", () => {
   it("includes only included questions in sort order with notes", () => {
     const script = buildPlanPracticeScript({
@@ -76,6 +112,24 @@ describe("buildPlanPracticeScript", () => {
     expect(script).toContain("1. [motivation] First?");
     expect(script).toContain("2. [behavioral] Second? (notater til intervjuer: STAR)");
     expect(script).not.toContain("Skipped?");
+  });
+
+  it("leaves out questions the candidate asks the interviewer", () => {
+    const script = buildPlanPracticeScript({
+      companyName: "DNB",
+      questions: [
+        { text: "Why DNB?", category: "motivation", audience: "candidate", included: true, sortOrder: 0 },
+        { text: "Hva er neste steg?", category: "company", audience: "ask_interviewer_company", included: true, sortOrder: 1 }
+      ]
+    });
+    expect(script).toContain("1. [motivation] Why DNB?");
+    expect(script).not.toContain("Hva er neste steg?");
+    expect(
+      buildPlanPracticeScript({
+        companyName: "DNB",
+        questions: [{ text: "Hva er neste steg?", category: "company", audience: "ask_interviewer_company" }]
+      })
+    ).toBe("");
   });
 
   it("is embedded in simulator prompt when planScript is set", () => {
@@ -103,6 +157,7 @@ describe("buildFinishRubricPrompt", () => {
     }
     expect(prompt).toContain("Ett forbedringspunkt");
     expect(prompt).toContain("Under 24 av 32");
+    expect(prompt).toContain("Spørsmålsrunden til slutt");
   });
 });
 
