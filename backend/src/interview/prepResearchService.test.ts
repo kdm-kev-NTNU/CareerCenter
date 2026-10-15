@@ -6,7 +6,7 @@ import { buildReverseQuestions, PrepResearchService } from "./prepResearchServic
 import { sha256Content } from "./contentHash.js";
 
 function service(llmClient: FakeLlmClient, repository: InterviewPrepMemoryRepository) {
-  return new PrepResearchService(llmClient, repository, new JobCancellationRegistry());
+  return new PrepResearchService(llmClient, repository, new JobCancellationRegistry(), { error: () => {} });
 }
 
 describe("PrepResearchService", () => {
@@ -109,6 +109,10 @@ describe("PrepResearchService", () => {
     expect(llmClient.webSearchCalls[0]?.options?.model).toBe("gpt-5.5");
     expect(llmClient.completeCalls.every((call) => call.model === "gpt-5.5")).toBe(true);
     expect(llmClient.structuredCalls.every((call) => call.options.model === "gpt-5.5")).toBe(true);
+    // Reasoning web search measured ~110s; the 60s client default must never apply to research steps.
+    expect(llmClient.webSearchCalls[0]?.options?.timeoutMs).toBeGreaterThanOrEqual(240_000);
+    expect(llmClient.completeCalls.every((call) => (call.timeoutMs ?? 0) > 60_000)).toBe(true);
+    expect(llmClient.structuredCalls.every((call) => (call.options.timeoutMs ?? 0) > 60_000)).toBe(true);
 
     await research.submitClarificationsAndCurate("u1", plan.id, [
       { id: updated!.clarifications[0]!.id, answer: "Corporate banking" }

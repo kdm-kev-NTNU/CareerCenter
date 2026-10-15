@@ -35,7 +35,17 @@ import {
   buildResearchSystemPrompt
 } from "./prompts.js";
 
+/**
+ * Per-step budgets for reasoning calls. The client default (60s) is too short:
+ * web search with reasoning "high" measured ~110s.
+ */
+const WEB_SEARCH_TIMEOUT_MS = 300_000;
+const RESEARCH_STEP_TIMEOUT_MS = 180_000;
 const CURATION_TIMEOUT_MS = 180_000;
+
+export interface PipelineFailureLogger {
+  error(details: Record<string, unknown>, message: string): void;
+}
 
 function isAbortError(error: unknown): boolean {
   return (
@@ -61,8 +71,29 @@ export class PrepResearchService {
   constructor(
     private readonly llmClient: LlmClient,
     private readonly repository: InterviewPrepRepository,
-    private readonly cancellationRegistry: JobCancellationRegistry
+    private readonly cancellationRegistry: JobCancellationRegistry,
+    private readonly failureLogger: PipelineFailureLogger
   ) {}
+
+  /** Persists the user-facing reason and logs the raw cause, which the plan row does not keep. */
+  private async markFailed(userId: string, planId: string, error: unknown, fallback: string): Promise<void> {
+    const message = describePipelineFailure(error, fallback);
+    const raw = error as { name?: string; status?: number; code?: string; message?: string };
+    const plan = await this.repository.getPrepPlan(userId, planId);
+    this.failureLogger.error(
+      {
+        planId,
+        pipelineStep: plan?.pipelineStep,
+        model: plan?.researchModel,
+        errName: raw?.name,
+        errStatus: raw?.status,
+        errCode: raw?.code,
+        errMessage: String(raw?.message ?? error)
+      },
+      "Prep plan pipeline step failed"
+    );
+    await this.repository.updatePrepPlanStatus(userId, planId, "failed", message);
+  }
 
   async startResearch(userId: string, planId: string): Promise<void> {
     await this.prepareResearch(userId, planId);
@@ -291,7 +322,7 @@ export class PrepResearchService {
         searchSnippet = this.llmClient.webSearch
           ? await this.llmClient.webSearch(
               `${plan.companyName} ${plan.roleTitle} niche strategy products deals culture news interview why company`,
-              { model, signal }
+              { model, signal, timeoutMs: WEB_SEARCH_TIMEOUT_MS }
             )
           : "";
         await this.repository.setPrepPlanPipeline(userId, planId, {
@@ -306,6 +337,7 @@ export class PrepResearchService {
         researchNotes = await this.llmClient.complete({
           model,
           signal,
+          timeoutMs: RESEARCH_STEP_TIMEOUT_MS,
           messages: [
             { role: "system", content: buildResearchSystemPrompt(plan.companyName, plan.roleTitle) },
             {
@@ -328,6 +360,7 @@ export class PrepResearchService {
           {
             model,
             signal,
+            timeoutMs: RESEARCH_STEP_TIMEOUT_MS,
             messages: [
               { role: "system", content: buildResearchSystemPrompt(plan.companyName, plan.roleTitle) },
               {
@@ -353,6 +386,7 @@ export class PrepResearchService {
           {
             model,
             signal,
+            timeoutMs: RESEARCH_STEP_TIMEOUT_MS,
             messages: [
               {
                 role: "system",
@@ -385,6 +419,7 @@ export class PrepResearchService {
         {
           model,
           signal,
+          timeoutMs: RESEARCH_STEP_TIMEOUT_MS,
           messages: [
             { role: "system", content: buildClarificationSystemPrompt(plan.companyName, plan.roleTitle) },
             {
@@ -416,8 +451,7 @@ export class PrepResearchService {
         await this.repository.updatePrepPlanStatus(userId, planId, "cancelled", USER_CANCEL_MESSAGE);
         throw Object.assign(new Error(USER_CANCEL_MESSAGE), { name: "AbortError" });
       }
-      const message = describePipelineFailure(error, "Research feilet.");
-      await this.repository.updatePrepPlanStatus(userId, planId, "failed", message);
+      await this.markFailed(userId, planId, error, "Research feilet.");
       throw error;
     }
   }
@@ -473,6 +507,7 @@ export class PrepResearchService {
       {
         model: plan.researchModel,
         signal,
+        timeoutMs: RESEARCH_STEP_TIMEOUT_MS,
         messages: [
           { role: "system", content: buildClarificationSystemPrompt(plan.companyName, plan.roleTitle) },
           {
@@ -653,8 +688,7 @@ export class PrepResearchService {
         await this.repository.updatePrepPlanStatus(userId, planId, "cancelled", USER_CANCEL_MESSAGE);
         throw Object.assign(new Error(USER_CANCEL_MESSAGE), { name: "AbortError" });
       }
-      const message = describePipelineFailure(error, "Kuratering feilet.");
-      await this.repository.updatePrepPlanStatus(userId, planId, "failed", message);
+      await this.markFailed(userId, planId, error, "Kuratering feilet.");
       throw error;
     }
   }

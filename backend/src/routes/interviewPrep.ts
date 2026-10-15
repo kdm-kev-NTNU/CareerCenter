@@ -131,7 +131,8 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
   const researchService = new PrepResearchService(
     deps.llmClient,
     deps.interviewPrepRepository,
-    cancellationRegistry
+    cancellationRegistry,
+    app.log
   );
   const importDeps = {
     llmClient: deps.llmClient,
