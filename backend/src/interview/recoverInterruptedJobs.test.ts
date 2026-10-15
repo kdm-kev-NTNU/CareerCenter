@@ -22,13 +22,15 @@ describe("recoverInterruptedJobs", () => {
     const researching = await repository.createPrepPlan("u1", {
       companyName: "A",
       roleTitle: "B",
-      format: "interview"
+      format: "interview",
+      researchModel: "gpt-6-astra"
     });
     await repository.updatePrepPlanStatus("u1", researching.id, "researching");
     const ready = await repository.createPrepPlan("u1", {
       companyName: "C",
       roleTitle: "D",
-      format: "interview"
+      format: "interview",
+      researchModel: "gpt-6-astra"
     });
     await repository.updatePrepPlanStatus("u1", ready.id, "ready");
 

@@ -43,10 +43,15 @@ describe("transitionPrepPlan", () => {
     expect(prepPlanStepVisual("created", "research_notes", "researching")).toBe("done");
     expect(prepPlanStepVisual("research_notes", "research_notes", "researching")).toBe("active");
     expect(prepPlanStepVisual("company_profile", "research_notes", "researching")).toBe("pending");
+    expect(prepPlanStepVisual("company_report", "company_profile", "researching")).toBe("pending");
+    expect(prepPlanStepVisual("company_profile", "company_report", "researching")).toBe("done");
+    expect(prepPlanStepVisual("company_report", "company_report", "researching")).toBe("active");
+    expect(prepPlanStepVisual("clarifications", "company_report", "researching")).toBe("pending");
     expect(prepPlanStepVisual("searching", "searching", "failed")).toBe("failed");
     expect(prepPlanStepVisual("created", "ready", "ready")).toBe("done");
     expect(prepPlanStepVisual("ready", "ready", "ready")).toBe("done");
     expect(isPrepPlanPipelineActive("searching", "researching")).toBe(true);
+    expect(isPrepPlanPipelineActive("company_report", "researching")).toBe(true);
     expect(isPrepPlanPipelineActive("awaiting_answers", "awaiting_answers")).toBe(false);
     expect(isPrepPlanPipelineActive("clarifications", "awaiting_answers")).toBe(true);
     expect(isPrepPlanPipelineActive("ready", "ready")).toBe(false);

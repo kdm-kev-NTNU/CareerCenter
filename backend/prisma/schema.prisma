@@ -394,10 +394,13 @@ model InterviewPrepPlan {
   companyName         String
   roleTitle           String                        @default("")
   format              String
+  researchModel       String                        @default("gpt-6-astra")
   status              String
   pipelineStep        String                        @default("created")
+  jobAdText           String                        @default("")
   researchNotes       String                        @default("")
   companyProfileJson  String                        @default("{}")
+  companyReportJson   String                        @default("")
   clarificationRound  Int                           @default(0)
   failureReason       String?
   createdAt           DateTime                      @default(now())

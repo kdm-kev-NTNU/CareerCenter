@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import type {
-  InterviewBankQuestionDto,
-  InterviewCasePublicDto,
-  InterviewImportJobDto,
-  InterviewKnowledgeDocDto
+import {
+  canDeleteImportJob,
+  type InterviewBankQuestionDto,
+  type InterviewCasePublicDto,
+  type InterviewImportJobDto,
+  type InterviewKnowledgeDocDto
 } from "@careercenter/shared";
 import { onMounted, onUnmounted, ref } from "vue";
 import { interviewPrepApi } from "../../api/interviewPrep.js";
@@ -156,6 +157,17 @@ async function stopJob(id: string) {
     error.value = err instanceof Error ? err.message : "Kunne ikke stoppe importen.";
   }
 }
+
+async function removeJob(id: string) {
+  if (!confirm("Fjerne denne importen fra listen? Dokumentet og eventuelle caseutkast blir liggende.")) return;
+  error.value = null;
+  try {
+    await interviewPrepApi.deleteImportJob(id);
+    await refresh();
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : "Kunne ikke slette importen.";
+  }
+}
 </script>
 
 <template>
@@ -213,6 +225,9 @@ async function stopJob(id: string) {
                 @click="retryJob(job.id)"
               >
                 Fortsett
+              </AppButton>
+              <AppButton v-if="canDeleteImportJob(job.status)" variant="ghost" @click="removeJob(job.id)">
+                Slett
               </AppButton>
             </div>
           </li>
@@ -317,6 +332,9 @@ async function stopJob(id: string) {
                 @click="retryJob(job.id)"
               >
                 Fortsett
+              </AppButton>
+              <AppButton v-if="canDeleteImportJob(job.status)" variant="ghost" @click="removeJob(job.id)">
+                Slett
               </AppButton>
             </div>
           </li>

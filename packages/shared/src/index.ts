@@ -354,6 +354,10 @@ export {
   caseFrameworkStepLabels,
   prepPlanStatuses,
   prepFormats,
+  researchModels,
+  DEFAULT_RESEARCH_MODEL,
+  researchModelLabels,
+  isResearchModel,
   questionTargets,
   questionCategories,
   caseSourceKinds,
@@ -361,7 +365,9 @@ export {
   prepQuestionSources,
   caseApprovalStatuses,
   importJobStatuses,
-  importJobKinds
+  importJobKinds,
+  deletableImportJobStatuses,
+  canDeleteImportJob
 } from "./interviewPrep.js";
 export type {
   InterviewMode,
@@ -370,6 +376,7 @@ export type {
   CaseFrameworkStep,
   PrepPlanStatus,
   PrepFormat,
+  ResearchModel,
   QuestionTarget,
   QuestionCategory,
   CaseSourceKind,
@@ -419,6 +426,12 @@ export { answerStats } from "./answerStats.js";
 export type { AnswerStats } from "./answerStats.js";
 export { emptyCompanyProfile } from "./companyProfile.js";
 export type { CompanyProfile } from "./companyProfile.js";
+export { emptyCompanyReport } from "./companyReport.js";
+export type {
+  CompanyReport,
+  CompanyReportKeyFacts,
+  CompanyReportRequirement
+} from "./companyReport.js";
 
 export { abilityTestKinds } from "./abilityTests.js";
 export type { AbilityTestKind } from "./abilityTests.js";

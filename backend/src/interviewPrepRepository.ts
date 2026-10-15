@@ -13,6 +13,7 @@ import type {
   PrepQuestionSource,
   QuestionCategory,
   QuestionTarget,
+  ResearchModel,
   VideoSimState,
   VideoSimulatorSettings
 } from "@careercenter/shared";
@@ -104,10 +105,13 @@ export interface InterviewPrepPlanRecord {
   companyName: string;
   roleTitle: string;
   format: PrepFormat;
+  researchModel: ResearchModel;
   status: PrepPlanStatus;
   pipelineStep: PrepPlanPipelineStep;
+  jobAdText: string;
   researchNotes: string;
   companyProfileJson: string;
+  companyReportJson: string;
   clarificationRound: number;
   failureReason?: string;
   clarifications: InterviewPrepClarificationRecord[];
@@ -233,6 +237,8 @@ export interface PrepPlanCreateInput {
   companyName: string;
   roleTitle: string;
   format: PrepFormat;
+  researchModel: ResearchModel;
+  jobAdText?: string;
 }
 
 export interface ImportJobCreateInput {
@@ -323,6 +329,7 @@ export interface InterviewPrepRepository {
       pipelineStep: PrepPlanPipelineStep;
       researchNotes?: string;
       companyProfileJson?: string;
+      companyReportJson?: string;
     }
   ): Promise<InterviewPrepPlanRecord | null>;
   setPrepPlanResearch(
@@ -332,6 +339,7 @@ export interface InterviewPrepRepository {
       researchNotes: string;
       clarifications: Array<{ question: string; sortOrder: number }>;
       companyProfileJson?: string;
+      companyReportJson?: string;
       clarificationRound?: number;
     }
   ): Promise<InterviewPrepPlanRecord | null>;
@@ -358,6 +366,7 @@ export interface InterviewPrepRepository {
         bankQuestionId?: string;
         storyId?: string;
         gapReason?: string;
+        notes?: string;
       }>;
       tasks: Array<{ title: string; description: string }>;
       recommendedCaseIds?: string[];
@@ -450,6 +459,12 @@ export interface InterviewPrepRepository {
     id: string,
     input: ImportJobUpdateInput
   ): Promise<InterviewImportJobRecord | null>;
+  /**
+   * Removes a stopped or finished import job.
+   * Returns false when the job is missing or still queued/running.
+   * Does not delete the knowledge document or extracted cases.
+   */
+  deleteImportJob(userId: string, id: string): Promise<boolean>;
   /** Mark all queued/running import jobs as failed (process restart recovery). */
   failInterruptedImportJobs(message: string): Promise<number>;
   /** Mark researching/curating prep plans as failed (process restart recovery). */

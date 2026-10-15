@@ -29,6 +29,7 @@ export const prepPlanPipelineStepLabel = {
   searching: "Nett-søk",
   research_notes: "Research-notater",
   company_profile: "Bedriftsprofil",
+  company_report: "Bedriftsrapport",
   clarifications: "Oppklaringsspørsmål",
   awaiting_answers: "Dine svar",
   curating_questions: "Spørsmål fra banken",

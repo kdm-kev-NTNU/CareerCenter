@@ -58,7 +58,16 @@ describe("OpenAiLlmClient", () => {
     createMock.mockResolvedValue({ output_text: "  svar  " });
     const client = new OpenAiLlmClient(envBase);
     await expect(client.complete({ messages: [{ role: "user", content: "hi" }] })).resolves.toBe("svar");
-    expect(createMock).toHaveBeenCalled();
+    expect(createMock.mock.calls[0]?.[0]).toMatchObject({ model: "gpt-test" });
+  });
+
+  it("uses model override on complete and web search", async () => {
+    createMock.mockResolvedValue({ output_text: "ok" });
+    const client = new OpenAiLlmClient(envBase);
+    await client.complete({ model: "gpt-5.5", messages: [{ role: "user", content: "hi" }] });
+    expect(createMock.mock.calls[0]?.[0]).toMatchObject({ model: "gpt-5.5" });
+    await client.webSearch("DNB", { model: "gpt-6-luna" });
+    expect(createMock.mock.calls[1]?.[0]).toMatchObject({ model: "gpt-6-luna" });
   });
 
   it("throws on empty complete response", async () => {

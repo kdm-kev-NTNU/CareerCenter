@@ -18,10 +18,12 @@ import {
 import {
   clarificationListSchema,
   companyProfileSchema,
+  companyReportSchema,
   curatedBankSelectionSchema
 } from "./knowledgeSchemas.js";
 import {
   buildClarificationSystemPrompt,
+  buildCompanyReportSystemPrompt,
   buildCurationSystemPrompt,
   buildResearchSystemPrompt
 } from "./prompts.js";
@@ -176,25 +178,30 @@ export class PrepResearchService {
   private async runResearch(userId: string, planId: string, signal: AbortSignal): Promise<void> {
     const plan = await this.repository.getPrepPlan(userId, planId);
     if (!plan) throw new Error("Plan ikke funnet.");
+    const model = plan.researchModel;
+    const jobAdBlock = plan.jobAdText.trim()
+      ? `\n\nStillingsannonse:\n${plan.jobAdText.trim()}`
+      : "\n\nStillingsannonse: (ikke oppgitt)";
 
     try {
       throwIfAborted(signal);
       const searchSnippet = this.llmClient.webSearch
         ? await this.llmClient.webSearch(
-            `${plan.companyName} ${plan.roleTitle} interview process culture`,
-            signal
+            `${plan.companyName} ${plan.roleTitle} company overview strategy news culture interview process`,
+            { model, signal }
           )
         : "";
 
       throwIfAborted(signal);
       await this.repository.setPrepPlanPipeline(userId, planId, { pipelineStep: "research_notes" });
       const researchNotes = await this.llmClient.complete({
+        model,
         signal,
         messages: [
           { role: "system", content: buildResearchSystemPrompt(plan.companyName, plan.roleTitle) },
           {
             role: "user",
-            content: `Oppsummer hva kandidaten bør vite om selskap, rolle og intervju. Nettfunn:\n${searchSnippet}`
+            content: `Oppsummer hva kandidaten bør vite om selskap, rolle og intervju.${jobAdBlock}\n\nNettfunn:\n${searchSnippet}`
           }
         ]
       });
@@ -206,12 +213,13 @@ export class PrepResearchService {
       });
       const profile = await this.llmClient.completeStructured(
         {
+          model,
           signal,
           messages: [
             { role: "system", content: buildResearchSystemPrompt(plan.companyName, plan.roleTitle) },
             {
               role: "user",
-              content: `Lag et companyProfile-JSON basert på research.\nResearch:\n${researchNotes}\nNettfunn:\n${searchSnippet}`
+              content: `Lag et companyProfile-JSON basert på research.${jobAdBlock}\n\nResearch:\n${researchNotes}\nNettfunn:\n${searchSnippet}`
             }
           ]
         },
@@ -220,17 +228,48 @@ export class PrepResearchService {
 
       throwIfAborted(signal);
       await this.repository.setPrepPlanPipeline(userId, planId, {
-        pipelineStep: "clarifications",
+        pipelineStep: "company_report",
         companyProfileJson: JSON.stringify(profile)
+      });
+      const report = await this.llmClient.completeStructured(
+        {
+          model,
+          signal,
+          messages: [
+            {
+              role: "system",
+              content: buildCompanyReportSystemPrompt(plan.companyName, plan.roleTitle)
+            },
+            {
+              role: "user",
+              content: [
+                `Lag en companyReport-JSON (bedriftsrapport) for kandidaten.`,
+                jobAdBlock.trim(),
+                `Research:\n${researchNotes}`,
+                `Profil:\n${JSON.stringify(profile)}`,
+                `Nettfunn:\n${searchSnippet}`
+              ].join("\n\n")
+            }
+          ]
+        },
+        companyReportSchema
+      );
+      const companyReportJson = JSON.stringify(report);
+
+      throwIfAborted(signal);
+      await this.repository.setPrepPlanPipeline(userId, planId, {
+        pipelineStep: "clarifications",
+        companyReportJson
       });
       const clarificationPayload = await this.llmClient.completeStructured(
         {
+          model,
           signal,
           messages: [
             { role: "system", content: buildClarificationSystemPrompt(plan.companyName, plan.roleTitle) },
             {
               role: "user",
-              content: `Research:\n${researchNotes}\n\nProfil:\n${JSON.stringify(profile)}\n\nLag oppklaringsspørsmål om hull i research (ikke intervjuspørsmål).`
+              content: `Research:\n${researchNotes}\n\nProfil:\n${JSON.stringify(profile)}\n\nRapport:\n${companyReportJson}\n\nLag oppklaringsspørsmål om hull i research (ikke intervjuspørsmål).`
             }
           ]
         },
@@ -241,6 +280,7 @@ export class PrepResearchService {
       await this.repository.setPrepPlanResearch(userId, planId, {
         researchNotes,
         companyProfileJson: JSON.stringify(profile),
+        companyReportJson,
         clarificationRound: 1,
         clarifications: clarificationPayload.clarifications.map((item, index) => ({
           question: item.question,
@@ -311,6 +351,7 @@ export class PrepResearchService {
     throwIfAborted(signal);
     const payload = await this.llmClient.completeStructured(
       {
+        model: plan.researchModel,
         signal,
         messages: [
           { role: "system", content: buildClarificationSystemPrompt(plan.companyName, plan.roleTitle) },
@@ -359,6 +400,7 @@ export class PrepResearchService {
       throwIfAborted(signal);
       const selection = await this.llmClient.completeStructured(
         {
+          model: plan.researchModel,
           signal,
           messages: [
             { role: "system", content: buildCurationSystemPrompt(plan.companyName, plan.roleTitle) },

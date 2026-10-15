@@ -10,7 +10,14 @@ export interface LlmMessage {
 export interface LlmCompleteOptions {
   messages: LlmMessage[];
   temperature?: number;
+  /** Optional per-call model override (falls back to env default). */
+  model?: string;
   /** Optional abort signal for cancellable long-running calls. */
+  signal?: AbortSignal;
+}
+
+export interface LlmWebSearchOptions {
+  model?: string;
   signal?: AbortSignal;
 }
 
@@ -27,6 +34,6 @@ export interface LlmClient {
     options: LlmCompleteOptions,
     schema: T
   ): Promise<z.infer<T>>;
-  webSearch?(query: string, signal?: AbortSignal): Promise<string>;
+  webSearch?(query: string, options?: LlmWebSearchOptions): Promise<string>;
   transcribe?(options: LlmTranscribeOptions): Promise<string>;
 }

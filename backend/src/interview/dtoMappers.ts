@@ -1,7 +1,9 @@
 import {
   emptyCompanyProfile,
+  emptyCompanyReport,
   findRepeatedStories,
   type CompanyProfile,
+  type CompanyReport,
   type InterviewBankQuestionDto,
   type InterviewImportJobDto,
   type InterviewKnowledgeDocDto,
@@ -19,7 +21,7 @@ import type {
   InterviewSessionRecord,
   InterviewSimulatorSettingsRecord
 } from "../interviewPrepRepository.js";
-import { companyProfileSchema } from "./knowledgeSchemas.js";
+import { companyProfileSchema, companyReportSchema } from "./knowledgeSchemas.js";
 
 export function toKnowledgeDocDto(doc: InterviewKnowledgeDoc): InterviewKnowledgeDocDto {
   return {
@@ -52,10 +54,13 @@ export function toPrepPlanDto(plan: InterviewPrepPlanRecord): InterviewPrepPlanD
     companyName: plan.companyName,
     roleTitle: plan.roleTitle,
     format: plan.format,
+    researchModel: plan.researchModel,
     status: plan.status,
     pipelineStep: plan.pipelineStep,
+    jobAdText: plan.jobAdText,
     researchNotes: plan.researchNotes,
     companyProfile: parseCompanyProfile(plan.companyProfileJson),
+    companyReport: parseCompanyReport(plan.companyReportJson),
     clarificationRound: plan.clarificationRound,
     failureReason: plan.failureReason,
     clarifications: plan.clarifications,
@@ -130,5 +135,15 @@ function parseCompanyProfile(json: string): CompanyProfile {
     return companyProfileSchema.parse(JSON.parse(json || "{}"));
   } catch {
     return emptyCompanyProfile();
+  }
+}
+
+function parseCompanyReport(json: string): CompanyReport | undefined {
+  const raw = json?.trim();
+  if (!raw || raw === "{}" || raw === '""') return undefined;
+  try {
+    return companyReportSchema.parse(JSON.parse(raw));
+  } catch {
+    return emptyCompanyReport();
   }
 }

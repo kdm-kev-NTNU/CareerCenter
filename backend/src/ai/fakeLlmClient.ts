@@ -1,5 +1,10 @@
 import type { z } from "zod";
-import type { LlmClient, LlmCompleteOptions, LlmTranscribeOptions } from "./llmClient.js";
+import type {
+  LlmClient,
+  LlmCompleteOptions,
+  LlmTranscribeOptions,
+  LlmWebSearchOptions
+} from "./llmClient.js";
 
 export interface FakeLlmClientOptions {
   configured?: boolean;
@@ -13,7 +18,7 @@ export interface FakeLlmClientOptions {
 export class FakeLlmClient implements LlmClient {
   readonly completeCalls: LlmCompleteOptions[] = [];
   readonly structuredCalls: Array<{ options: LlmCompleteOptions; schema: z.ZodType }> = [];
-  readonly webSearchCalls: string[] = [];
+  readonly webSearchCalls: Array<{ query: string; options?: LlmWebSearchOptions }> = [];
   readonly transcribeCalls: LlmTranscribeOptions[] = [];
 
   private configured: boolean;
@@ -56,11 +61,11 @@ export class FakeLlmClient implements LlmClient {
     return schema.parse(next);
   }
 
-  async webSearch(query: string, signal?: AbortSignal): Promise<string> {
-    if (signal?.aborted) {
+  async webSearch(query: string, options?: LlmWebSearchOptions): Promise<string> {
+    if (options?.signal?.aborted) {
       throw Object.assign(new Error("Avbrutt"), { name: "AbortError" });
     }
-    this.webSearchCalls.push(query);
+    this.webSearchCalls.push({ query, options });
     return this.webSearchResult;
   }
 
