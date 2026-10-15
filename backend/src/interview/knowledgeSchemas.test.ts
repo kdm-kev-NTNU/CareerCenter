@@ -1,5 +1,6 @@
+import { zodTextFormat } from "openai/helpers/zod";
 import { describe, expect, it } from "vitest";
-import { prepPlanIntakeSchema } from "./knowledgeSchemas.js";
+import { companyReportSchema, prepPlanIntakeSchema } from "./knowledgeSchemas.js";
 
 describe("prepPlanIntakeSchema", () => {
   it("defaults researchModel to gpt-6-astra", () => {
@@ -39,5 +40,33 @@ describe("prepPlanIntakeSchema", () => {
         researchModel: "o3"
       })
     ).toThrow();
+  });
+});
+
+describe("companyReportSchema", () => {
+  it("converts to strict structured outputs", () => {
+    expect(() => zodTextFormat(companyReportSchema, "structured_response")).not.toThrow();
+  });
+
+  it("fills missing key facts with empty strings", () => {
+    const parsed = companyReportSchema.parse({});
+    expect(parsed.keyFacts).toEqual({
+      industry: "",
+      headquarters: "",
+      size: "",
+      ownership: ""
+    });
+    expect(parsed.headline).toBe("");
+    expect(parsed.nicheInsights).toEqual([]);
+  });
+
+  it("keeps a provided key fact and defaults the rest", () => {
+    const parsed = companyReportSchema.parse({ keyFacts: { industry: "Bank" } });
+    expect(parsed.keyFacts).toEqual({
+      industry: "Bank",
+      headquarters: "",
+      size: "",
+      ownership: ""
+    });
   });
 });
