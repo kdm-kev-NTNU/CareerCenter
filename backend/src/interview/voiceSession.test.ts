@@ -7,9 +7,9 @@ describe("createVoiceSession", () => {
   });
 
   it("returns mock credentials without API key", async () => {
-    const session = await createVoiceSession({ OPENAI_API_KEY: undefined, OPENAI_VOICE_MODEL: "gpt-live-1" });
+    const session = await createVoiceSession({ OPENAI_API_KEY: undefined, OPENAI_VOICE_MODEL: "gpt-realtime-2.1" });
     expect(session.mock).toBe(true);
-    expect(session.model).toBe("gpt-live-1");
+    expect(session.model).toBe("gpt-realtime-2.1");
     expect(session.clientSecret.startsWith("mock_voice_")).toBe(true);
     expect(session.tools.length).toBeGreaterThan(0);
   });
@@ -19,7 +19,7 @@ describe("createVoiceSession", () => {
       "fetch",
       vi.fn(async () => ({ ok: true, json: async () => ({ value: "ek_real", expires_at: 1_900_000_000 }) }))
     );
-    const session = await createVoiceSession({ OPENAI_API_KEY: "sk-test", OPENAI_VOICE_MODEL: "gpt-live-1" });
+    const session = await createVoiceSession({ OPENAI_API_KEY: "sk-test", OPENAI_VOICE_MODEL: "gpt-realtime-2.1" });
     expect(session.clientSecret).toBe("ek_real");
     expect(JSON.stringify(session)).not.toContain("sk-test");
   });
