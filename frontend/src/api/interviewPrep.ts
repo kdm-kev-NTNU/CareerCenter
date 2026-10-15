@@ -1,6 +1,8 @@
 import type {
+  EssentialsDraftDto,
   InterviewAbilityTestAttemptDto,
   InterviewBankQuestionDto,
+  InterviewBankQuestionSummaryDto,
   InterviewCaseEntryDto,
   InterviewCasePublicDto,
   InterviewImportJobDto,
@@ -10,10 +12,14 @@ import type {
   InterviewPrepPlanDto,
   InterviewSessionDto,
   InterviewSimulatorSettingsDto,
+  InterviewSimulatorSettingsInput,
   InterviewVideoRunDto,
   InterviewVideoSettingsDto,
   InterviewMode,
   PrepFormat,
+  QuestionAudience,
+  QuestionCategory,
+  QuestionDiscardReason,
   ResearchModel,
   VideoSimulatorSettings,
   VoiceSessionDto,
@@ -59,19 +65,54 @@ export const interviewPrepApi = {
     return uploadRequest<KnowledgeImportResult>("/api/interview/knowledge/import", formData);
   },
 
-  searchQuestions: (params: { q?: string; category?: string; tag?: string } = {}) => {
+  searchQuestions: (
+    params: {
+      q?: string;
+      category?: string;
+      tag?: string;
+      audience?: QuestionAudience;
+      status?: "active" | "discarded" | "all";
+    } = {}
+  ) => {
     const query = new URLSearchParams();
     if (params.q) query.set("q", params.q);
     if (params.category) query.set("category", params.category);
     if (params.tag) query.set("tag", params.tag);
+    if (params.audience) query.set("audience", params.audience);
+    if (params.status) query.set("status", params.status);
     const suffix = query.toString() ? `?${query}` : "";
     return request<InterviewBankQuestionDto[]>(`/api/interview/questions${suffix}`);
   },
-  reindexQuestions: () =>
-    request<{ indexed: number; queuedJobs: number; documentCount: number; message: string }>(
-      "/api/interview/questions/reindex",
-      { method: "POST" }
+  questionSummary: () => request<InterviewBankQuestionSummaryDto>("/api/interview/questions/summary"),
+  updateQuestion: (
+    id: string,
+    payload: { text?: string; category?: QuestionCategory; audience?: QuestionAudience }
+  ) =>
+    request<InterviewBankQuestionDto>(`/api/interview/questions/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload)
+    }),
+  discardQuestion: (id: string, reason?: QuestionDiscardReason) =>
+    request<InterviewBankQuestionDto>(`/api/interview/questions/${id}/discard`, {
+      method: "POST",
+      body: JSON.stringify(reason ? { reason } : {})
+    }),
+  restoreQuestion: (id: string) =>
+    request<InterviewBankQuestionDto>(`/api/interview/questions/${id}/restore`, { method: "POST" }),
+  cleanupQuestions: (reset = false) =>
+    request<{ queuedJobs: InterviewImportJobDto[]; uncleaned: number; message: string }>(
+      "/api/interview/questions/cleanup",
+      { method: "POST", body: JSON.stringify({ reset }) }
     ),
+  reindexQuestions: () =>
+    request<{
+      indexed: number;
+      removed: number;
+      queuedJobs: number;
+      cleanupJobs: number;
+      documentCount: number;
+      message: string;
+    }>("/api/interview/questions/reindex", { method: "POST" }),
 
   cases: (params: { q?: string; sourceKind?: string; style?: string; approvalStatus?: string } = {}) => {
     const query = new URLSearchParams();
@@ -160,7 +201,14 @@ export const interviewPrepApi = {
     }),
   addPlanQuestion: (
     planId: string,
-    payload: { text: string; category: string; target?: string; notes?: string; included?: boolean }
+    payload: {
+      text: string;
+      category: string;
+      audience?: QuestionAudience;
+      target?: string;
+      notes?: string;
+      included?: boolean;
+    }
   ) =>
     request<InterviewPrepPlanDto>(`/api/interview/plans/${planId}/questions`, {
       method: "POST",
@@ -178,11 +226,13 @@ export const interviewPrepApi = {
 
   simulatorSettings: (mode: InterviewMode) =>
     request<InterviewSimulatorSettingsDto>(`/api/interview/simulator/settings/${mode}`),
-  saveSimulatorSettings: (payload: InterviewSimulatorSettingsDto) =>
+  saveSimulatorSettings: (payload: InterviewSimulatorSettingsInput) =>
     request<InterviewSimulatorSettingsDto>("/api/interview/simulator/settings", {
       method: "PUT",
       body: JSON.stringify(payload)
     }),
+  essentialsDraft: (mode: InterviewMode) =>
+    request<EssentialsDraftDto>(`/api/interview/simulator/settings/${mode}/essentials-draft`, { method: "POST" }),
 
   sessions: (mode?: InterviewMode) =>
     request<InterviewSessionDto[]>(mode ? `/api/interview/sessions?mode=${mode}` : "/api/interview/sessions"),

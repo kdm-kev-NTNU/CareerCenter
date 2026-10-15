@@ -1,6 +1,8 @@
 import {
   caseSourceKinds,
   caseStyles,
+  DEFAULT_SIMULATOR_LANGUAGE,
+  DEFAULT_SIMULATOR_TONE,
   DEFAULT_RESEARCH_MODEL,
   interviewModes,
   knowledgeDocKinds,
@@ -9,7 +11,9 @@ import {
   MIN_CURATED_QUESTIONS,
   prepFormats,
   researchModels,
+  questionAudiences,
   questionCategories,
+  questionDiscardReasons,
   questionTargets
 } from "@careercenter/shared";
 import { z } from "zod";
@@ -52,9 +56,10 @@ export const clarificationAnswersSchema = z.object({
 export const simulatorSettingsSchema = z.object({
   mode: z.enum(interviewModes),
   companyName: z.string().default(""),
-  tone: z.string().default("profesjonell"),
-  language: z.string().default("nb"),
-  essentialsSheet: z.string().default("")
+  tone: z.string().default(DEFAULT_SIMULATOR_TONE),
+  language: z.string().default(DEFAULT_SIMULATOR_LANGUAGE),
+  /** `null` resets the sheet to the default for the mode. */
+  essentialsSheet: z.string().nullable().default(null)
 });
 
 export const createSessionSchema = z.object({
@@ -131,6 +136,8 @@ export const clarificationListSchema = z.object({
     .max(MAX_CLARIFICATIONS_PER_ROUND)
 });
 
+const reverseAudiences = ["ask_interviewer_company", "ask_interviewer_personal"] as const;
+
 export const curatedBankSelectionSchema = z.object({
   selectedQuestionIds: z.array(z.string()).min(MIN_CURATED_QUESTIONS).max(MAX_CURATED_QUESTIONS),
   generatedQuestions: z
@@ -142,6 +149,17 @@ export const curatedBankSelectionSchema = z.object({
         gapReason: z.string().min(1)
       })
     )
+    .default([]),
+  /** Questions the candidate asks the interviewer, tailored to the company. */
+  reverseQuestions: z
+    .array(
+      z.object({
+        text: z.string().min(1),
+        audience: z.enum(reverseAudiences),
+        bankQuestionId: z.string().nullable()
+      })
+    )
+    .max(8)
     .default([]),
   tasks: z
     .array(
@@ -165,10 +183,73 @@ export const bankQuestionExtractSchema = z.object({
     .array(
       z.object({
         text: z.string().min(1),
-        category: z.enum(questionCategories).optional()
+        audience: z.enum(questionAudiences),
+        category: z.enum(questionCategories)
       })
     )
     .default([])
+});
+
+/** Discard reasons the cleanup agent may choose ("manuelt" is reserved for the user). */
+export const llmQuestionDiscardReasons = [
+  "instruks_til_intervjuer",
+  "tips",
+  "selvrefleksjon",
+  "mal",
+  "duplikat",
+  "ikke_sporsmal"
+] as const;
+
+export const questionCleanupActions = ["keep", "rewrite", "split", "discard"] as const;
+export type QuestionCleanupAction = (typeof questionCleanupActions)[number];
+
+// Strict Structured Outputs: every field is required; use null instead of optional.
+export const questionCleanupResultSchema = z.object({
+  items: z.array(
+    z.object({
+      id: z.string(),
+      action: z.enum(questionCleanupActions),
+      parts: z.array(
+        z.object({
+          text: z.string(),
+          audience: z.enum(questionAudiences),
+          category: z.enum(questionCategories)
+        })
+      ),
+      discardReason: z.enum(llmQuestionDiscardReasons).nullable()
+    })
+  )
+});
+export type QuestionCleanupResult = z.infer<typeof questionCleanupResultSchema>;
+
+export const bankQuestionQuerySchema = z.object({
+  q: z.string().optional(),
+  category: z.enum(questionCategories).optional(),
+  tag: z.string().optional(),
+  audience: z.enum(questionAudiences).optional(),
+  status: z.enum(["active", "discarded", "all"]).default("active")
+});
+
+export const patchBankQuestionSchema = z
+  .object({
+    text: z.string().trim().min(3).optional(),
+    category: z.enum(questionCategories).optional(),
+    audience: z.enum(questionAudiences).optional()
+  })
+  .refine((value) => value.text !== undefined || value.category !== undefined || value.audience !== undefined, {
+    message: "Ingen endringer."
+  });
+
+export const discardBankQuestionSchema = z.object({
+  reason: z.enum(questionDiscardReasons).default("manuelt")
+});
+
+export const questionCleanupRequestSchema = z.object({
+  reset: z.boolean().default(false)
+});
+
+export const essentialsDraftSchema = z.object({
+  sheet: z.string()
 });
 
 export const patchPlanQuestionSchema = z.object({
@@ -181,6 +262,7 @@ export const patchPlanQuestionSchema = z.object({
 export const addPlanQuestionSchema = z.object({
   text: z.string().min(1),
   category: z.enum(questionCategories),
+  audience: z.enum(questionAudiences).optional(),
   target: z.enum(questionTargets).optional(),
   notes: z.string().optional(),
   included: z.boolean().optional()

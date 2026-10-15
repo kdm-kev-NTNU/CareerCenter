@@ -360,12 +360,22 @@ export {
   isResearchModel,
   questionTargets,
   questionCategories,
+  questionCategoryLabels,
+  questionAudiences,
+  questionAudienceLabels,
+  isQuestionAudience,
+  categoryForAudience,
+  bankQuestionStatuses,
+  bankQuestionOrigins,
+  questionDiscardReasons,
+  questionDiscardReasonLabels,
   caseSourceKinds,
   caseStyles,
   prepQuestionSources,
   caseApprovalStatuses,
   importJobStatuses,
   importJobKinds,
+  importJobKindLabels,
   deletableImportJobStatuses,
   canDeleteImportJob
 } from "./interviewPrep.js";
@@ -379,6 +389,10 @@ export type {
   ResearchModel,
   QuestionTarget,
   QuestionCategory,
+  QuestionAudience,
+  BankQuestionStatus,
+  BankQuestionOrigin,
+  QuestionDiscardReason,
   CaseSourceKind,
   CaseStyle,
   PrepQuestionSource,
@@ -395,6 +409,7 @@ export type {
   InterviewCasePublicDto,
   InterviewCaseEntryDto,
   InterviewBankQuestionDto,
+  InterviewBankQuestionSummaryDto,
   InterviewPrepClarificationDto,
   InterviewPrepQuestionDto,
   InterviewPrepPlanCaseDto,
@@ -402,6 +417,8 @@ export type {
   InterviewPrepPlanDto,
   InterviewImportJobDto,
   InterviewSimulatorSettingsDto,
+  InterviewSimulatorSettingsInput,
+  EssentialsDraftDto,
   InterviewSessionDto,
   InterviewMessageDto,
   InterviewSessionFeedbackDto
@@ -409,6 +426,8 @@ export type {
 
 export {
   extractBankQuestions,
+  categoryForDocKind,
+  normalizeQuestionKey,
   rankBankQuestions,
   findRepeatedStories,
   joinSoftWrappedLines,
@@ -504,6 +523,14 @@ export {
   defaultVideoSimulatorSettings
 } from "./videoSimulatorSettings.js";
 export type { VideoSimulatorSettings } from "./videoSimulatorSettings.js";
+export {
+  DEFAULT_SIMULATOR_TONE,
+  DEFAULT_SIMULATOR_LANGUAGE,
+  defaultEssentialsSheets,
+  resolveEssentialsSheet,
+  normalizeEssentialsInput,
+  defaultSimulatorSettings
+} from "./simulatorSettings.js";
 export type {
   InterviewAbilityTestAttemptDto,
   InterviewVideoSettingsDto,

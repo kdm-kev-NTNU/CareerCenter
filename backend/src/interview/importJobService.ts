@@ -1,13 +1,13 @@
 import {
+  categoryForAudience,
   classifyCaseSource,
-  extractBankQuestions,
+  normalizeQuestionKey,
   type CaseSourceKind,
   type ImportJobKind,
-  type ImportJobStatus,
-  type QuestionCategory
+  type ImportJobStatus
 } from "@careercenter/shared";
 import type { LlmClient } from "../ai/llmClient.js";
-import type { InterviewPrepRepository } from "../interviewPrepRepository.js";
+import type { BankQuestionInput, InterviewPrepRepository } from "../interviewPrepRepository.js";
 import { proposeCaseSpans } from "./caseSpans.js";
 import { sha256Content } from "./contentHash.js";
 import { parseDocuments, spanText } from "./documentPages.js";
@@ -24,12 +24,22 @@ import {
   USER_CANCEL_MESSAGE
 } from "./jobCancellationRegistry.js";
 import { bankQuestionExtractSchema, caseSpanExtractSchema, exhibitPromptSchema } from "./knowledgeSchemas.js";
+import { processQuestionCleanup } from "./questionCleanup.js";
+import { audienceDefinitions, categoryDefinitions } from "./questionTaxonomyPrompt.js";
 
 export interface ProcessImportJobDeps {
   llmClient: LlmClient;
   repository: InterviewPrepRepository;
   cancellationRegistry: JobCancellationRegistry;
+  /** Called when an LLM question import finishes, so the new rows get cleaned up. */
+  onQuestionsImported?: (userId: string, knowledgeDocId: string) => void;
 }
+
+const START_MESSAGES: Record<ImportJobKind, string> = {
+  cases: "Segmenterer dokument…",
+  questions: "Trekker ut spørsmål…",
+  questions_cleanup: "Rydder spørsmål…"
+};
 
 function isAbortError(error: unknown): boolean {
   return (
@@ -64,7 +74,7 @@ export async function processImportJob(
     await deps.repository.updateImportJob(userId, jobId, {
       status: "running",
       progress: 10,
-      message: job.kind === "questions" ? "Trekker ut spørsmål…" : "Segmenterer dokument…"
+      message: START_MESSAGES[job.kind]
     });
 
     const docs = await deps.repository.listKnowledgeDocs(userId);
@@ -73,6 +83,11 @@ export async function processImportJob(
 
     if (job.kind === "questions") {
       await processQuestionImport(deps, userId, jobId, doc.id, doc.kind, doc.title, doc.content, signal);
+      return;
+    }
+
+    if (job.kind === "questions_cleanup") {
+      await processQuestionCleanup(deps, userId, jobId, doc, signal);
       return;
     }
 
@@ -323,6 +338,21 @@ async function processQuestionImport(
     100,
     `${insertedTotal} nye spørsmål indeksert`
   );
+  deps.onQuestionsImported?.(userId, knowledgeDocId);
+}
+
+export function buildQuestionExtractSystemPrompt(): string {
+  return [
+    "Du trekker ut spørsmål fra et dokument om intervjuforberedelse. Returner hvert spørsmål som et eget element med text, audience og category.",
+    "Ta med spørsmål en intervjuer kan stille kandidaten, og spørsmål kandidaten kan stille intervjueren.",
+    "Ikke ta med: instrukser til intervjueren eller øvingspartneren, tips og råd, svarmaler og standardsvar, e-postmaler, utfyllingsfelt, eller spørsmål kandidaten skal reflektere over alene.",
+    "Returner bare selve spørsmålet: fjern innledninger som «Spørsmålet om X stiller du slik:», punkttegn og anførselstegn. Behold ordlyden ellers.",
+    "Ikke lag case-prompts eller oppgaver uten spørsmålstegn.",
+    "",
+    ...audienceDefinitions,
+    "",
+    ...categoryDefinitions
+  ].join("\n");
 }
 
 async function extractQuestionChunk(
@@ -346,11 +376,7 @@ async function extractQuestionChunk(
     {
       signal,
       messages: [
-        {
-          role: "system",
-          content:
-            "Du trekker ut intervjuspørsmål fra teksten. Returner bare spørsmål kandidaten faktisk kan øve på (linjer som ender med ?). Ikke lag case-prompts eller oppgaver uten spørsmålstegn."
-        },
+        { role: "system", content: buildQuestionExtractSystemPrompt() },
         {
           role: "user",
           content: `Dokument: ${title}\nDel: ${chunk.title}\n\n${text}`
@@ -360,23 +386,29 @@ async function extractQuestionChunk(
     bankQuestionExtractSchema
   );
 
-  const categoryFallback =
-    extractBankQuestions({ kind: kind as never, title, content: "" })[0]?.category ?? "behavioral";
+  // Skip questions the document already has (rule-based or earlier chunks), by normalized text.
+  const existing = await deps.repository.listBankQuestions(userId, { knowledgeDocId, status: "all" });
+  const seen = new Set(
+    existing.flatMap((row) => [normalizeQuestionKey(row.text), normalizeQuestionKey(row.sourceText)])
+  );
+  const questions: BankQuestionInput[] = [];
+  for (const item of extracted.questions) {
+    const textValue = item.text.trim();
+    if (textValue.length < 8 || !textValue.endsWith("?")) continue;
+    const key = normalizeQuestionKey(textValue);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    questions.push({
+      text: textValue,
+      category: categoryForAudience(item.audience, item.category),
+      audience: item.audience,
+      tags: [kind, "llm"],
+      origin: "llm",
+      contentHash: sha256Content(`bank:v2:${knowledgeDocId}:llm:${key}`)
+    });
+  }
 
-  const questions = extracted.questions
-    .map((item) => {
-      const textValue = item.text.trim();
-      if (textValue.length < 8 || !textValue.endsWith("?")) return null;
-      return {
-        text: textValue,
-        category: (item.category ?? categoryFallback) as QuestionCategory,
-        tags: [kind, "llm"],
-        contentHash: sha256Content(textValue.toLowerCase())
-      };
-    })
-    .filter((item): item is NonNullable<typeof item> => item !== null);
-
-  return deps.repository.upsertBankQuestionsForDoc(userId, knowledgeDocId, questions);
+  return deps.repository.insertBankQuestions(userId, knowledgeDocId, questions);
 }
 
 async function extractCaseChunk(

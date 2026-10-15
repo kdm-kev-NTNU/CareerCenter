@@ -3,14 +3,17 @@ import {
   MAX_CURATED_QUESTIONS,
   MIN_CURATED_QUESTIONS,
   canCancelPrepPlan,
+  categoryForAudience,
   rankBankQuestions,
   rankCasesForCompany,
   transitionPrepPlan,
+  type PrepQuestionSource,
+  type QuestionAudience,
   type QuestionCategory,
   type QuestionTarget
 } from "@careercenter/shared";
 import type { LlmClient } from "../ai/llmClient.js";
-import type { InterviewPrepRepository } from "../interviewPrepRepository.js";
+import type { InterviewBankQuestionRecord, InterviewPrepRepository } from "../interviewPrepRepository.js";
 import {
   JobCancellationRegistry,
   USER_CANCEL_MESSAGE
@@ -384,7 +387,9 @@ export class PrepResearchService {
       throwIfAborted(signal);
       await this.repository.setPrepPlanPipeline(userId, planId, { pipelineStep: "curating_questions" });
       const profile = safeParseProfile(plan.companyProfileJson);
-      const bank = await this.repository.listBankQuestions(userId);
+      const bank = await this.repository.listBankQuestions(userId, { status: "active" });
+      const candidateBank = bank.filter((q) => q.audience === "candidate");
+      const reverseBank = bank.filter((q) => q.audience !== "candidate");
       const candidates = rankBankQuestions(
         {
           industries: profile.industries,
@@ -393,7 +398,14 @@ export class PrepResearchService {
           interviewFormats: profile.interviewFormats,
           values: profile.values
         },
-        bank.map((q) => ({ id: q.id, text: q.text, category: q.category, tags: q.tags })),
+        candidateBank.map((q) => ({
+          id: q.id,
+          text: q.text,
+          category: q.category,
+          tags: q.tags,
+          audience: q.audience,
+          status: q.status
+        })),
         120
       );
 
@@ -419,7 +431,11 @@ export class PrepResearchService {
                 `Avklaringer:\n${plan.clarifications.map((c) => `${c.question}\nSvar: ${c.answer}`).join("\n\n")}`,
                 `Kandidater fra banken (velg ${MIN_CURATED_QUESTIONS}-${MAX_CURATED_QUESTIONS} id-er):\n${candidates
                   .map((q) => `${q.id} | ${q.category} | ${q.text}`)
-                  .join("\n")}`
+                  .join("\n")}`,
+                `Spørsmål kandidaten kan stille intervjueren (fra banken):\n${
+                  reverseBank.map((q) => `${q.id} | ${q.audience} | ${q.text}`).join("\n") || "–"
+                }`,
+                `Forslag fra bedriftsrapporten:\n${report.questionsToAsk.join("\n") || "–"}`
               ].join("\n\n")
             }
           ]
@@ -431,20 +447,15 @@ export class PrepResearchService {
       if (selected.length !== selection.selectedQuestionIds.length) {
         throw new Error("Kuratering refererte spørsmål utenfor banken.");
       }
-      if (selected.length < MIN_CURATED_QUESTIONS) {
+      // Questions the candidate asks, and discarded ones, never go into the interviewer's list.
+      const candidateIds = new Set(candidateBank.map((q) => q.id));
+      const usable = selected.filter((q) => candidateIds.has(q.id));
+      if (usable.length < MIN_CURATED_QUESTIONS) {
         throw new Error(`Kuratering må ha minst ${MIN_CURATED_QUESTIONS} bankspørsmål.`);
       }
 
-      const byId = new Map(selected.map((q) => [q.id, q]));
-      const questions: Array<{
-        text: string;
-        category: QuestionCategory;
-        target: QuestionTarget;
-        source: "bank" | "generated";
-        bankQuestionId?: string;
-        gapReason?: string;
-        notes?: string;
-      }> = [];
+      const byId = new Map(usable.map((q) => [q.id, q]));
+      const questions: CuratedQuestion[] = [];
 
       for (const id of selection.selectedQuestionIds) {
         const q = byId.get(id);
@@ -468,6 +479,7 @@ export class PrepResearchService {
       }
 
       attachCompanyAnswerNotes(questions, report);
+      questions.push(...buildReverseQuestions(selection.reverseQuestions, reverseBank, report.questionsToAsk));
 
       throwIfAborted(signal);
       await this.repository.setPrepPlanPipeline(userId, planId, { pipelineStep: "curating_cases" });
@@ -508,6 +520,69 @@ export class PrepResearchService {
   }
 }
 
+interface CuratedQuestion {
+  text: string;
+  category: QuestionCategory;
+  audience?: QuestionAudience;
+  target: QuestionTarget;
+  source: PrepQuestionSource;
+  bankQuestionId?: string;
+  gapReason?: string;
+  notes?: string;
+}
+
+const MAX_REVERSE_COMPANY = 5;
+const MAX_REVERSE_PERSONAL = 3;
+
+/**
+ * Questions the candidate asks the interviewer, from the curation result.
+ * Falls back to the company report suggestions and personal bank questions when the model returns none.
+ */
+export function buildReverseQuestions(
+  picks: Array<{ text: string; audience: "ask_interviewer_company" | "ask_interviewer_personal"; bankQuestionId: string | null }>,
+  reverseBank: InterviewBankQuestionRecord[],
+  reportSuggestions: string[]
+): CuratedQuestion[] {
+  const byId = new Map(reverseBank.map((q) => [q.id, q]));
+  const counts = { ask_interviewer_company: 0, ask_interviewer_personal: 0 };
+  const limits = { ask_interviewer_company: MAX_REVERSE_COMPANY, ask_interviewer_personal: MAX_REVERSE_PERSONAL };
+  const seen = new Set<string>();
+  const out: CuratedQuestion[] = [];
+
+  for (const pick of picks) {
+    const text = pick.text.trim();
+    const key = text.toLowerCase();
+    if (!text || seen.has(key) || counts[pick.audience] >= limits[pick.audience]) continue;
+    seen.add(key);
+    counts[pick.audience] += 1;
+    const bankQuestion = pick.bankQuestionId ? byId.get(pick.bankQuestionId) : undefined;
+    out.push({
+      text,
+      category: categoryForAudience(pick.audience, "company"),
+      audience: pick.audience,
+      target: "interview",
+      source: bankQuestion ? (bankQuestion.text.trim() === text ? "bank" : "edited") : "generated",
+      bankQuestionId: bankQuestion?.id
+    });
+  }
+  if (out.length > 0) return out;
+
+  for (const text of reportSuggestions.slice(0, 3)) {
+    out.push({ text, category: "company", audience: "ask_interviewer_company", target: "interview", source: "generated" });
+  }
+  for (const q of reverseBank.filter((item) => item.audience === "ask_interviewer_personal").slice(0, 2)) {
+    out.push({
+      text: q.text,
+      category: "personal",
+      audience: "ask_interviewer_personal",
+      target: "interview",
+      source: "bank",
+      bankQuestionId: q.id
+    });
+  }
+  return out;
+}
+
 function safeParseProfile(json: string) {
   try {
     return companyProfileSchema.parse(JSON.parse(json || "{}"));
@@ -529,7 +604,7 @@ function safeParseReport(json: string) {
  * Invariant: only fills empty notes; never overwrites existing notes.
  */
 function attachCompanyAnswerNotes(
-  questions: Array<{ category: QuestionCategory; text: string; notes?: string }>,
+  questions: Array<{ category: QuestionCategory; audience?: QuestionAudience; text: string; notes?: string }>,
   report: ReturnType<typeof safeParseReport>
 ): void {
   const prep = [...report.companyQuestionPrep];
@@ -537,7 +612,7 @@ function attachCompanyAnswerNotes(
 
   let prepIndex = 0;
   for (const question of questions) {
-    if (question.category !== "company") continue;
+    if (question.category !== "company" || (question.audience ?? "candidate") !== "candidate") continue;
     if (question.notes?.trim()) continue;
 
     const match =

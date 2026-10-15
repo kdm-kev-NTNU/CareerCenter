@@ -12,6 +12,8 @@ describe("createVoiceSession", () => {
     expect(session.model).toBe("gpt-realtime-2.1");
     expect(session.clientSecret.startsWith("mock_voice_")).toBe(true);
     expect(session.tools.length).toBeGreaterThan(0);
+    const endTool = session.tools.find((tool) => tool.name === "end_interview");
+    expect(endTool?.description).toContain("Har du noen spørsmål til oss?");
   });
 
   it("never returns the API key when configured", async () => {

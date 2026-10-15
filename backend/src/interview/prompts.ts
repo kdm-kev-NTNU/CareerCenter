@@ -1,5 +1,6 @@
-import type { CaseStyle, InterviewMode } from "@careercenter/shared";
+import type { CaseStyle, InterviewMode, QuestionAudience } from "@careercenter/shared";
 import {
+  buildClosingRoundRules,
   candidateProfile,
   deliveryRules,
   formatRubricCriteriaForPrompt,
@@ -18,6 +19,8 @@ function section(title: string, lines: string[]): string {
 export interface PlanPracticeQuestion {
   text: string;
   category: string;
+  /** Questions the candidate asks the interviewer are left out of the script. */
+  audience?: QuestionAudience;
   notes?: string;
   included?: boolean;
   sortOrder?: number;
@@ -31,12 +34,12 @@ export interface PlanPracticeInput {
 }
 
 /**
- * Builds a numbered practice script from included plan questions.
+ * Builds a numbered practice script from included plan questions the interviewer asks.
  * Pure: does not mutate plan; callers snapshot this into the session prompt.
  */
 export function buildPlanPracticeScript(plan: PlanPracticeInput): string {
   const included = [...plan.questions]
-    .filter((q) => q.included !== false)
+    .filter((q) => q.included !== false && (q.audience ?? "candidate") === "candidate")
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
 
   if (included.length === 0) {
@@ -71,9 +74,12 @@ export function buildSimulatorSystemPrompt(input: {
   interviewerInfo?: string;
   solution?: string;
   planScript?: string;
+  /** Questions the candidate has prepared for the closing round. */
+  questionsToAsk?: Array<{ text: string; audience: QuestionAudience }>;
 }): string {
   const essentials = input.essentialsSheet.trim();
   const isTutor = input.mode === "concept_tutor";
+  const closingRound = buildClosingRoundRules(input.mode);
 
   const lines: string[] = [
     "Du er intervjuer og øvingspartner i en muntlig intervjuøkt. Les hele instruksen før du svarer. Ikke oppsummer den.",
@@ -121,7 +127,25 @@ export function buildSimulatorSystemPrompt(input: {
     }
   }
 
-  if (essentials) lines.push(`Essensielt ark:\n${essentials}`);
+  if (closingRound.length > 0) {
+    lines.push(section("Avslutning: spørsmålsrunde", closingRound));
+    const prepared = input.questionsToAsk ?? [];
+    if (prepared.length > 0) {
+      const company = prepared.filter((q) => q.audience === "ask_interviewer_company");
+      const personal = prepared.filter((q) => q.audience === "ask_interviewer_personal");
+      lines.push(
+        [
+          "SKJULT: Spørsmål kandidaten har forberedt til spørsmålsrunden. Ikke nevn dem og ikke still dem selv. Kjenn dem igjen når kandidaten spør, og svar i rollen.",
+          company.length > 0 ? `Om selskapet:\n${company.map((q) => `- ${q.text}`).join("\n")}` : "",
+          personal.length > 0 ? `Til deg personlig:\n${personal.map((q) => `- ${q.text}`).join("\n")}` : ""
+        ]
+          .filter(Boolean)
+          .join("\n")
+      );
+    }
+  }
+
+  if (essentials) lines.push(`Kandidatens essentials-ark (bakgrunn, ikke les det opp):\n${essentials}`);
   return lines.filter(Boolean).join("\n\n");
 }
 
@@ -133,7 +157,8 @@ export function buildFinishRubricPrompt(): string {
     "Kriterier:",
     formatRubricCriteriaForPrompt(),
     "Slik tolker du scoren:",
-    ...scoreInterpretation.map((line) => `- ${line}`)
+    ...scoreInterpretation.map((line) => `- ${line}`),
+    "Spørsmålsrunden til slutt (kandidatens spørsmål til intervjueren) inngår ikke i STAR-scorene. Nevn den i forbedringspunktet bare hvis kandidaten ikke stilte noen spørsmål, eller ingen personlige, og det er det viktigste å endre."
   ].join("\n");
 }
 
@@ -178,6 +203,7 @@ export function buildCurationSystemPrompt(companyName: string, roleTitle: string
     "Velg 30–50 spørsmål ved å returnere selectedQuestionIds fra banken.",
     "Prioriter bedriftsspesifikke (category company) spørsmål når banken har dem.",
     "Lag generatedQuestions KUN for temaer banken ikke dekker, og oppgi gapReason for hvert.",
+    "reverseQuestions: velg 3–5 spørsmål kandidaten kan stille om selskapet (ask_interviewer_company) og 2–3 personlige spørsmål til intervjueren (ask_interviewer_personal). Ta utgangspunkt i bankens spørsmål kandidaten kan stille og bedriftsrapportens forslag. Tilpass dem til selskapet og rollen med konkrete detaljer fra research (en satsing, et produkt, en nyhet), men ikke finn på fakta. Sett bankQuestionId når spørsmålet bygger på et bankspørsmål, ellers null. Disse skal aldri med i selectedQuestionIds eller generatedQuestions.",
     "tasks: lag konkrete øvingsoppgaver som bruker nisje-info fra bedriftsrapporten til å øve svar på bedriftsspesifikke spørsmål (f.eks. skriv 60-sekunders «Hvorfor oss?» med 2 nicheHooks).",
     "Ikke finn opp bank-id-er."
   ].join("\n");

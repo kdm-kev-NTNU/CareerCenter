@@ -1,6 +1,39 @@
 import { zodTextFormat } from "openai/helpers/zod";
 import { describe, expect, it } from "vitest";
-import { companyReportSchema, prepPlanIntakeSchema } from "./knowledgeSchemas.js";
+import {
+  bankQuestionExtractSchema,
+  companyReportSchema,
+  curatedBankSelectionSchema,
+  essentialsDraftSchema,
+  prepPlanIntakeSchema,
+  questionCleanupResultSchema,
+  simulatorSettingsSchema
+} from "./knowledgeSchemas.js";
+
+describe("LLM schemas", () => {
+  it("convert to strict structured outputs", () => {
+    for (const schema of [
+      questionCleanupResultSchema,
+      bankQuestionExtractSchema,
+      curatedBankSelectionSchema,
+      essentialsDraftSchema
+    ]) {
+      expect(() => zodTextFormat(schema, "structured_response")).not.toThrow();
+    }
+  });
+
+  it("defaults reverse questions to an empty list in curation", () => {
+    const parsed = curatedBankSelectionSchema.parse({ selectedQuestionIds: Array.from({ length: 30 }, (_, i) => `q${i}`) });
+    expect(parsed.reverseQuestions).toEqual([]);
+  });
+});
+
+describe("simulatorSettingsSchema", () => {
+  it("accepts null essentials to reset to the default", () => {
+    expect(simulatorSettingsSchema.parse({ mode: "case_oral", essentialsSheet: null }).essentialsSheet).toBeNull();
+    expect(simulatorSettingsSchema.parse({ mode: "case_oral" }).essentialsSheet).toBeNull();
+  });
+});
 
 describe("prepPlanIntakeSchema", () => {
   it("defaults researchModel to gpt-6-astra", () => {

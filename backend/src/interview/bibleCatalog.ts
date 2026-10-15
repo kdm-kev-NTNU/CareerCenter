@@ -149,6 +149,8 @@ async function indexDocQuestions(
       knowledgeDocId,
       text: item.text,
       category: item.category,
+      origin: "rule",
+      sourceText: item.text,
       tags: item.tags,
       contentHash: sha256Content(`${CATALOG_VERSION}:${doc.slug}:${item.contentHashInput}`)
     })),

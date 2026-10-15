@@ -1,6 +1,10 @@
 import { nanoid } from "nanoid";
 import type {
   AbilityAttemptInput,
+  BankQuestionFilter,
+  BankQuestionInput,
+  BankQuestionPatch,
+  BankQuestionSummary,
   ImportJobCreateInput,
   ImportJobUpdateInput,
   InterviewAbilityTestAttemptRecord,
@@ -23,12 +27,13 @@ import type {
   VideoRunInput
 } from "./interviewPrepRepository.js";
 import type { InterviewFeedbackRubric } from "./interview/feedbackRubric.js";
-import { canDeleteImportJob } from "@careercenter/shared";
+import { canDeleteImportJob, categoryForAudience } from "@careercenter/shared";
 import type {
   ImportJobKind,
   InterviewMode,
   PrepPlanStatus,
   PrepQuestionSource,
+  QuestionAudience,
   QuestionCategory,
   QuestionTarget,
   VideoSimulatorSettings
@@ -116,41 +121,14 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
     return true;
   }
 
-  async replaceBankQuestionsForDoc(
+  async insertBankQuestions(
     userId: string,
     knowledgeDocId: string,
-    questions: Array<{ text: string; category: QuestionCategory; tags: string[]; contentHash: string }>
-  ): Promise<void> {
-    for (const [questionId, question] of this.bankQuestions) {
-      if (question.userId === userId && question.knowledgeDocId === knowledgeDocId) {
-        this.bankQuestions.delete(questionId);
-      }
-    }
-    const timestamp = nowIso();
-    for (const item of questions) {
-      const row: InterviewBankQuestionRecord = {
-        id: nanoid(),
-        userId,
-        knowledgeDocId,
-        text: item.text,
-        category: item.category,
-        tags: item.tags,
-        contentHash: item.contentHash,
-        createdAt: timestamp
-      };
-      this.bankQuestions.set(row.id, row);
-    }
-  }
-
-  async upsertBankQuestionsForDoc(
-    userId: string,
-    knowledgeDocId: string,
-    questions: Array<{ text: string; category: QuestionCategory; tags: string[]; contentHash: string }>
+    questions: BankQuestionInput[]
   ): Promise<number> {
+    // Mirrors the (userId, contentHash) unique index with skipDuplicates.
     const existingHashes = new Set(
-      [...this.bankQuestions.values()]
-        .filter((q) => q.userId === userId && q.knowledgeDocId === knowledgeDocId)
-        .map((q) => q.contentHash)
+      [...this.bankQuestions.values()].filter((q) => q.userId === userId).map((q) => q.contentHash)
     );
     const timestamp = nowIso();
     let inserted = 0;
@@ -163,8 +141,13 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
         knowledgeDocId,
         text: item.text,
         category: item.category,
+        audience: item.audience ?? "candidate",
+        status: "active",
+        origin: item.origin,
+        sourceText: item.sourceText ?? item.text,
         tags: item.tags,
         contentHash: item.contentHash,
+        cleanedAt: item.cleanedAt,
         createdAt: timestamp
       };
       this.bankQuestions.set(row.id, row);
@@ -173,13 +156,15 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
     return inserted;
   }
 
-  async listBankQuestions(
-    userId: string,
-    filter?: { q?: string; category?: string; tag?: string }
-  ): Promise<InterviewBankQuestionRecord[]> {
+  async listBankQuestions(userId: string, filter?: BankQuestionFilter): Promise<InterviewBankQuestionRecord[]> {
+    const status = filter?.status ?? "active";
     return [...this.bankQuestions.values()]
       .filter((row) => {
         if (row.userId !== userId) return false;
+        if (status !== "all" && row.status !== status) return false;
+        if (filter?.audience && row.audience !== filter.audience) return false;
+        if (filter?.knowledgeDocId && row.knowledgeDocId !== filter.knowledgeDocId) return false;
+        if (filter?.uncleaned && row.cleanedAt) return false;
         if (filter?.category && row.category !== filter.category) return false;
         if (filter?.tag && !row.tags.some((tag) => tag === filter.tag)) return false;
         if (filter?.q && !includesCi(row.text, filter.q)) return false;
@@ -191,6 +176,66 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
   async getBankQuestionsByIds(userId: string, ids: string[]): Promise<InterviewBankQuestionRecord[]> {
     const idSet = new Set(ids);
     return [...this.bankQuestions.values()].filter((row) => row.userId === userId && idSet.has(row.id));
+  }
+
+  async updateBankQuestion(
+    userId: string,
+    id: string,
+    patch: BankQuestionPatch
+  ): Promise<InterviewBankQuestionRecord | null> {
+    const existing = this.bankQuestions.get(id);
+    if (!existing || existing.userId !== userId) return null;
+    const updated: InterviewBankQuestionRecord = {
+      ...existing,
+      ...(patch.text !== undefined ? { text: patch.text } : {}),
+      ...(patch.category !== undefined ? { category: patch.category } : {}),
+      ...(patch.audience !== undefined ? { audience: patch.audience } : {}),
+      ...(patch.status !== undefined ? { status: patch.status } : {}),
+      ...(patch.discardReason !== undefined ? { discardReason: patch.discardReason ?? undefined } : {}),
+      ...(patch.origin !== undefined ? { origin: patch.origin } : {}),
+      ...(patch.cleanedAt !== undefined ? { cleanedAt: patch.cleanedAt ?? undefined } : {})
+    };
+    this.bankQuestions.set(id, updated);
+    return updated;
+  }
+
+  async deleteBankQuestions(userId: string, ids: string[]): Promise<number> {
+    let removed = 0;
+    for (const id of ids) {
+      const row = this.bankQuestions.get(id);
+      if (!row || row.userId !== userId) continue;
+      this.bankQuestions.delete(id);
+      removed += 1;
+    }
+    return removed;
+  }
+
+  async resetBankQuestionCleanup(userId: string): Promise<number> {
+    let reset = 0;
+    for (const [id, row] of this.bankQuestions) {
+      if (row.userId !== userId || row.status !== "active" || row.origin === "manual") continue;
+      this.bankQuestions.set(id, { ...row, cleanedAt: undefined });
+      reset += 1;
+    }
+    return reset;
+  }
+
+  async summarizeBankQuestions(userId: string): Promise<BankQuestionSummary> {
+    const summary: BankQuestionSummary = {
+      byAudience: { candidate: 0, ask_interviewer_personal: 0, ask_interviewer_company: 0 },
+      discarded: 0,
+      uncleaned: 0
+    };
+    for (const row of this.bankQuestions.values()) {
+      if (row.userId !== userId) continue;
+      if (row.status === "discarded") {
+        summary.discarded += 1;
+        continue;
+      }
+      summary.byAudience[row.audience] += 1;
+      if (!row.cleanedAt) summary.uncleaned += 1;
+    }
+    return summary;
   }
 
   async listCaseEntries(userId: string): Promise<InterviewCaseEntryRecord[]> {
@@ -455,6 +500,7 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       questions: Array<{
         text: string;
         category: QuestionCategory;
+        audience?: QuestionAudience;
         target: QuestionTarget;
         source?: PrepQuestionSource;
         bankQuestionId?: string;
@@ -473,7 +519,8 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       questions: input.questions.map((item, index) => ({
         id: nanoid(),
         text: item.text,
-        category: item.category,
+        category: categoryForAudience(item.audience ?? "candidate", item.category),
+        audience: item.audience ?? "candidate",
         target: item.target,
         sortOrder: index,
         source: item.source ?? "generated",
@@ -520,6 +567,7 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       id: existing.id,
       text: replacement.text,
       category: replacement.category,
+      audience: existing.audience,
       target: replacement.target,
       sortOrder: existing.sortOrder,
       source: replacement.source,
@@ -568,10 +616,12 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
     const plan = await this.getPrepPlan(userId, planId);
     if (!plan) return null;
     const maxOrder = plan.questions.reduce((max, q) => Math.max(max, q.sortOrder), -1);
+    const audience = input.audience ?? "candidate";
     const question = {
       id: nanoid(),
       text: input.text,
-      category: input.category,
+      category: categoryForAudience(audience, input.category),
+      audience,
       target: input.target ?? ("interview" as QuestionTarget),
       sortOrder: maxOrder + 1,
       source: "custom" as const,

@@ -350,6 +350,12 @@ model InterviewBankQuestion {
   knowledgeDocId String
   text           String
   category       String
+  audience       String                @default("candidate")
+  status         String                @default("active")
+  discardReason  String?
+  origin         String                @default("rule")
+  sourceText     String?
+  cleanedAt      DateTime?
   tags           String[]
   contentHash    String
   createdAt      DateTime              @default(now())
@@ -360,6 +366,8 @@ model InterviewBankQuestion {
   @@unique([userId, contentHash])
   @@index([userId, category])
   @@index([knowledgeDocId])
+  @@index([userId, audience, status])
+  @@index([knowledgeDocId, cleanedAt])
 }
 
 model InterviewCaseEntry {
@@ -432,6 +440,7 @@ model InterviewPrepQuestion {
   planId          String
   text            String
   category        String
+  audience        String                 @default("candidate")
   target          String
   sortOrder       Int                    @default(0)
   source          String                 @default("generated")
@@ -496,7 +505,7 @@ model InterviewSimulatorSettings {
   companyName     String   @default("")
   tone            String   @default("profesjonell")
   language        String   @default("nb")
-  essentialsSheet String   @default("")
+  essentialsSheet String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
