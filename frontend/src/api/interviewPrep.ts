@@ -245,11 +245,6 @@ export const interviewPrepApi = {
     request<InterviewSessionDto>("/api/interview/sessions", { method: "POST", body: JSON.stringify(payload) }),
   sessionMessages: (sessionId: string) =>
     request<InterviewMessageDto[]>(`/api/interview/sessions/${sessionId}/messages`),
-  sendSessionMessage: (sessionId: string, content: string) =>
-    request<InterviewMessageDto>(`/api/interview/sessions/${sessionId}/messages`, {
-      method: "POST",
-      body: JSON.stringify({ content })
-    }),
   finishSession: (sessionId: string) =>
     request<InterviewSessionDto>(`/api/interview/sessions/${sessionId}/finish`, { method: "POST" }),
 

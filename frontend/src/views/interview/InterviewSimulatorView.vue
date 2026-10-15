@@ -23,12 +23,10 @@ import PageHeader from "../../components/ui/PageHeader.vue";
 import StateView from "../../components/ui/StateView.vue";
 
 const route = useRoute();
-const channel = ref<"text" | "voice">("text");
 const mode = ref<InterviewMode>("behavioral_mock");
 const settings = ref<InterviewSimulatorSettingsDto | null>(null);
 const session = ref<InterviewSessionDto | null>(null);
 const messages = ref<InterviewMessageDto[]>([]);
-const draft = ref("");
 const voiceDraft = ref("");
 const voiceSession = ref<VoiceSessionDto | null>(null);
 const voiceReady = ref(false);
@@ -52,8 +50,7 @@ const planLabel = computed(() => {
   return `Plan: ${prepPlan.value.companyName} (${count} spørsmål)`;
 });
 
-const voiceDeviceCheckActive = () =>
-  channel.value === "voice" && Boolean(session.value) && !session.value?.finishedAt;
+const voiceDeviceCheckActive = () => Boolean(session.value) && !session.value?.finishedAt;
 
 async function syncVoiceStream() {
   if (!voiceDeviceCheckActive()) {
@@ -67,7 +64,7 @@ async function syncVoiceStream() {
   });
 }
 
-watch([channel, session], () => {
+watch(session, () => {
   void syncVoiceStream();
 });
 
@@ -143,9 +140,7 @@ async function startSession() {
       caseEntryId: mode.value === "case_oral" && caseEntryId.value ? caseEntryId.value : undefined
     });
     messages.value = (await interviewPrepApi.sessionMessages(session.value.id)).filter((m) => m.role !== "system");
-    if (channel.value === "voice") {
-      voiceSession.value = await interviewPrepApi.createVoiceSession(session.value.id);
-    }
+    voiceSession.value = await interviewPrepApi.createVoiceSession(session.value.id);
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Kunne ikke starte sesjon.";
   } finally {
@@ -172,22 +167,6 @@ async function connectVoiceLive() {
     stopRealtime = connection.stop;
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Kunne ikke koble til stemme.";
-  }
-}
-
-async function sendMessage() {
-  if (!session.value || !draft.value.trim()) return;
-  loading.value = true;
-  try {
-    const userText = draft.value.trim();
-    draft.value = "";
-    messages.value.push({ id: `local-${Date.now()}`, role: "user", content: userText, createdAt: new Date().toISOString() });
-    const assistant = await interviewPrepApi.sendSessionMessage(session.value.id, userText);
-    messages.value.push(assistant);
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : "Melding feilet.";
-  } finally {
-    loading.value = false;
   }
 }
 
@@ -242,14 +221,10 @@ function printEssentials() {
 
 <template>
   <section class="stack">
-    <PageHeader title="Intervjussimulator" lead="Øv PEI og case med tekst eller stemme." />
+    <PageHeader title="Intervjussimulator" lead="Øv PEI og case med stemme." />
     <p v-if="planLabel" class="field-hint" data-test="plan-practice-label">{{ planLabel }}</p>
 
     <article class="panel stack">
-      <div class="toolbar">
-        <button type="button" :class="{ active: channel === 'text' }" @click="channel = 'text'">Tekst</button>
-        <button type="button" :class="{ active: channel === 'voice' }" @click="channel = 'voice'">Stemme</button>
-      </div>
       <label>
         Modus
         <select v-model="mode" @change="loadSettings">
@@ -286,7 +261,7 @@ function printEssentials() {
     </article>
 
     <MediaDeviceCheck
-      v-if="channel === 'voice' && session && !session.finishedAt"
+      v-if="session && !session.finishedAt"
       :stream="voiceStream"
       :need-camera="false"
       @ready="onVoiceDevicesReady"
@@ -294,7 +269,7 @@ function printEssentials() {
       @failed="onVoiceDevicesFailed"
     />
 
-    <article v-if="session && channel === 'voice' && voiceSession" class="panel stack">
+    <article v-if="session && voiceSession" class="panel stack">
       <h3>Stemme-sesjon</h3>
       <p class="field-hint">
         Modell {{ voiceSession.model }} · {{ voiceSession.mock ? "mock" : "live" }} · utløper
@@ -322,10 +297,6 @@ function printEssentials() {
           :content="message.content"
         />
       </div>
-      <form v-if="channel === 'text'" class="stack" @submit.prevent="sendMessage">
-        <textarea v-model="draft" rows="3" placeholder="Ditt svar …" />
-        <AppButton type="submit" :loading="loading">Send</AppButton>
-      </form>
       <AppButton variant="secondary" :disabled="!!session.finishedAt" @click="finishSession">
         Avslutt og hent feedback
       </AppButton>
