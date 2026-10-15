@@ -127,7 +127,7 @@ function onEssentialsChange(sheet: string, isDefault: boolean) {
   settings.value = { ...settings.value, essentialsSheet: sheet, essentialsIsDefault: isDefault };
 }
 
-async function startSession(practice = false) {
+async function startSession() {
   loading.value = true;
   error.value = null;
   voiceSession.value = null;
@@ -138,12 +138,9 @@ async function startSession(practice = false) {
     await saveSettings();
     session.value = await interviewPrepApi.createSession({
       mode: mode.value,
-      title: prepPlan.value
-        ? `${practice ? "Test" : "Øving"}: ${prepPlan.value.companyName}`
-        : `${mode.value} ${practice ? "test" : "sim"}`,
+      title: prepPlan.value ? `Øving: ${prepPlan.value.companyName}` : `${mode.value} sim`,
       prepPlanId: routePlanId.value,
-      caseEntryId: mode.value === "case_oral" && caseEntryId.value ? caseEntryId.value : undefined,
-      practice
+      caseEntryId: mode.value === "case_oral" && caseEntryId.value ? caseEntryId.value : undefined
     });
     messages.value = (await interviewPrepApi.sessionMessages(session.value.id)).filter((m) => m.role !== "system");
     if (channel.value === "voice") {
@@ -284,10 +281,7 @@ function printEssentials() {
         </div>
       </template>
       <div class="form-grid">
-        <AppButton :loading="loading" @click="startSession(false)">Start ny sesjon</AppButton>
-        <AppButton variant="ghost" :loading="loading" @click="startSession(true)">
-          Test-sesjon (uten vurdering)
-        </AppButton>
+        <AppButton :loading="loading" @click="startSession()">Start ny sesjon</AppButton>
       </div>
     </article>
 
@@ -333,15 +327,12 @@ function printEssentials() {
         <AppButton type="submit" :loading="loading">Send</AppButton>
       </form>
       <AppButton variant="secondary" :disabled="!!session.finishedAt" @click="finishSession">
-        {{ session.practice ? "Avslutt test" : "Avslutt og hent feedback" }}
+        Avslutt og hent feedback
       </AppButton>
-      <div v-if="session.feedback && !session.practice" class="panel">
+      <div v-if="session.feedback" class="panel">
         <h4>Feedback (sum {{ session.feedback.sum }})</h4>
         <p>{{ session.feedback.improvement }}</p>
       </div>
-      <p v-else-if="session.finishedAt && session.practice" class="field-hint">
-        Test avsluttet uten KI-vurdering.
-      </p>
     </article>
 
     <StateView v-if="error" state="error" :message="error" />

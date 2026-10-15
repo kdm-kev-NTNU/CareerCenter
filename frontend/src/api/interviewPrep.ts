@@ -241,7 +241,6 @@ export const interviewPrepApi = {
     title?: string;
     prepPlanId?: string;
     caseEntryId?: string;
-    practice?: boolean;
   }) =>
     request<InterviewSessionDto>("/api/interview/sessions", { method: "POST", body: JSON.stringify(payload) }),
   sessionMessages: (sessionId: string) =>
