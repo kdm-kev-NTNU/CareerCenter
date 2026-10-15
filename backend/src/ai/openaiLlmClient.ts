@@ -2,7 +2,12 @@ import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
 import type { z } from "zod";
 import type { Env } from "../config/env.js";
-import type { LlmClient, LlmCompleteOptions, LlmTranscribeOptions } from "./llmClient.js";
+import type {
+  LlmClient,
+  LlmCompleteOptions,
+  LlmTranscribeOptions,
+  LlmWebSearchOptions
+} from "./llmClient.js";
 
 type OpenAiEnv = Pick<
   Env,
@@ -80,7 +85,7 @@ export class OpenAiLlmClient implements LlmClient {
     return parsed;
   }
 
-  async webSearch(query: string, options?: { model?: string; signal?: AbortSignal }): Promise<string> {
+  async webSearch(query: string, options?: LlmWebSearchOptions): Promise<string> {
     const client = this.requireClient();
     throwIfAborted(options?.signal);
     const response = await client.responses.create(
@@ -91,7 +96,7 @@ export class OpenAiLlmClient implements LlmClient {
         reasoning: { effort: this.reasoningEffort },
         ...(this.fastMode ? { service_tier: "priority" as const } : {})
       },
-      requestOptions(options?.signal)
+      requestOptions(options?.signal, options?.timeoutMs)
     );
     throwIfAborted(options?.signal);
     const text = response.output_text?.trim();

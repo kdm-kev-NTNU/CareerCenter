@@ -33,6 +33,17 @@ function openAiStatus(error: unknown): number | undefined {
   return undefined;
 }
 
+function openAiCode(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null) return undefined;
+  if ("code" in error && typeof (error as { code: unknown }).code === "string") {
+    return (error as { code: string }).code;
+  }
+  return undefined;
+}
+
+/** OpenAI reports exhausted billing as 429 too; it must not be shown as a transient rate limit. */
+const QUOTA_CODES = new Set(["insufficient_quota", "credit_balance_exhausted", "billing_hard_limit_reached"]);
+
 function openAiMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   return String(error);
@@ -51,7 +62,18 @@ export function describePipelineFailure(error: unknown, fallback = "Plan-steg fe
 
   const name = openAiErrorName(error);
   const status = openAiStatus(error);
+  const code = openAiCode(error);
   const message = openAiMessage(error).toLowerCase();
+
+  if (
+    status === 402 ||
+    (code !== undefined && QUOTA_CODES.has(code)) ||
+    message.includes("insufficient_quota") ||
+    message.includes("quota") ||
+    message.includes("no credits")
+  ) {
+    return "AI-kvoten er brukt opp. Fyll på kreditt hos OpenAI og fortsett fra steget som feilet.";
+  }
 
   if (
     name === "APIConnectionTimeoutError" ||
@@ -73,10 +95,6 @@ export function describePipelineFailure(error: unknown, fallback = "Plan-steg fe
     message.includes("invalid api key")
   ) {
     return "AI-autentisering feilet. Sjekk at API-nøkkelen er satt riktig.";
-  }
-
-  if (status === 402 || message.includes("insufficient_quota") || message.includes("quota")) {
-    return "AI-kvoten er brukt opp. Fyll på kvote eller bytt nøkkel, og fortsett.";
   }
 
   if (name === "BadRequestError" || status === 400) {

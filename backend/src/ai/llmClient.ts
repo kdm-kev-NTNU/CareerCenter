@@ -21,6 +21,8 @@ export interface LlmCompleteOptions {
 export interface LlmWebSearchOptions {
   model?: string;
   signal?: AbortSignal;
+  /** Optional per-call timeout in ms (falls back to client default). */
+  timeoutMs?: number;
 }
 
 export interface LlmTranscribeOptions {

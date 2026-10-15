@@ -28,6 +28,14 @@ describe("describePipelineFailure", () => {
     expect(describePipelineFailure(quota)).toMatch(/kvoten/);
   });
 
+  it("maps exhausted credits (429) to quota, not rate limit", () => {
+    const credits = Object.assign(
+      new Error("429 You have no credits remaining. Add credits to continue using the API."),
+      { status: 429, code: "credit_balance_exhausted" }
+    );
+    expect(describePipelineFailure(credits)).toMatch(/kvoten/);
+  });
+
   it("maps auth and bad request model errors", () => {
     const auth = Object.assign(new Error("Incorrect API key"), { name: "AuthenticationError", status: 401 });
     expect(describePipelineFailure(auth)).toMatch(/autentisering/);
