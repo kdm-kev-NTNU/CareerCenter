@@ -23,8 +23,16 @@ describe("LLM schemas", () => {
   });
 
   it("defaults reverse questions to an empty list in curation", () => {
-    const parsed = curatedBankSelectionSchema.parse({ selectedQuestionIds: Array.from({ length: 30 }, (_, i) => `q${i}`) });
+    const parsed = curatedBankSelectionSchema.parse({
+      selectedRefs: Array.from({ length: 30 }, (_, i) => `Q${i + 1}`)
+    });
     expect(parsed.reverseQuestions).toEqual([]);
+    expect(parsed.selectedRefs).toHaveLength(30);
+  });
+
+  it("accepts fewer than 30 selectedRefs (domain fill happens later)", () => {
+    const parsed = curatedBankSelectionSchema.parse({ selectedRefs: ["Q1", "Q2"] });
+    expect(parsed.selectedRefs).toEqual(["Q1", "Q2"]);
   });
 });
 

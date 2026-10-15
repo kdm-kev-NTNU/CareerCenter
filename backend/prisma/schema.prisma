@@ -407,9 +407,11 @@ model InterviewPrepPlan {
   pipelineStep        String                        @default("created")
   jobAdText           String                        @default("")
   researchNotes       String                        @default("")
+  searchSnippet       String                        @default("")
   companyProfileJson  String                        @default("{}")
   companyReportJson   String                        @default("")
   clarificationRound  Int                           @default(0)
+  curationFilledCount Int                           @default(0)
   failureReason       String?
   createdAt           DateTime                      @default(now())
   updatedAt           DateTime                      @updatedAt

@@ -206,6 +206,54 @@ function tokenize(value: string): string[] {
 }
 
 /**
+ * Resolves short model aliases (Q1…Qn) to bank ids, drops unknowns, caps at max,
+ * and fills up to min from the ranked candidate list.
+ * Invariant: when enough candidates exist, result length is in [min, max] and
+ * every id is unique and present in rankedCandidates.
+ */
+export function resolveCuratedSelection(
+  refs: string[],
+  rankedCandidates: Array<{ id: string }>,
+  options: { min?: number; max?: number } = {}
+): { ids: string[]; filledCount: number; droppedRefs: string[] } {
+  const min = options.min ?? 30;
+  const max = options.max ?? 50;
+  const aliasToId = new Map<string, string>();
+  rankedCandidates.forEach((q, index) => {
+    aliasToId.set(`Q${index + 1}`, q.id);
+  });
+
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  const droppedRefs: string[] = [];
+
+  for (const raw of refs) {
+    const ref = raw.trim().toUpperCase();
+    if (!ref) continue;
+    const id = aliasToId.get(ref);
+    if (!id) {
+      droppedRefs.push(raw);
+      continue;
+    }
+    if (seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+    if (ids.length >= max) break;
+  }
+
+  let filledCount = 0;
+  for (const candidate of rankedCandidates) {
+    if (ids.length >= min) break;
+    if (seen.has(candidate.id)) continue;
+    seen.add(candidate.id);
+    ids.push(candidate.id);
+    filledCount += 1;
+  }
+
+  return { ids: ids.slice(0, max), filledCount, droppedRefs };
+}
+
+/**
  * Deterministic pre-ranking of bank questions for a company profile.
  * Only active questions the interviewer asks the candidate are ranked.
  * Returns up to `limit` candidates (default 120), stable by score then id.

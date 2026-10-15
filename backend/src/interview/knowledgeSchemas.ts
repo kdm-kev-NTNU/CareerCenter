@@ -7,8 +7,6 @@ import {
   interviewModes,
   knowledgeDocKinds,
   MAX_CLARIFICATIONS_PER_ROUND,
-  MAX_CURATED_QUESTIONS,
-  MIN_CURATED_QUESTIONS,
   prepFormats,
   researchModels,
   questionAudiences,
@@ -137,8 +135,13 @@ export const clarificationListSchema = z.object({
 
 const reverseAudiences = ["ask_interviewer_company", "ask_interviewer_personal"] as const;
 
+/**
+ * Model output for bank curation. Domain min/max are enforced in resolveCuratedSelection,
+ * not here — so weak models that return too few refs do not fail schema parse.
+ */
 export const curatedBankSelectionSchema = z.object({
-  selectedQuestionIds: z.array(z.string()).min(MIN_CURATED_QUESTIONS).max(MAX_CURATED_QUESTIONS),
+  /** Short aliases from the prompt (Q1…Qn). */
+  selectedRefs: z.array(z.string()).default([]),
   generatedQuestions: z
     .array(
       z.object({
@@ -155,7 +158,8 @@ export const curatedBankSelectionSchema = z.object({
       z.object({
         text: z.string().min(1),
         audience: z.enum(reverseAudiences),
-        bankQuestionId: z.string().nullable()
+        /** Short alias R1…Rn from the reverse bank list, or null when generated. */
+        bankRef: z.string().nullable().default(null)
       })
     )
     .max(8)

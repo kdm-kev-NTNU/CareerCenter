@@ -175,8 +175,31 @@ async function submitAnswers(skip = false) {
   }
 }
 
+async function resumeFromFailure() {
+  if (!plan.value) return;
+  saving.value = true;
+  error.value = null;
+  try {
+    const updated = await interviewPrepApi.resumePlan(plan.value.id);
+    applyDetail({ plan: updated, rankedCases: updated.recommendedCases });
+    followLive.value = true;
+    ensurePolling();
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : "Kunne ikke fortsette planen.";
+  } finally {
+    saving.value = false;
+  }
+}
+
 async function retryResearch() {
   if (!plan.value) return;
+  if (
+    !confirm(
+      "Starte research på nytt fra nett-søk? Ferdig research, svar og kuratering for denne planen erstattes."
+    )
+  ) {
+    return;
+  }
   saving.value = true;
   error.value = null;
   try {
@@ -454,6 +477,9 @@ async function downloadCompanyReport() {
           </template>
           <template v-else-if="selectedStep === 'curating_questions'">
             <p>Velger {{ plan.questions.length || "30–50" }} spørsmål fra banken.</p>
+            <p v-if="plan.curationFilledCount > 0" class="field-hint">
+              Modellen valgte for få; {{ plan.curationFilledCount }} ble fylt inn fra rangeringen.
+            </p>
           </template>
           <template v-else-if="selectedStep === 'curating_cases'">
             <p>Kobler case og øvingsoppgaver til profilen.</p>
@@ -466,6 +492,14 @@ async function downloadCompanyReport() {
           <AppButton v-if="canCancel" variant="secondary" :loading="saving" @click="stopResearch">Stopp</AppButton>
           <AppButton
             v-if="plan.status === 'failed' || plan.status === 'cancelled'"
+            :loading="saving"
+            @click="resumeFromFailure"
+          >
+            Fortsett fra steget som feilet
+          </AppButton>
+          <AppButton
+            v-if="plan.status === 'failed' || plan.status === 'cancelled'"
+            variant="secondary"
             :loading="saving"
             @click="retryResearch"
           >

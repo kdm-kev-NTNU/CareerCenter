@@ -69,6 +69,7 @@ export function toPrepPlanDto(plan: InterviewPrepPlanRecord): InterviewPrepPlanD
     companyProfile: parseCompanyProfile(plan.companyProfileJson),
     companyReport: parseCompanyReport(plan.companyReportJson),
     clarificationRound: plan.clarificationRound,
+    curationFilledCount: plan.curationFilledCount,
     failureReason: plan.failureReason,
     clarifications: plan.clarifications,
     questions: plan.questions.map((q) => ({

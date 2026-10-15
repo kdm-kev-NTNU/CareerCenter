@@ -152,7 +152,7 @@ export function buildSimulatorSystemPrompt(input: {
 export function buildFinishRubricPrompt(): string {
   return [
     "Evaluer kandidatens intervjusvar med STAR-rubric fra Intervjubibelen.",
-    "Score hvert kriterium fra 1 til 4. Returner scores, sum (totalt av 32), og ett konkret forbedringspunkt.",
+    "Score hvert kriterium fra 1 til 4. Returner scores og ett konkret forbedringspunkt. Ikke returner sum — den beregnes server-side.",
     "Bruk hele transkriptet. Relevans betyr at historien svarer på spørsmålet som ble stilt.",
     "Kriterier:",
     formatRubricCriteriaForPrompt(),
@@ -199,13 +199,13 @@ export function buildClarificationSystemPrompt(companyName: string, roleTitle: s
 export function buildCurationSystemPrompt(companyName: string, roleTitle: string): string {
   return [
     buildResearchSystemPrompt(companyName, roleTitle),
-    "Du får kandidater fra brukerens spørsmålsbank med id.",
-    "Velg 30–50 spørsmål ved å returnere selectedQuestionIds fra banken.",
+    "Du får kandidater fra brukerens spørsmålsbank merket med korte alias Q1, Q2, …",
+    "Velg 30–50 spørsmål ved å returnere selectedRefs med disse aliasene (f.eks. \"Q1\", \"Q7\"). Ikke bruk lange id-er.",
     "Prioriter bedriftsspesifikke (category company) spørsmål når banken har dem.",
     "Lag generatedQuestions KUN for temaer banken ikke dekker, og oppgi gapReason for hvert.",
-    "reverseQuestions: velg 3–5 spørsmål kandidaten kan stille om selskapet (ask_interviewer_company) og 2–3 personlige spørsmål til intervjueren (ask_interviewer_personal). Ta utgangspunkt i bankens spørsmål kandidaten kan stille og bedriftsrapportens forslag. Tilpass dem til selskapet og rollen med konkrete detaljer fra research (en satsing, et produkt, en nyhet), men ikke finn på fakta. Sett bankQuestionId når spørsmålet bygger på et bankspørsmål, ellers null. Disse skal aldri med i selectedQuestionIds eller generatedQuestions.",
+    "reverseQuestions: velg 3–5 spørsmål kandidaten kan stille om selskapet (ask_interviewer_company) og 2–3 personlige spørsmål til intervjueren (ask_interviewer_personal). Ta utgangspunkt i listen merket R1, R2, … og bedriftsrapportens forslag. Tilpass dem til selskapet og rollen med konkrete detaljer fra research (en satsing, et produkt, en nyhet), men ikke finn på fakta. Sett bankRef til aliaset (f.eks. \"R2\") når spørsmålet bygger på et bankspørsmål, ellers null. Disse skal aldri med i selectedRefs eller generatedQuestions.",
     "tasks: lag konkrete øvingsoppgaver som bruker nisje-info fra bedriftsrapporten til å øve svar på bedriftsspesifikke spørsmål (f.eks. skriv 60-sekunders «Hvorfor oss?» med 2 nicheHooks).",
-    "Ikke finn opp bank-id-er."
+    "Ikke finn opp aliaser som ikke finnes i listene."
   ].join("\n");
 }
 

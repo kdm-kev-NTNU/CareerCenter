@@ -412,8 +412,10 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
     input: {
       pipelineStep: InterviewPrepPlanRecord["pipelineStep"];
       researchNotes?: string;
+      searchSnippet?: string;
       companyProfileJson?: string;
       companyReportJson?: string;
+      curationFilledCount?: number;
     }
   ): Promise<InterviewPrepPlanRecord | null> {
     const existing = await this.prisma.interviewPrepPlan.findFirst({ where: { id, userId } });
@@ -423,8 +425,12 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       data: {
         pipelineStep: input.pipelineStep,
         ...(input.researchNotes !== undefined ? { researchNotes: input.researchNotes } : {}),
+        ...(input.searchSnippet !== undefined ? { searchSnippet: input.searchSnippet } : {}),
         ...(input.companyProfileJson !== undefined ? { companyProfileJson: input.companyProfileJson } : {}),
-        ...(input.companyReportJson !== undefined ? { companyReportJson: input.companyReportJson } : {})
+        ...(input.companyReportJson !== undefined ? { companyReportJson: input.companyReportJson } : {}),
+        ...(input.curationFilledCount !== undefined
+          ? { curationFilledCount: input.curationFilledCount }
+          : {})
       },
       include: planIncludes
     });
@@ -532,6 +538,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       }>;
       tasks: Array<{ title: string; description: string }>;
       recommendedCaseIds?: string[];
+      curationFilledCount?: number;
     }
   ): Promise<InterviewPrepPlanRecord | null> {
     const existing = await this.prisma.interviewPrepPlan.findFirst({ where: { id, userId } });
@@ -543,6 +550,9 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       this.prisma.interviewPrepPlan.update({
         where: { id },
         data: {
+          ...(input.curationFilledCount !== undefined
+            ? { curationFilledCount: input.curationFilledCount }
+            : {}),
           questions: {
             create: input.questions.map((item, index) => ({
               text: item.text,
@@ -1110,9 +1120,11 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       pipelineStep: parsePrepPlanPipelineStep(row.pipelineStep),
       jobAdText: row.jobAdText,
       researchNotes: row.researchNotes,
+      searchSnippet: row.searchSnippet,
       companyProfileJson: row.companyProfileJson,
       companyReportJson: row.companyReportJson,
       clarificationRound: row.clarificationRound,
+      curationFilledCount: row.curationFilledCount,
       failureReason: row.failureReason ?? undefined,
       clarifications: row.clarifications
         .sort((a, b) => a.sortOrder - b.sortOrder)
@@ -1335,9 +1347,11 @@ type PlanRow = {
   pipelineStep: string;
   jobAdText: string;
   researchNotes: string;
+  searchSnippet: string;
   companyProfileJson: string;
   companyReportJson: string;
   clarificationRound: number;
+  curationFilledCount: number;
   failureReason: string | null;
   createdAt: Date;
   updatedAt: Date;

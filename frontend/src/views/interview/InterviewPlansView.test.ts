@@ -28,6 +28,7 @@ function makePlan(id: string, status: PrepPlanStatus, included = 2): InterviewPr
     jobAdText: "",
     researchNotes: "",
     clarificationRound: 0,
+    curationFilledCount: 0,
     clarifications: [],
     questions: Array.from({ length: included }, (_, i) => ({
       id: `${id}-q${i}`,

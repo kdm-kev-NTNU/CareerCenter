@@ -4,13 +4,16 @@ import {
   MIN_CURATED_QUESTIONS,
   canCancelPrepPlan,
   categoryForAudience,
+  prepPlanResumePoint,
   rankBankQuestions,
   rankCasesForCompany,
+  resolveCuratedSelection,
   transitionPrepPlan,
   type PrepQuestionSource,
   type QuestionAudience,
   type QuestionCategory,
-  type QuestionTarget
+  type QuestionTarget,
+  type ResearchPipelineStep
 } from "@careercenter/shared";
 import type { LlmClient } from "../ai/llmClient.js";
 import type { InterviewBankQuestionRecord, InterviewPrepRepository } from "../interviewPrepRepository.js";
@@ -24,12 +27,15 @@ import {
   companyReportSchema,
   curatedBankSelectionSchema
 } from "./knowledgeSchemas.js";
+import { describePipelineFailure, PrepPipelineError } from "./pipelineErrors.js";
 import {
   buildClarificationSystemPrompt,
   buildCompanyReportSystemPrompt,
   buildCurationSystemPrompt,
   buildResearchSystemPrompt
 } from "./prompts.js";
+
+const CURATION_TIMEOUT_MS = 180_000;
 
 function isAbortError(error: unknown): boolean {
   return (
@@ -95,6 +101,65 @@ export class PrepResearchService {
     );
   }
 
+  /**
+   * Resumes a failed/cancelled plan from the persisted pipeline step
+   * without redoing finished research artefacts.
+   */
+  async enqueueResume(userId: string, planId: string) {
+    const plan = await this.repository.getPrepPlan(userId, planId);
+    if (!plan) throw new Error("Plan ikke funnet.");
+    if (plan.status !== "failed" && plan.status !== "cancelled") {
+      throw new Error("Planen kan bare gjenopptas når den har feilet eller er stoppet.");
+    }
+
+    const point = prepPlanResumePoint(plan.pipelineStep, plan.clarificationRound);
+
+    if (point.kind === "awaiting_answers") {
+      const next = transitionPrepPlan(plan.status, { type: "resume_answers" });
+      const updated = await this.repository.updatePrepPlanStatus(userId, planId, next);
+      if (!updated) throw new Error("Plan ikke funnet.");
+      await this.repository.setPrepPlanPipeline(userId, planId, { pipelineStep: "awaiting_answers" });
+      const current = await this.repository.getPrepPlan(userId, planId);
+      if (!current) throw new Error("Plan ikke funnet.");
+      return current;
+    }
+
+    if (point.kind === "curation") {
+      return this.enqueue(
+        userId,
+        planId,
+        "curate",
+        async () => {
+          const next = transitionPrepPlan(plan.status, { type: "resume_curation" });
+          await this.repository.updatePrepPlanStatus(userId, planId, next);
+          const updated = await this.repository.setPrepPlanPipeline(userId, planId, {
+            pipelineStep: "curating_questions"
+          });
+          if (!updated) throw new Error("Plan ikke funnet.");
+          return updated;
+        },
+        (signal) => this.curate(userId, planId, signal)
+      );
+    }
+
+    return this.enqueue(
+      userId,
+      planId,
+      "research",
+      async () => {
+        const next = transitionPrepPlan(plan.status, { type: "resume_research" });
+        await this.repository.updatePrepPlanStatus(userId, planId, next);
+        const from = point.from === "created" ? "searching" : point.from;
+        const updated = await this.repository.setPrepPlanPipeline(userId, planId, {
+          pipelineStep: from
+        });
+        if (!updated) throw new Error("Plan ikke funnet.");
+        return updated;
+      },
+      (signal) => this.runResearch(userId, planId, signal, point.from)
+    );
+  }
+
   /** True while a research or curation job for the plan is still running in this process. */
   isRunning(planId: string): boolean {
     return this.running.has(`research:${planId}`) || this.running.has(`curate:${planId}`);
@@ -143,7 +208,7 @@ export class PrepResearchService {
             await this.repository.updatePrepPlanStatus(userId, planId, "cancelled", USER_CANCEL_MESSAGE);
             return;
           }
-          const message = error instanceof Error ? error.message : "Plan-steg feilet.";
+          const message = describePipelineFailure(error, "Plan-steg feilet.");
           await this.repository.updatePrepPlanStatus(userId, planId, "failed", message);
         })
         .finally(() => {
@@ -168,7 +233,15 @@ export class PrepResearchService {
       }
       await this.repository.updatePrepPlanStatus(userId, planId, researching);
     }
-    const updated = await this.repository.setPrepPlanPipeline(userId, planId, { pipelineStep: "searching" });
+    // Fresh start: clear resume artefacts so "Start på nytt" is not contaminated.
+    const updated = await this.repository.setPrepPlanPipeline(userId, planId, {
+      pipelineStep: "searching",
+      searchSnippet: "",
+      researchNotes: "",
+      companyProfileJson: "{}",
+      companyReportJson: "",
+      curationFilledCount: 0
+    });
     if (!updated) throw new Error("Plan ikke funnet.");
     return updated;
   }
@@ -183,7 +256,16 @@ export class PrepResearchService {
     return updated;
   }
 
-  private async runResearch(userId: string, planId: string, signal: AbortSignal): Promise<void> {
+  /**
+   * Runs research from `from` onward, reusing persisted artefacts for earlier steps.
+   * Invariant: valid stored artefacts are never regenerated on resume.
+   */
+  private async runResearch(
+    userId: string,
+    planId: string,
+    signal: AbortSignal,
+    from: ResearchPipelineStep = "created"
+  ): Promise<void> {
     const plan = await this.repository.getPrepPlan(userId, planId);
     if (!plan) throw new Error("Plan ikke funnet.");
     const model = plan.researchModel;
@@ -191,84 +273,114 @@ export class PrepResearchService {
       ? `\n\nStillingsannonse:\n${plan.jobAdText.trim()}`
       : "\n\nStillingsannonse: (ikke oppgitt)";
 
+    const stepIndex = (step: ResearchPipelineStep) =>
+      (["created", "searching", "research_notes", "company_profile", "company_report", "clarifications"] as const).indexOf(
+        step
+      );
+    const startIndex = stepIndex(from === "created" ? "searching" : from);
+
     try {
-      throwIfAborted(signal);
-      const searchSnippet = this.llmClient.webSearch
-        ? await this.llmClient.webSearch(
-            `${plan.companyName} ${plan.roleTitle} niche strategy products deals culture news interview why company`,
-            { model, signal }
-          )
-        : "";
+      let searchSnippet = plan.searchSnippet?.trim() ?? "";
+      let researchNotes = plan.researchNotes?.trim() ?? "";
+      let profileJson = plan.companyProfileJson;
+      let reportJson = plan.companyReportJson;
 
-      throwIfAborted(signal);
-      await this.repository.setPrepPlanPipeline(userId, planId, { pipelineStep: "research_notes" });
-      const researchNotes = await this.llmClient.complete({
-        model,
-        signal,
-        messages: [
-          { role: "system", content: buildResearchSystemPrompt(plan.companyName, plan.roleTitle) },
-          {
-            role: "user",
-            content: `Oppsummer hva kandidaten bør vite om selskap, rolle og intervju.${jobAdBlock}\n\nNettfunn:\n${searchSnippet}`
-          }
-        ]
-      });
+      if (startIndex <= stepIndex("searching") || !searchSnippet) {
+        throwIfAborted(signal);
+        await this.repository.setPrepPlanPipeline(userId, planId, { pipelineStep: "searching" });
+        searchSnippet = this.llmClient.webSearch
+          ? await this.llmClient.webSearch(
+              `${plan.companyName} ${plan.roleTitle} niche strategy products deals culture news interview why company`,
+              { model, signal }
+            )
+          : "";
+        await this.repository.setPrepPlanPipeline(userId, planId, {
+          pipelineStep: "research_notes",
+          searchSnippet
+        });
+      }
 
-      throwIfAborted(signal);
-      await this.repository.setPrepPlanPipeline(userId, planId, {
-        pipelineStep: "company_profile",
-        researchNotes
-      });
-      const profile = await this.llmClient.completeStructured(
-        {
+      if (startIndex <= stepIndex("research_notes") || !researchNotes) {
+        throwIfAborted(signal);
+        await this.repository.setPrepPlanPipeline(userId, planId, { pipelineStep: "research_notes" });
+        researchNotes = await this.llmClient.complete({
           model,
           signal,
           messages: [
             { role: "system", content: buildResearchSystemPrompt(plan.companyName, plan.roleTitle) },
             {
               role: "user",
-              content: `Lag et companyProfile-JSON basert på research.${jobAdBlock}\n\nResearch:\n${researchNotes}\nNettfunn:\n${searchSnippet}`
+              content: `Oppsummer hva kandidaten bør vite om selskap, rolle og intervju.${jobAdBlock}\n\nNettfunn:\n${searchSnippet}`
             }
           ]
-        },
-        companyProfileSchema
-      );
+        });
+        await this.repository.setPrepPlanPipeline(userId, planId, {
+          pipelineStep: "company_profile",
+          researchNotes
+        });
+      }
+
+      let profile = tryParseProfile(profileJson);
+      if (startIndex <= stepIndex("company_profile") || !profile) {
+        throwIfAborted(signal);
+        await this.repository.setPrepPlanPipeline(userId, planId, { pipelineStep: "company_profile" });
+        profile = await this.llmClient.completeStructured(
+          {
+            model,
+            signal,
+            messages: [
+              { role: "system", content: buildResearchSystemPrompt(plan.companyName, plan.roleTitle) },
+              {
+                role: "user",
+                content: `Lag et companyProfile-JSON basert på research.${jobAdBlock}\n\nResearch:\n${researchNotes}\nNettfunn:\n${searchSnippet}`
+              }
+            ]
+          },
+          companyProfileSchema
+        );
+        profileJson = JSON.stringify(profile);
+        await this.repository.setPrepPlanPipeline(userId, planId, {
+          pipelineStep: "company_report",
+          companyProfileJson: profileJson
+        });
+      }
+
+      let report = tryParseReport(reportJson);
+      if (startIndex <= stepIndex("company_report") || !report) {
+        throwIfAborted(signal);
+        await this.repository.setPrepPlanPipeline(userId, planId, { pipelineStep: "company_report" });
+        report = await this.llmClient.completeStructured(
+          {
+            model,
+            signal,
+            messages: [
+              {
+                role: "system",
+                content: buildCompanyReportSystemPrompt(plan.companyName, plan.roleTitle)
+              },
+              {
+                role: "user",
+                content: [
+                  `Lag en companyReport-JSON (bedriftsrapport) for kandidaten.`,
+                  jobAdBlock.trim(),
+                  `Research:\n${researchNotes}`,
+                  `Profil:\n${profileJson}`,
+                  `Nettfunn:\n${searchSnippet}`
+                ].join("\n\n")
+              }
+            ]
+          },
+          companyReportSchema
+        );
+        reportJson = JSON.stringify(report);
+        await this.repository.setPrepPlanPipeline(userId, planId, {
+          pipelineStep: "clarifications",
+          companyReportJson: reportJson
+        });
+      }
 
       throwIfAborted(signal);
-      await this.repository.setPrepPlanPipeline(userId, planId, {
-        pipelineStep: "company_report",
-        companyProfileJson: JSON.stringify(profile)
-      });
-      const report = await this.llmClient.completeStructured(
-        {
-          model,
-          signal,
-          messages: [
-            {
-              role: "system",
-              content: buildCompanyReportSystemPrompt(plan.companyName, plan.roleTitle)
-            },
-            {
-              role: "user",
-              content: [
-                `Lag en companyReport-JSON (bedriftsrapport) for kandidaten.`,
-                jobAdBlock.trim(),
-                `Research:\n${researchNotes}`,
-                `Profil:\n${JSON.stringify(profile)}`,
-                `Nettfunn:\n${searchSnippet}`
-              ].join("\n\n")
-            }
-          ]
-        },
-        companyReportSchema
-      );
-      const companyReportJson = JSON.stringify(report);
-
-      throwIfAborted(signal);
-      await this.repository.setPrepPlanPipeline(userId, planId, {
-        pipelineStep: "clarifications",
-        companyReportJson
-      });
+      await this.repository.setPrepPlanPipeline(userId, planId, { pipelineStep: "clarifications" });
       const clarificationPayload = await this.llmClient.completeStructured(
         {
           model,
@@ -277,7 +389,7 @@ export class PrepResearchService {
             { role: "system", content: buildClarificationSystemPrompt(plan.companyName, plan.roleTitle) },
             {
               role: "user",
-              content: `Research:\n${researchNotes}\n\nProfil:\n${JSON.stringify(profile)}\n\nRapport:\n${companyReportJson}\n\nLag oppklaringsspørsmål om hull i research (ikke intervjuspørsmål).`
+              content: `Research:\n${researchNotes}\n\nProfil:\n${profileJson}\n\nRapport:\n${reportJson}\n\nLag oppklaringsspørsmål om hull i research (ikke intervjuspørsmål).`
             }
           ]
         },
@@ -287,8 +399,8 @@ export class PrepResearchService {
       throwIfAborted(signal);
       await this.repository.setPrepPlanResearch(userId, planId, {
         researchNotes,
-        companyProfileJson: JSON.stringify(profile),
-        companyReportJson,
+        companyProfileJson: profileJson,
+        companyReportJson: reportJson,
         clarificationRound: 1,
         clarifications: clarificationPayload.clarifications.map((item, index) => ({
           question: item.question,
@@ -304,7 +416,7 @@ export class PrepResearchService {
         await this.repository.updatePrepPlanStatus(userId, planId, "cancelled", USER_CANCEL_MESSAGE);
         throw Object.assign(new Error(USER_CANCEL_MESSAGE), { name: "AbortError" });
       }
-      const message = error instanceof Error ? error.message : "Research feilet.";
+      const message = describePipelineFailure(error, "Research feilet.");
       await this.repository.updatePrepPlanStatus(userId, planId, "failed", message);
       throw error;
     }
@@ -395,6 +507,14 @@ export class PrepResearchService {
       const bank = await this.repository.listBankQuestions(userId, { status: "active" });
       const candidateBank = bank.filter((q) => q.audience === "candidate");
       const reverseBank = bank.filter((q) => q.audience !== "candidate");
+
+      if (candidateBank.length < MIN_CURATED_QUESTIONS) {
+        throw new PrepPipelineError(
+          "curating_questions",
+          `Spørsmålsbanken har bare ${candidateBank.length} aktive spørsmål; planen trenger minst ${MIN_CURATED_QUESTIONS}. Importer eller aktiver flere spørsmål.`
+        );
+      }
+
       const candidates = rankBankQuestions(
         {
           industries: profile.industries,
@@ -415,12 +535,18 @@ export class PrepResearchService {
       );
 
       const report = safeParseReport(plan.companyReportJson);
+      const candidateLines = candidates
+        .map((q, index) => `Q${index + 1} | ${q.category} | ${q.text}`)
+        .join("\n");
+      const reverseLines =
+        reverseBank.map((q, index) => `R${index + 1} | ${q.audience} | ${q.text}`).join("\n") || "–";
 
       throwIfAborted(signal);
       const selection = await this.llmClient.completeStructured(
         {
           model: plan.researchModel,
           signal,
+          timeoutMs: CURATION_TIMEOUT_MS,
           messages: [
             { role: "system", content: buildCurationSystemPrompt(plan.companyName, plan.roleTitle) },
             {
@@ -434,12 +560,8 @@ export class PrepResearchService {
                   interviewAngles: report.interviewAngles
                 })}`,
                 `Avklaringer:\n${plan.clarifications.map((c) => `${c.question}\nSvar: ${c.answer}`).join("\n\n")}`,
-                `Kandidater fra banken (velg ${MIN_CURATED_QUESTIONS}-${MAX_CURATED_QUESTIONS} id-er):\n${candidates
-                  .map((q) => `${q.id} | ${q.category} | ${q.text}`)
-                  .join("\n")}`,
-                `Spørsmål kandidaten kan stille intervjueren (fra banken):\n${
-                  reverseBank.map((q) => `${q.id} | ${q.audience} | ${q.text}`).join("\n") || "–"
-                }`,
+                `Kandidater fra banken (velg ${MIN_CURATED_QUESTIONS}-${MAX_CURATED_QUESTIONS} alias Q1…):\n${candidateLines}`,
+                `Spørsmål kandidaten kan stille intervjueren (alias R1…):\n${reverseLines}`,
                 `Forslag fra bedriftsrapporten:\n${report.questionsToAsk.join("\n") || "–"}`
               ].join("\n\n")
             }
@@ -448,21 +570,23 @@ export class PrepResearchService {
         curatedBankSelectionSchema
       );
 
-      const selected = await this.repository.getBankQuestionsByIds(userId, selection.selectedQuestionIds);
-      if (selected.length !== selection.selectedQuestionIds.length) {
-        throw new Error("Kuratering refererte spørsmål utenfor banken.");
-      }
-      // Questions the candidate asks, and discarded ones, never go into the interviewer's list.
-      const candidateIds = new Set(candidateBank.map((q) => q.id));
-      const usable = selected.filter((q) => candidateIds.has(q.id));
-      if (usable.length < MIN_CURATED_QUESTIONS) {
-        throw new Error(`Kuratering må ha minst ${MIN_CURATED_QUESTIONS} bankspørsmål.`);
+      const resolved = resolveCuratedSelection(selection.selectedRefs, candidates, {
+        min: MIN_CURATED_QUESTIONS,
+        max: MAX_CURATED_QUESTIONS
+      });
+
+      if (resolved.ids.length < MIN_CURATED_QUESTIONS) {
+        throw new PrepPipelineError(
+          "curating_questions",
+          `Kuratering fikk bare ${resolved.ids.length} gyldige bankspørsmål (trenger minst ${MIN_CURATED_QUESTIONS}).`
+        );
       }
 
-      const byId = new Map(usable.map((q) => [q.id, q]));
+      const selected = await this.repository.getBankQuestionsByIds(userId, resolved.ids);
+      const byId = new Map(selected.map((q) => [q.id, q]));
       const questions: CuratedQuestion[] = [];
 
-      for (const id of selection.selectedQuestionIds) {
+      for (const id of resolved.ids) {
         const q = byId.get(id);
         if (!q) continue;
         questions.push({
@@ -473,6 +597,7 @@ export class PrepResearchService {
           bankQuestionId: q.id
         });
       }
+
       for (const generated of selection.generatedQuestions) {
         questions.push({
           text: generated.text,
@@ -484,7 +609,13 @@ export class PrepResearchService {
       }
 
       attachCompanyAnswerNotes(questions, report);
-      questions.push(...buildReverseQuestions(selection.reverseQuestions, reverseBank, report.questionsToAsk));
+
+      const reversePicks = selection.reverseQuestions.map((pick) => ({
+        text: pick.text,
+        audience: pick.audience,
+        bankQuestionId: resolveReverseBankRef(pick.bankRef, reverseBank)
+      }));
+      questions.push(...buildReverseQuestions(reversePicks, reverseBank, report.questionsToAsk));
 
       throwIfAborted(signal);
       await this.repository.setPrepPlanPipeline(userId, planId, { pipelineStep: "curating_cases" });
@@ -508,17 +639,21 @@ export class PrepResearchService {
       await this.repository.setPrepPlanCurated(userId, planId, {
         questions,
         tasks,
-        recommendedCaseIds
+        recommendedCaseIds,
+        curationFilledCount: resolved.filledCount
       });
       const ready = transitionPrepPlan("curating", { type: "curation_done" });
-      await this.repository.setPrepPlanPipeline(userId, planId, { pipelineStep: "ready" });
+      await this.repository.setPrepPlanPipeline(userId, planId, {
+        pipelineStep: "ready",
+        curationFilledCount: resolved.filledCount
+      });
       await this.repository.updatePrepPlanStatus(userId, planId, ready);
     } catch (error) {
       if (isAbortError(error) || signal.aborted) {
         await this.repository.updatePrepPlanStatus(userId, planId, "cancelled", USER_CANCEL_MESSAGE);
         throw Object.assign(new Error(USER_CANCEL_MESSAGE), { name: "AbortError" });
       }
-      const message = error instanceof Error ? error.message : "Kuratering feilet.";
+      const message = describePipelineFailure(error, "Kuratering feilet.");
       await this.repository.updatePrepPlanStatus(userId, planId, "failed", message);
       throw error;
     }
@@ -538,6 +673,17 @@ interface CuratedQuestion {
 
 const MAX_REVERSE_COMPANY = 5;
 const MAX_REVERSE_PERSONAL = 3;
+
+function resolveReverseBankRef(
+  bankRef: string | null | undefined,
+  reverseBank: InterviewBankQuestionRecord[]
+): string | null {
+  if (!bankRef) return null;
+  const match = /^R(\d+)$/i.exec(bankRef.trim());
+  if (!match) return null;
+  const index = Number(match[1]) - 1;
+  return reverseBank[index]?.id ?? null;
+}
 
 /**
  * Questions the candidate asks the interviewer, from the curation result.
@@ -586,6 +732,25 @@ export function buildReverseQuestions(
     });
   }
   return out;
+}
+
+/** Strict parse: returns null when JSON is missing or invalid (forces re-run on resume). */
+function tryParseProfile(json: string) {
+  try {
+    if (!json || json === "{}") return null;
+    return companyProfileSchema.parse(JSON.parse(json));
+  } catch {
+    return null;
+  }
+}
+
+function tryParseReport(json: string) {
+  try {
+    if (!json || !json.trim()) return null;
+    return companyReportSchema.parse(JSON.parse(json));
+  } catch {
+    return null;
+  }
 }
 
 function safeParseProfile(json: string) {
