@@ -5,12 +5,17 @@ import type {
   InterviewPrepPlanDto,
   InterviewPrepQuestionDto,
   PrepPlanPipelineStep,
+  QuestionAudience,
   QuestionCategory
 } from "@careercenter/shared";
 import {
   canCancelPrepPlan,
   canStartSimulators,
   isPrepPlanPipelineActive,
+  questionAudienceLabels,
+  questionAudiences,
+  questionCategories,
+  questionCategoryLabels,
   researchModelLabels
 } from "@careercenter/shared";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
@@ -31,7 +36,7 @@ const loading = ref(true);
 const saving = ref(false);
 const error = ref<string | null>(null);
 const answers = ref<Record<string, string>>({});
-const swapQuestionId = ref<string | null>(null);
+const swapQuestion = ref<InterviewPrepQuestionDto | null>(null);
 const bankHits = ref<InterviewBankQuestionDto[]>([]);
 const bankQ = ref("");
 const selectedStep = ref<PrepPlanPipelineStep>("created");
@@ -41,6 +46,7 @@ const editText = ref("");
 const editNotes = ref("");
 const newQuestionText = ref("");
 const newQuestionCategory = ref<QuestionCategory>("behavioral");
+const newQuestionAudience = ref<QuestionAudience>("candidate");
 let pollTimer: ReturnType<typeof setInterval> | undefined;
 
 const planId = computed(() => route.params.id as string);
@@ -52,18 +58,35 @@ const canCancel = computed(() => (plan.value ? canCancelPrepPlan(plan.value.stat
 const canPractice = computed(() => (plan.value ? canStartSimulators(plan.value.status) : false));
 const canDownloadReport = computed(() => Boolean(plan.value?.companyReport));
 const downloadingReport = ref(false);
-const includedCount = computed(
-  () => plan.value?.questions.filter((q) => q.included).length ?? 0
+const candidateQuestions = computed(
+  () => plan.value?.questions.filter((q) => q.audience === "candidate") ?? []
 );
-const questionsByCategory = computed(() => {
-  const groups = new Map<string, NonNullable<typeof plan.value>["questions"]>();
-  for (const q of plan.value?.questions ?? []) {
-    const list = groups.get(q.category) ?? [];
+const includedCount = computed(() => candidateQuestions.value.filter((q) => q.included).length);
+
+const askGroupTitles: Record<Exclude<QuestionAudience, "candidate">, string> = {
+  ask_interviewer_company: "Om selskapet",
+  ask_interviewer_personal: "Til intervjueren (personlig)"
+};
+
+/** Interviewer questions grouped by category, then the questions the candidate asks the interviewer. */
+const questionGroups = computed(() => {
+  const groups: Array<{ key: string; title: string; ask: boolean; items: InterviewPrepQuestionDto[] }> = [];
+  const byCategory = new Map<QuestionCategory, InterviewPrepQuestionDto[]>();
+  for (const q of candidateQuestions.value) {
+    const list = byCategory.get(q.category) ?? [];
     list.push(q);
-    groups.set(q.category, list);
+    byCategory.set(q.category, list);
   }
-  return [...groups.entries()];
+  for (const [category, items] of byCategory) {
+    groups.push({ key: category, title: questionCategoryLabels[category] ?? category, ask: false, items });
+  }
+  for (const audience of ["ask_interviewer_company", "ask_interviewer_personal"] as const) {
+    const items = plan.value?.questions.filter((q) => q.audience === audience) ?? [];
+    if (items.length) groups.push({ key: audience, title: askGroupTitles[audience], ask: true, items });
+  }
+  return groups;
 });
+const firstAskGroupKey = computed(() => questionGroups.value.find((group) => group.ask)?.key);
 
 function applyDetail(detail: { plan: InterviewPrepPlanDto; rankedCases: InterviewPrepPlanCaseDto[] }) {
   plan.value = detail.plan;
@@ -181,17 +204,25 @@ async function stopResearch() {
   }
 }
 
-async function openSwap(questionId: string) {
-  swapQuestionId.value = questionId;
-  bankHits.value = await interviewPrepApi.searchQuestions({ q: bankQ.value || undefined });
+async function openSwap(question: InterviewPrepQuestionDto) {
+  swapQuestion.value = question;
+  await searchSwap();
+}
+
+async function searchSwap() {
+  if (!swapQuestion.value) return;
+  bankHits.value = await interviewPrepApi.searchQuestions({
+    q: bankQ.value || undefined,
+    audience: swapQuestion.value.audience
+  });
 }
 
 async function applySwap(bankQuestionId: string) {
-  if (!plan.value || !swapQuestionId.value) return;
-  plan.value = await interviewPrepApi.replacePlanQuestion(plan.value.id, swapQuestionId.value, {
+  if (!plan.value || !swapQuestion.value) return;
+  plan.value = await interviewPrepApi.replacePlanQuestion(plan.value.id, swapQuestion.value.id, {
     bankQuestionId
   });
-  swapQuestionId.value = null;
+  swapQuestion.value = null;
 }
 
 function startEdit(question: InterviewPrepQuestionDto) {
@@ -234,7 +265,8 @@ async function addQuestion() {
   try {
     plan.value = await interviewPrepApi.addPlanQuestion(plan.value.id, {
       text: newQuestionText.value.trim(),
-      category: newQuestionCategory.value
+      category: newQuestionCategory.value,
+      audience: newQuestionAudience.value
     });
     newQuestionText.value = "";
   } catch (err) {
@@ -244,16 +276,18 @@ async function addQuestion() {
   }
 }
 
-async function moveQuestion(questionId: string, direction: -1 | 1) {
+/** Swap with the neighbour in the same group; the backend needs the full list of ids. */
+async function moveQuestion(question: InterviewPrepQuestionDto, direction: -1 | 1) {
   if (!plan.value) return;
   const ordered = [...plan.value.questions].sort((a, b) => a.sortOrder - b.sortOrder);
-  const index = ordered.findIndex((q) => q.id === questionId);
-  const target = index + direction;
-  if (index < 0 || target < 0 || target >= ordered.length) return;
+  const peers = ordered.filter((q) => q.audience === question.audience);
+  const neighbour = peers[peers.findIndex((q) => q.id === question.id) + direction];
+  if (!neighbour) return;
   const ids = ordered.map((q) => q.id);
-  const tmp = ids[index]!;
-  ids[index] = ids[target]!;
-  ids[target] = tmp;
+  const from = ids.indexOf(question.id);
+  const to = ids.indexOf(neighbour.id);
+  ids[from] = neighbour.id;
+  ids[to] = question.id;
   plan.value = await interviewPrepApi.reorderPlanQuestions(plan.value.id, ids);
 }
 
@@ -426,25 +460,33 @@ async function downloadCompanyReport() {
 
       <article v-if="plan.questions.length || canPractice" class="panel stack">
         <div class="panel-heading-row">
-          <h3>Spørsmål ({{ includedCount }}/{{ plan.questions.length }} i øving)</h3>
+          <h3>Spørsmål ({{ includedCount }}/{{ candidateQuestions.length }} i øving)</h3>
           <AppButton v-if="canPractice" variant="secondary" :disabled="includedCount === 0" @click="practiceWithPlan">
             Øv med denne planen
           </AppButton>
         </div>
-        <div v-for="[category, items] in questionsByCategory" :key="category" class="stack">
-          <h4>{{ category }}</h4>
+        <template v-for="group in questionGroups" :key="group.key">
+          <div v-if="group.key === firstAskGroupKey" class="stack">
+            <h3>Spørsmål du stiller dem</h3>
+            <p class="field-hint">
+              Ha fem klare, still to eller tre, og minst ett personlig. KI-intervjueren svarer på dem i
+              avslutningsrunden når du øver med planen.
+            </p>
+          </div>
+          <div class="stack">
+          <h4>{{ group.title }}</h4>
           <ul class="plain-list">
-            <li v-for="question in items" :key="question.id" class="stack">
+            <li v-for="question in group.items" :key="question.id" class="stack">
               <div class="panel-heading-row">
                 <label class="inline-check">
                   <input type="checkbox" :checked="question.included" @change="toggleIncluded(question)" />
                   Ta med i øving
                 </label>
                 <div class="form-grid">
-                  <AppButton variant="ghost" class="mini-btn" @click="moveQuestion(question.id, -1)">Opp</AppButton>
-                  <AppButton variant="ghost" class="mini-btn" @click="moveQuestion(question.id, 1)">Ned</AppButton>
+                  <AppButton variant="ghost" class="mini-btn" @click="moveQuestion(question, -1)">Opp</AppButton>
+                  <AppButton variant="ghost" class="mini-btn" @click="moveQuestion(question, 1)">Ned</AppButton>
                   <AppButton variant="ghost" class="mini-btn" @click="startEdit(question)">Rediger</AppButton>
-                  <AppButton variant="ghost" class="mini-btn" @click="openSwap(question.id)">Bytt</AppButton>
+                  <AppButton variant="ghost" class="mini-btn" @click="openSwap(question)">Bytt</AppButton>
                   <AppButton variant="ghost" class="mini-btn" @click="removeQuestion(question.id)">Slett</AppButton>
                 </div>
               </div>
@@ -469,39 +511,48 @@ async function downloadCompanyReport() {
               </template>
             </li>
           </ul>
-        </div>
+          </div>
+        </template>
 
         <div class="stack">
           <h4>Legg til spørsmål</h4>
-          <textarea v-model="newQuestionText" rows="2" placeholder="Skriv et intervjuspørsmål …" />
-          <label>
-            Kategori
-            <select v-model="newQuestionCategory">
-              <option value="behavioral">behavioral</option>
-              <option value="technical">technical</option>
-              <option value="motivation">motivation</option>
-              <option value="company">company</option>
-              <option value="case">case</option>
-            </select>
-          </label>
+          <textarea v-model="newQuestionText" rows="2" placeholder="Skriv et spørsmål …" />
+          <div class="form-grid">
+            <label>
+              Hvem spør
+              <select v-model="newQuestionAudience">
+                <option v-for="audience in questionAudiences" :key="audience" :value="audience">
+                  {{ questionAudienceLabels[audience] }}
+                </option>
+              </select>
+            </label>
+            <label v-if="newQuestionAudience === 'candidate'">
+              Kategori
+              <select v-model="newQuestionCategory">
+                <option v-for="item in questionCategories" :key="item" :value="item">
+                  {{ questionCategoryLabels[item] }}
+                </option>
+              </select>
+            </label>
+          </div>
           <AppButton :loading="saving" :disabled="!newQuestionText.trim()" @click="addQuestion">Legg til</AppButton>
         </div>
       </article>
 
-      <article v-if="swapQuestionId" class="panel stack">
+      <article v-if="swapQuestion" class="panel stack">
         <h3>Bytt med spørsmål fra banken</h3>
         <label>
           Søk
-          <input v-model="bankQ" @keyup.enter="openSwap(swapQuestionId!)" />
+          <input v-model="bankQ" @keyup.enter="searchSwap" />
         </label>
-        <AppButton variant="secondary" @click="openSwap(swapQuestionId!)">Søk</AppButton>
+        <AppButton variant="secondary" @click="searchSwap">Søk</AppButton>
         <ul class="plain-list">
           <li v-for="hit in bankHits" :key="hit.id" class="panel-heading-row">
             <span>{{ hit.text }}</span>
             <AppButton class="mini-btn" @click="applySwap(hit.id)">Velg</AppButton>
           </li>
         </ul>
-        <AppButton variant="ghost" @click="swapQuestionId = null">Lukk</AppButton>
+        <AppButton variant="ghost" @click="swapQuestion = null">Lukk</AppButton>
       </article>
 
       <article v-if="plan.tasks.length" class="panel stack">

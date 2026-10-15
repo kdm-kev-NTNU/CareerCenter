@@ -1,3 +1,4 @@
+import { defaultEssentialsSheets, interviewModes } from "@careercenter/shared";
 import { describe, expect, it, vi } from "vitest";
 import { escapeHtml, printEssentialsSheet } from "./printEssentials.js";
 
@@ -37,5 +38,23 @@ describe("printEssentialsSheet", () => {
 
   it("returns false when the popup is blocked", () => {
     expect(printEssentialsSheet("tekst", () => null)).toBe(false);
+  });
+});
+
+describe("default essentials sheets", () => {
+  it("prints every default sheet with quotes intact", () => {
+    for (const mode of interviewModes) {
+      const write = vi.fn();
+      const openWindow = () => ({
+        document: { open: vi.fn(), write, close: vi.fn() },
+        print: vi.fn(),
+        close: vi.fn(),
+        focus: vi.fn()
+      });
+      expect(printEssentialsSheet(defaultEssentialsSheets[mode], openWindow)).toBe(true);
+      const html = String(write.mock.calls[0]?.[0] ?? "");
+      expect(html).toContain("ESSENTIALS");
+      expect(html).toContain("«");
+    }
   });
 });
