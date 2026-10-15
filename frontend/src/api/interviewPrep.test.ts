@@ -58,6 +58,45 @@ describe("interviewPrepApi", () => {
     expect(mockedRequest).toHaveBeenCalledWith("/api/interview/questions/reindex", { method: "POST" });
   });
 
+  it("filters questions by audience and status and manages the bank", async () => {
+    await interviewPrepApi.searchQuestions({ audience: "ask_interviewer_personal", status: "discarded" });
+    await interviewPrepApi.questionSummary();
+    await interviewPrepApi.updateQuestion("q1", { audience: "ask_interviewer_company" });
+    await interviewPrepApi.discardQuestion("q1");
+    await interviewPrepApi.discardQuestion("q2", "tips");
+    await interviewPrepApi.restoreQuestion("q1");
+    await interviewPrepApi.cleanupQuestions(true);
+
+    expect(mockedRequest).toHaveBeenCalledWith(
+      "/api/interview/questions?audience=ask_interviewer_personal&status=discarded"
+    );
+    expect(mockedRequest).toHaveBeenCalledWith("/api/interview/questions/summary");
+    expect(mockedRequest).toHaveBeenCalledWith("/api/interview/questions/q1", {
+      method: "PATCH",
+      body: JSON.stringify({ audience: "ask_interviewer_company" })
+    });
+    expect(mockedRequest).toHaveBeenCalledWith("/api/interview/questions/q1/discard", {
+      method: "POST",
+      body: "{}"
+    });
+    expect(mockedRequest).toHaveBeenCalledWith("/api/interview/questions/q2/discard", {
+      method: "POST",
+      body: JSON.stringify({ reason: "tips" })
+    });
+    expect(mockedRequest).toHaveBeenCalledWith("/api/interview/questions/q1/restore", { method: "POST" });
+    expect(mockedRequest).toHaveBeenCalledWith("/api/interview/questions/cleanup", {
+      method: "POST",
+      body: JSON.stringify({ reset: true })
+    });
+  });
+
+  it("drafts essentials for a mode", async () => {
+    await interviewPrepApi.essentialsDraft("case_oral");
+    expect(mockedRequest).toHaveBeenCalledWith("/api/interview/simulator/settings/case_oral/essentials-draft", {
+      method: "POST"
+    });
+  });
+
   it("lists and manages cases", async () => {
     await interviewPrepApi.cases({ q: "profit", sourceKind: "casebook", approvalStatus: "pending" });
     await interviewPrepApi.approveCase("c1");

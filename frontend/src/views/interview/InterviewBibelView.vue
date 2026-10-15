@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import {
   canDeleteImportJob,
-  type InterviewBankQuestionDto,
+  importJobKindLabels,
   type InterviewCasePublicDto,
   type InterviewImportJobDto,
   type InterviewKnowledgeDocDto
 } from "@careercenter/shared";
 import { onMounted, onUnmounted, ref } from "vue";
 import { interviewPrepApi } from "../../api/interviewPrep.js";
+import QuestionBankPanel from "../../components/interview/QuestionBankPanel.vue";
 import AppButton from "../../components/ui/AppButton.vue";
 import PageHeader from "../../components/ui/PageHeader.vue";
 import StateView from "../../components/ui/StateView.vue";
@@ -22,11 +23,10 @@ const jobs = ref<InterviewImportJobDto[]>([]);
 const uploading = ref(false);
 const newTitle = ref("");
 const newContent = ref("");
-const searchQ = ref("");
-const searchCategory = ref("");
-const questionHits = ref<InterviewBankQuestionDto[]>([]);
+const caseSearchQ = ref("");
 const caseHits = ref<InterviewCasePublicDto[]>([]);
 const searching = ref(false);
+const aiConfigured = ref(false);
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 
 async function refresh() {
@@ -46,8 +46,20 @@ async function refresh() {
   }
 }
 
+async function refreshJobs() {
+  jobs.value = await interviewPrepApi.importJobs();
+}
+
 onMounted(() => {
   void refresh();
+  void interviewPrepApi
+    .getStatus()
+    .then((status) => {
+      aiConfigured.value = status.aiConfigured;
+    })
+    .catch(() => {
+      aiConfigured.value = false;
+    });
   pollTimer = setInterval(() => {
     const active = jobs.value.some((job) => job.status === "queued" || job.status === "running");
     if (!active) return;
@@ -98,28 +110,16 @@ async function removeDoc(id: string) {
   await refresh();
 }
 
-async function runSearch() {
+async function searchCases() {
   searching.value = true;
   error.value = null;
   try {
-    const params = { q: searchQ.value.trim() || undefined, category: searchCategory.value || undefined };
-    [questionHits.value, caseHits.value] = await Promise.all([
-      interviewPrepApi.searchQuestions(params),
-      interviewPrepApi.cases(params)
-    ]);
+    caseHits.value = await interviewPrepApi.cases({ q: caseSearchQ.value.trim() || undefined });
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Søk feilet.";
   } finally {
     searching.value = false;
   }
-}
-
-const reindexMessage = ref<string | null>(null);
-
-async function reindex() {
-  const result = await interviewPrepApi.reindexQuestions();
-  reindexMessage.value = result.message;
-  await runSearch();
 }
 
 async function approve(id: string) {
@@ -209,7 +209,7 @@ async function removeJob(id: string) {
         <ul class="plain-list">
           <li v-for="job in jobs" :key="job.id" class="stack">
             <strong>{{ sourceLabel(job.knowledgeDocId) || "Dokument" }}</strong>
-            <span class="field-hint">{{ job.status }} · {{ job.progress }}%</span>
+            <span class="field-hint">{{ importJobKindLabels[job.kind] }} · {{ job.status }} · {{ job.progress }}%</span>
             <p>{{ job.message }}</p>
             <div class="form-grid">
               <AppButton
@@ -265,40 +265,14 @@ async function removeJob(id: string) {
     </template>
 
     <template v-else-if="tab === 'sok'">
+      <QuestionBankPanel :docs="docs" :jobs="jobs" :ai-configured="aiConfigured" @jobs-changed="refreshJobs" />
+
       <article class="panel stack">
-        <h3>Søk i spørsmåls- og casebanken</h3>
-        <label>Søk <input v-model="searchQ" placeholder="f.eks. leadership, profitability" @keyup.enter="runSearch" /></label>
+        <h3>Case-søk</h3>
         <label>
-          Kategori
-          <select v-model="searchCategory">
-            <option value="">Alle</option>
-            <option value="behavioral">behavioral</option>
-            <option value="technical">technical</option>
-            <option value="motivation">motivation</option>
-            <option value="company">company</option>
-            <option value="case">case</option>
-          </select>
+          Søk <input v-model="caseSearchQ" placeholder="f.eks. profitability" @keyup.enter="searchCases" />
         </label>
-        <div class="form-grid">
-          <AppButton :loading="searching" @click="runSearch">Søk</AppButton>
-          <AppButton variant="secondary" @click="reindex">Reindekser spørsmål</AppButton>
-        </div>
-        <p v-if="reindexMessage" class="field-hint">{{ reindexMessage }}</p>
-      </article>
-
-      <article class="panel stack">
-        <h3>Spørsmål ({{ questionHits.length }})</h3>
-        <StateView v-if="!questionHits.length" state="empty" message="Ingen treff. Prøv et annet søk eller reindekser." />
-        <ul v-else class="plain-list">
-          <li v-for="q in questionHits" :key="q.id">
-            <strong>{{ q.text }}</strong>
-            <span class="field-hint">{{ q.category }} · {{ q.tags.join(", ") }}</span>
-          </li>
-        </ul>
-      </article>
-
-      <article class="panel stack">
-        <h3>Case ({{ caseHits.length }})</h3>
+        <AppButton :loading="searching" @click="searchCases">Søk i caser</AppButton>
         <StateView v-if="!caseHits.length" state="empty" message="Ingen case-treff." />
         <ul v-else class="plain-list">
           <li v-for="item in caseHits" :key="item.id">
@@ -316,7 +290,7 @@ async function removeJob(id: string) {
         <ul v-else class="plain-list">
           <li v-for="job in jobs" :key="job.id" class="stack">
             <strong>{{ sourceLabel(job.knowledgeDocId) || job.status }}</strong>
-            <span class="field-hint">{{ job.kind }} · {{ job.status }} · {{ job.progress }}%</span>
+            <span class="field-hint">{{ importJobKindLabels[job.kind] }} · {{ job.status }} · {{ job.progress }}%</span>
             <p>{{ job.message }}</p>
             <div class="form-grid">
               <AppButton

@@ -43,13 +43,14 @@ describe("interview prep routes", () => {
       content: "seed",
       contentHash: sha256Content(`seed-${Math.random()}`)
     });
-    await repo.replaceBankQuestionsForDoc(
+    await repo.insertBankQuestions(
       userId,
       doc.id,
       Array.from({ length: 30 }, (_, i) => ({
         text: `Seeded question ${i}?`,
         category: "behavioral" as const,
         tags: ["seed"],
+        origin: "rule" as const,
         contentHash: sha256Content(`seed-q-${doc.id}-${i}`)
       }))
     );
@@ -811,3 +812,361 @@ describe("interview prep routes", () => {
     await app.close();
   });
 });
+
+describe("question bank and essentials routes", () => {
+  async function setup(options: { configured?: boolean; structuredResults?: unknown[] } = {}) {
+    const main = new MemoryRepository();
+    const repo = new InterviewPrepMemoryRepository();
+    const llmClient = new FakeLlmClient({
+      configured: options.configured ?? true,
+      structuredResults: options.structuredResults
+    });
+    const app = await buildServer({
+      repository: main,
+      authDisabled: true,
+      llmClient,
+      interviewPrepRepository: repo
+    });
+    await app.ready();
+    await app.inject({ method: "GET", url: "/api/interview/status" });
+    const user = await main.findUserByName("__test__");
+    return { app, repo, llmClient, userId: user!.id };
+  }
+
+  async function seedQuestions(repo: InterviewPrepMemoryRepository, userId: string) {
+    const doc = await repo.createKnowledgeDoc(userId, {
+      kind: "company",
+      title: "Bedrift",
+      content: "x",
+      contentHash: sha256Content(`bank-${Math.random()}`)
+    });
+    await repo.insertBankQuestions(userId, doc.id, [
+      { text: "Hva vet du om oss?", category: "company", tags: [], origin: "rule", contentHash: sha256Content("a") },
+      {
+        text: "Hva overrasket deg mest?",
+        category: "personal",
+        audience: "ask_interviewer_personal",
+        tags: [],
+        origin: "rule",
+        contentHash: sha256Content("b")
+      }
+    ]);
+    const rows = await repo.listBankQuestions(userId);
+    return { doc, rows, byText: (text: string) => rows.find((row) => row.text === text)! };
+  }
+
+  function keepAll(rows: Array<{ id: string; text: string; audience: string; category: string }>) {
+    return {
+      items: rows.map((row) => ({
+        id: row.id,
+        action: "keep",
+        parts: [{ text: row.text, audience: row.audience, category: row.category }],
+        discardReason: null
+      }))
+    };
+  }
+
+  it("filters, edits, discards and restores bank questions", async () => {
+    const { app, repo, userId } = await setup();
+    const { byText } = await seedQuestions(repo, userId);
+    const ours = byText("Hva vet du om oss?");
+
+    const reverse = await app.inject({
+      method: "GET",
+      url: "/api/interview/questions?audience=ask_interviewer_personal"
+    });
+    expect(reverse.json().map((q: { text: string }) => q.text)).toEqual(["Hva overrasket deg mest?"]);
+
+    const moved = await app.inject({
+      method: "PATCH",
+      url: `/api/interview/questions/${ours.id}`,
+      payload: { audience: "ask_interviewer_company", category: "behavioral" }
+    });
+    expect(moved.statusCode).toBe(200);
+    expect(moved.json()).toMatchObject({ audience: "ask_interviewer_company", category: "company", origin: "manual" });
+    expect(moved.json().cleanedAt).toBeTruthy();
+
+    const missing = await app.inject({
+      method: "PATCH",
+      url: "/api/interview/questions/nope",
+      payload: { text: "Ny tekst?" }
+    });
+    expect(missing.statusCode).toBe(404);
+    const empty = await app.inject({ method: "PATCH", url: `/api/interview/questions/${ours.id}`, payload: {} });
+    expect(empty.statusCode).toBe(400);
+
+    const discarded = await app.inject({
+      method: "POST",
+      url: `/api/interview/questions/${ours.id}/discard`,
+      payload: {}
+    });
+    expect(discarded.json()).toMatchObject({ status: "discarded", discardReason: "manuelt" });
+    const active = await app.inject({ method: "GET", url: "/api/interview/questions" });
+    expect(active.json().some((q: { id: string }) => q.id === ours.id)).toBe(false);
+    const bin = await app.inject({ method: "GET", url: "/api/interview/questions?status=discarded" });
+    expect(bin.json().map((q: { id: string }) => q.id)).toEqual([ours.id]);
+
+    const summary = await app.inject({ method: "GET", url: "/api/interview/questions/summary" });
+    expect(summary.json()).toEqual({
+      byAudience: { candidate: 0, ask_interviewer_personal: 1, ask_interviewer_company: 0 },
+      discarded: 1,
+      uncleaned: 1
+    });
+
+    const restored = await app.inject({ method: "POST", url: `/api/interview/questions/${ours.id}/restore` });
+    expect(restored.json()).toMatchObject({ status: "active" });
+    expect(restored.json().discardReason).toBeUndefined();
+    await app.close();
+  });
+
+  it("rejects swapping in a discarded bank question and fixes the category of added questions to ask", async () => {
+    const { app, repo, userId } = await setup();
+    const { byText } = await seedQuestions(repo, userId);
+    const question = byText("Hva vet du om oss?");
+    await repo.updateBankQuestion(userId, question.id, { status: "discarded", discardReason: "tips" });
+    const plan = await repo.createPrepPlan(userId, {
+      companyName: "DNB",
+      roleTitle: "",
+      format: "interview",
+      researchModel: "gpt-6-astra"
+    });
+    await repo.setPrepPlanCurated(userId, plan.id, {
+      questions: [{ text: "A?", category: "behavioral", target: "interview", source: "generated" }],
+      tasks: []
+    });
+    const ready = await repo.getPrepPlan(userId, plan.id);
+    const swap = await app.inject({
+      method: "PUT",
+      url: `/api/interview/plans/${plan.id}/questions/${ready!.questions[0]!.id}`,
+      payload: { bankQuestionId: question.id }
+    });
+    expect(swap.statusCode).toBe(400);
+
+    const added = await app.inject({
+      method: "POST",
+      url: `/api/interview/plans/${plan.id}/questions`,
+      payload: { text: "Hvordan jobber dere med KI?", category: "behavioral", audience: "ask_interviewer_company" }
+    });
+    expect(added.statusCode).toBe(201);
+    expect(added.json().questions.at(-1)).toMatchObject({ audience: "ask_interviewer_company", category: "company" });
+    await app.close();
+  });
+
+  it("refuses the cleanup agent without AI", async () => {
+    const { app } = await setup({ configured: false });
+    const refused = await app.inject({ method: "POST", url: "/api/interview/questions/cleanup", payload: {} });
+    expect(refused.statusCode).toBe(503);
+    await app.close();
+  });
+
+  it("queues the cleanup agent, and queues again after a reset", async () => {
+    // FakeLlmClient keeps this array by reference, so results can be added once row ids exist.
+    const results: unknown[] = [];
+    const { app, repo, userId, llmClient } = await setup({ structuredResults: results });
+    const { rows } = await seedQuestions(repo, userId);
+    results.push(keepAll(rows), keepAll(rows));
+
+    const queued = await app.inject({ method: "POST", url: "/api/interview/questions/cleanup", payload: {} });
+    expect(queued.statusCode).toBe(200);
+    expect(queued.json().queuedJobs).toHaveLength(1);
+    await waitForUncleaned(repo, userId, 0);
+
+    const nothing = await app.inject({ method: "POST", url: "/api/interview/questions/cleanup", payload: {} });
+    expect(nothing.json()).toMatchObject({ queuedJobs: [], message: "Alle spørsmål er ryddet." });
+
+    const reset = await app.inject({
+      method: "POST",
+      url: "/api/interview/questions/cleanup",
+      payload: { reset: true }
+    });
+    expect(reset.json().queuedJobs).toHaveLength(1);
+    await waitForUncleaned(repo, userId, 0);
+    expect(llmClient.structuredCalls).toHaveLength(2);
+    await app.close();
+  });
+
+  it("queues cleanup after a knowledge document with questions is saved, only when AI is on", async () => {
+    const off = await setup({ configured: false });
+    await off.app.inject({
+      method: "POST",
+      url: "/api/interview/knowledge",
+      payload: { title: "Notater", content: "Hvorfor vil du jobbe her?" }
+    });
+    expect(await off.repo.listImportJobs(off.userId)).toHaveLength(0);
+    await off.app.close();
+
+    const { app, repo, userId } = await setup();
+    await app.inject({
+      method: "POST",
+      url: "/api/interview/knowledge",
+      payload: { title: "Notater", content: "Hvorfor vil du jobbe her?" }
+    });
+    const jobs = await repo.listImportJobs(userId);
+    expect(jobs.map((job) => job.kind)).toEqual(["questions_cleanup"]);
+    await waitForUncleaned(repo, userId, 1);
+    await app.close();
+  });
+
+  it("reindexes twice without failing when documents share a question", async () => {
+    const { app } = await setup({ configured: false });
+    for (const title of ["A", "B"]) {
+      await app.inject({
+        method: "POST",
+        url: "/api/interview/knowledge",
+        payload: { title, content: `${title}\nHva gjør du på fritiden?` }
+      });
+    }
+    for (let i = 0; i < 2; i += 1) {
+      const response = await app.inject({ method: "POST", url: "/api/interview/questions/reindex" });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ indexed: 0, removed: 0 });
+    }
+    await app.close();
+  });
+
+  it("serves default essentials per mode, saves a custom sheet and resets it", async () => {
+    const { app } = await setup();
+    const initial = await app.inject({ method: "GET", url: "/api/interview/simulator/settings/case_oral" });
+    expect(initial.json()).toMatchObject({ mode: "case_oral", essentialsIsDefault: true });
+    expect(initial.json().essentialsSheet).toContain("CASE – ESSENTIALS");
+
+    const custom = await app.inject({
+      method: "PUT",
+      url: "/api/interview/simulator/settings",
+      payload: { mode: "case_oral", essentialsSheet: "Mitt ark" }
+    });
+    expect(custom.json()).toMatchObject({ essentialsSheet: "Mitt ark", essentialsIsDefault: false });
+
+    const sameAsDefault = await app.inject({
+      method: "PUT",
+      url: "/api/interview/simulator/settings",
+      payload: { mode: "case_oral", essentialsSheet: initial.json().essentialsSheet }
+    });
+    expect(sameAsDefault.json().essentialsIsDefault).toBe(true);
+
+    await app.inject({
+      method: "PUT",
+      url: "/api/interview/simulator/settings",
+      payload: { mode: "case_oral", essentialsSheet: "Mitt ark" }
+    });
+    const reset = await app.inject({
+      method: "PUT",
+      url: "/api/interview/simulator/settings",
+      payload: { mode: "case_oral", essentialsSheet: null }
+    });
+    expect(reset.json()).toMatchObject({ essentialsIsDefault: true });
+    await app.close();
+  });
+
+  it("drafts an essentials sheet from documents without saving it", async () => {
+    const off = await setup({ configured: false });
+    const offline = await off.app.inject({
+      method: "POST",
+      url: "/api/interview/simulator/settings/behavioral_mock/essentials-draft"
+    });
+    expect(offline.statusCode).toBe(503);
+    await off.app.close();
+
+    const { app, repo, userId, llmClient } = await setup({ structuredResults: [{ sheet: "STAR – mitt utkast" }] });
+    const none = await app.inject({
+      method: "POST",
+      url: "/api/interview/simulator/settings/behavioral_mock/essentials-draft"
+    });
+    expect(none.statusCode).toBe(400);
+
+    await repo.createKnowledgeDoc(userId, {
+      kind: "star",
+      title: "STAR",
+      content: "Ta pausen først.",
+      contentHash: sha256Content("star")
+    });
+    await repo.createKnowledgeDoc(userId, {
+      kind: "practice",
+      title: "Instruks til øvingspartner",
+      content: "Spør alltid om en til.",
+      contentHash: sha256Content("instruks")
+    });
+    const draft = await app.inject({
+      method: "POST",
+      url: "/api/interview/simulator/settings/behavioral_mock/essentials-draft"
+    });
+    expect(draft.statusCode).toBe(200);
+    expect(draft.json()).toEqual({ draft: "STAR – mitt utkast", sourceDocTitles: ["STAR"] });
+    expect(llmClient.structuredCalls[0]!.options.messages[1]!.content).not.toContain("Spør alltid");
+
+    const settings = await app.inject({ method: "GET", url: "/api/interview/simulator/settings/behavioral_mock" });
+    expect(settings.json().essentialsIsDefault).toBe(true);
+    await app.close();
+  });
+
+  it("keeps default essentials out of the prompt and puts the plan's questions to ask in the closing round", async () => {
+    const { app, repo, userId } = await setup();
+    const plan = await repo.createPrepPlan(userId, {
+      companyName: "DNB",
+      roleTitle: "Analyst",
+      format: "interview",
+      researchModel: "gpt-6-astra"
+    });
+    await repo.setPrepPlanCurated(userId, plan.id, {
+      questions: [
+        { text: "Why DNB?", category: "motivation", target: "interview", source: "custom" },
+        {
+          text: "Hva overrasket deg mest?",
+          category: "personal",
+          audience: "ask_interviewer_personal",
+          target: "interview",
+          source: "bank"
+        }
+      ],
+      tasks: []
+    });
+    await repo.updatePrepPlanStatus(userId, plan.id, "ready");
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/interview/sessions",
+      payload: { mode: "behavioral_mock", prepPlanId: plan.id }
+    });
+    expect(created.statusCode).toBe(201);
+    const messages = await app.inject({ method: "GET", url: `/api/interview/sessions/${created.json().id}/messages` });
+    const system = (messages.json() as Array<{ role: string; content: string }>).find((m) => m.role === "system")!;
+    const script = system.content.split("Spørsmålsliste:")[1]!.split("\n\n")[0]!;
+    expect(script).toContain("Why DNB?");
+    expect(script).not.toContain("Hva overrasket deg mest?");
+    expect(system.content).toContain("Til deg personlig:\n- Hva overrasket deg mest?");
+    expect(system.content).not.toContain("essentials-ark");
+
+    const onlyReverse = await repo.createPrepPlan(userId, {
+      companyName: "X",
+      roleTitle: "",
+      format: "interview",
+      researchModel: "gpt-6-astra"
+    });
+    await repo.setPrepPlanCurated(userId, onlyReverse.id, {
+      questions: [
+        { text: "Hva er neste steg?", category: "company", audience: "ask_interviewer_company", target: "interview" }
+      ],
+      tasks: []
+    });
+    await repo.updatePrepPlanStatus(userId, onlyReverse.id, "ready");
+    const rejected = await app.inject({
+      method: "POST",
+      url: "/api/interview/sessions",
+      payload: { mode: "behavioral_mock", prepPlanId: onlyReverse.id }
+    });
+    expect(rejected.statusCode).toBe(400);
+    await app.close();
+  });
+});
+
+async function waitForUncleaned(repo: InterviewPrepMemoryRepository, userId: string, expected: number) {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const summary = await repo.summarizeBankQuestions(userId);
+    const jobs = await repo.listImportJobs(userId);
+    if (summary.uncleaned === expected && jobs.every((job) => job.status !== "queued" && job.status !== "running")) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error("Tidsavbrudd mens spørsmålene skulle ryddes.");
+}

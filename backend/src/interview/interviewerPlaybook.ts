@@ -106,6 +106,26 @@ export const modeSections: Record<InterviewMode, string[]> = {
   concept_tutor: conceptTutorModeSections
 };
 
+const closingRoundTrigger: Partial<Record<InterviewMode, string>> = {
+  behavioral_mock:
+    "Når øvingsplanen er gjennomgått, eller etter fire til seks hovedspørsmål uten plan, spør «Har du noen spørsmål til oss?».",
+  case_oral: "Når kandidaten har gitt en anbefaling og casen er ferdig, spør «Har du noen spørsmål til oss?»."
+};
+
+/** Closing round where the candidate asks the interviewer questions. Not used in tutor mode. */
+export function buildClosingRoundRules(mode: InterviewMode): string[] {
+  const trigger = closingRoundTrigger[mode];
+  if (!trigger) return [];
+  return [
+    trigger,
+    "I spørsmålsrunden er du en ansatt i selskapet, ikke coach. Svar kort og ærlig i jeg-form, som en som faktisk jobber der.",
+    "Du kan finne på troverdige, hverdagslige detaljer om arbeidsdagen og egen erfaring, men ikke konkrete tall, kundenavn, lønn eller interne forhold du ikke kan vite. Hvis du ikke vet, si det slik en ansatt ville gjort: «Det vet jeg ikke sikkert, men …».",
+    "La kandidaten styre. Svar på ett spørsmål om gangen, og ikke still nye intervjuspørsmål her. Et kort motspørsmål er greit hvis det er naturlig.",
+    "Noter om kandidaten stilte minst ett personlig spørsmål og fulgte opp på svaret ditt.",
+    "Når kandidaten ikke har flere spørsmål: takk for samtalen og si at Avslutt-knappen gir vurderingen. Ikke avslutt økten, heller ikke med verktøyet end_interview, før spørsmålsrunden er ferdig."
+  ];
+}
+
 export const sessionStartInstruction =
   "Presentér deg kort som intervjuer og still det første spørsmålet med en gang. Ikke spør om modus, selskap eller lengde — det er allerede valgt i appen. Hvis kandidaten skriver «feedback» eller «stopp», si at han skal bruke Avslutt-knappen for å få vurdering.";
 

@@ -11,7 +11,11 @@ export interface VoiceSessionPayload {
 
 const VOICE_TOOLS = [
   { name: "next_question", description: "Move to the next interview question." },
-  { name: "end_interview", description: "End the interview when enough signal is gathered." }
+  {
+    name: "end_interview",
+    description:
+      "End the interview when enough signal is gathered, and only after the closing round where the candidate asks their questions («Har du noen spørsmål til oss?») is finished."
+  }
 ];
 
 /** Ephemeral Realtime client secret. Never returns the API key. */

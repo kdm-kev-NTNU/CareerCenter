@@ -13,7 +13,13 @@ vi.mock("../../api/interviewPrep.js", () => ({
     createKnowledge: vi.fn(),
     deleteKnowledge: vi.fn(),
     importKnowledge: vi.fn(),
+    getStatus: vi.fn(),
     searchQuestions: vi.fn(),
+    questionSummary: vi.fn(),
+    updateQuestion: vi.fn(),
+    discardQuestion: vi.fn(),
+    restoreQuestion: vi.fn(),
+    cleanupQuestions: vi.fn(),
     reindexQuestions: vi.fn(),
     approveCase: vi.fn(),
     rejectCase: vi.fn()
@@ -24,6 +30,7 @@ const api = vi.mocked(interviewPrepApi);
 
 describe("InterviewBibelView", () => {
   beforeEach(() => {
+    api.getStatus.mockResolvedValue({ aiConfigured: true });
     api.knowledgeDocs.mockResolvedValue([
       {
         id: "doc-1",
@@ -74,6 +81,7 @@ describe("InterviewBibelView", () => {
 
     expect(wrapper.text()).toContain("wharton.pdf");
     expect(wrapper.text()).toContain("Chunk 2 av 5");
+    expect(wrapper.text()).toContain("Case-import · running");
 
     const approval = wrapper.get("button");
     const buttons = wrapper.findAll("button").filter((button) => button.text() === "Godkjenning");

@@ -198,4 +198,15 @@ describe("CareerCenter", () => {
       }
     }
   });
+
+  it("shows the default essentials sheet and the question bank segments", () => {
+    cy.visit("/interview/simulator");
+    cy.get('textarea[aria-label="Essentials-ark"]').invoke("val").should("contain", "STAR");
+    cy.contains(".status-badge", "Standard").should("be.visible");
+
+    cy.visit("/interview/bibel");
+    cy.contains("button", /^Søk$/).click();
+    cy.contains("button", "Spørsmål til meg").should("be.visible");
+    cy.contains("button", "Jeg spør: om bedriften").should("be.visible");
+  });
 });

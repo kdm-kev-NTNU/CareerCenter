@@ -32,7 +32,7 @@ function uniqueError(): Error {
 function createFakePrisma() {
   const docs: DocRow[] = [];
   const cases: CaseRow[] = [];
-  const questions: Array<{ contentHash: string; text: string }> = [];
+  const questions: Array<{ contentHash: string; text: string; origin?: string; sourceText?: string }> = [];
   let docSeq = 0;
   let caseSeq = 0;
 
@@ -85,7 +85,11 @@ function createFakePrisma() {
       }
     },
     interviewBankQuestion: {
-      async createMany({ data }: { data: Array<{ contentHash: string; text: string }> }) {
+      async createMany({
+        data
+      }: {
+        data: Array<{ contentHash: string; text: string; origin?: string; sourceText?: string }>;
+      }) {
         for (const item of data) {
           if (!questions.some((row) => row.contentHash === item.contentHash)) questions.push(item);
         }
@@ -119,6 +123,7 @@ describe("interview bible catalog", () => {
     expect(docCount).toBe(bibleDocs.length);
     expect(caseCount).toBe(bibleCases.length);
     expect(questionCount).toBeGreaterThan(10);
+    expect(fake.questions.every((row) => row.origin === "rule" && row.sourceText === row.text)).toBe(true);
 
     await ensureInterviewBibleCatalog(fake.client, "user-1");
     expect(fake.docs).toHaveLength(docCount);

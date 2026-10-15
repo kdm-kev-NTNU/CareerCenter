@@ -1,13 +1,25 @@
 import { describe, expect, it } from "vitest";
 import { abilityTestKinds } from "./abilityTests.js";
 import {
+  bankQuestionOrigins,
+  bankQuestionStatuses,
+  categoryForAudience,
   caseFrameworkSteps,
   DEFAULT_RESEARCH_MODEL,
   interviewModes,
   isResearchModel,
   knowledgeDocKinds,
   canDeleteImportJob,
+  importJobKindLabels,
+  importJobKinds,
+  isQuestionAudience,
   prepPlanStatuses,
+  questionAudienceLabels,
+  questionAudiences,
+  questionCategories,
+  questionCategoryLabels,
+  questionDiscardReasonLabels,
+  questionDiscardReasons,
   researchModelLabels,
   researchModels,
   starRubricCriteria,
@@ -66,6 +78,46 @@ describe("interview prep constants", () => {
     expect(canDeleteImportJob("review")).toBe(true);
     expect(canDeleteImportJob("queued")).toBe(false);
     expect(canDeleteImportJob("running")).toBe(false);
+  });
+});
+
+describe("question taxonomy", () => {
+  it("separates situational, personal and brainteaser questions from behavioral", () => {
+    expect(questionCategories).toEqual([
+      "behavioral",
+      "situational",
+      "motivation",
+      "personal",
+      "technical",
+      "case",
+      "brainteaser",
+      "company"
+    ]);
+  });
+
+  it("labels every category, audience, discard reason and job kind", () => {
+    expect(Object.keys(questionCategoryLabels).sort()).toEqual([...questionCategories].sort());
+    expect(Object.keys(questionAudienceLabels).sort()).toEqual([...questionAudiences].sort());
+    expect(Object.keys(questionDiscardReasonLabels).sort()).toEqual([...questionDiscardReasons].sort());
+    expect(Object.keys(importJobKindLabels).sort()).toEqual([...importJobKinds].sort());
+    expect(importJobKinds).toContain("questions_cleanup");
+    expect(questionAudienceLabels.ask_interviewer_personal).toBe("Jeg spør: personlig");
+  });
+
+  it("defines bank question statuses and origins", () => {
+    expect(bankQuestionStatuses).toEqual(["active", "discarded"]);
+    expect(bankQuestionOrigins).toEqual(["rule", "llm", "split", "manual"]);
+  });
+
+  it("forces the category of questions the candidate asks the interviewer", () => {
+    expect(categoryForAudience("candidate", "situational")).toBe("situational");
+    expect(categoryForAudience("ask_interviewer_company", "behavioral")).toBe("company");
+    expect(categoryForAudience("ask_interviewer_personal", "technical")).toBe("personal");
+  });
+
+  it("recognises audiences", () => {
+    expect(isQuestionAudience("candidate")).toBe(true);
+    expect(isQuestionAudience("interviewer")).toBe(false);
   });
 });
 

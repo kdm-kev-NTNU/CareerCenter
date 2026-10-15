@@ -12,6 +12,7 @@ import { interviewModes } from "@careercenter/shared";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { interviewPrepApi } from "../../api/interviewPrep.js";
+import EssentialsSheetEditor from "../../components/interview/EssentialsSheetEditor.vue";
 import MediaDeviceCheck from "../../components/interview/MediaDeviceCheck.vue";
 import { useMediaStream } from "../../composables/useMediaStream.js";
 import { printEssentialsSheet } from "../../lib/printEssentials.js";
@@ -38,6 +39,7 @@ const prepPlan = ref<InterviewPrepPlanDto | null>(null);
 const { stream: voiceStream, acquire: acquireVoiceStream, release: releaseVoiceStream } = useMediaStream();
 const loading = ref(false);
 const error = ref<string | null>(null);
+const aiConfigured = ref(false);
 let stopRealtime: (() => void) | null = null;
 
 const routePlanId = computed(() => {
@@ -46,7 +48,7 @@ const routePlanId = computed(() => {
 });
 const planLabel = computed(() => {
   if (!prepPlan.value) return null;
-  const count = prepPlan.value.questions.filter((q) => q.included).length;
+  const count = prepPlan.value.questions.filter((q) => q.included && q.audience === "candidate").length;
   return `Plan: ${prepPlan.value.companyName} (${count} spørsmål)`;
 });
 
@@ -93,6 +95,14 @@ async function loadPlan() {
 onMounted(() => {
   void loadSettings();
   void loadPlan();
+  void interviewPrepApi
+    .getStatus()
+    .then((status) => {
+      aiConfigured.value = status.aiConfigured;
+    })
+    .catch(() => {
+      aiConfigured.value = false;
+    });
 });
 watch(routePlanId, () => void loadPlan());
 
@@ -104,7 +114,17 @@ onBeforeUnmount(() => {
 
 async function saveSettings() {
   if (!settings.value) return;
-  settings.value = await interviewPrepApi.saveSimulatorSettings(settings.value);
+  const { essentialsIsDefault, ...rest } = settings.value;
+  // null keeps the default, so later improvements to the default sheet reach this user.
+  settings.value = await interviewPrepApi.saveSimulatorSettings({
+    ...rest,
+    essentialsSheet: essentialsIsDefault ? null : rest.essentialsSheet
+  });
+}
+
+function onEssentialsChange(sheet: string, isDefault: boolean) {
+  if (!settings.value) return;
+  settings.value = { ...settings.value, essentialsSheet: sheet, essentialsIsDefault: isDefault };
 }
 
 async function startSession(practice = false) {
@@ -250,14 +270,13 @@ function printEssentials() {
         <label>Selskap <input v-model="settings.companyName" /></label>
         <label>Tone <input v-model="settings.tone" /></label>
         <label>Språk <input v-model="settings.language" /></label>
-        <label>
-          Essentials-ark
-          <textarea
-            v-model="settings.essentialsSheet"
-            rows="4"
-            placeholder="Nøkkelpunkter du vil ha på papir under intervjuet …"
-          />
-        </label>
+        <EssentialsSheetEditor
+          :sheet="settings.essentialsSheet"
+          :is-default="settings.essentialsIsDefault"
+          :mode="mode"
+          :ai-configured="aiConfigured"
+          @change="onEssentialsChange"
+        />
         <p class="field-hint">Skriv ut essentials åpner bare dette arket, ikke hele siden.</p>
         <div class="form-grid">
           <AppButton variant="secondary" @click="saveSettings">Lagre innstillinger</AppButton>

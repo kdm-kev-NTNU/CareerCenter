@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  categoryForDocKind,
   extractBankQuestions,
   findRepeatedStories,
+  normalizeQuestionKey,
   rankBankQuestions
 } from "./questionBank.js";
 
@@ -57,6 +59,37 @@ describe("rankBankQuestions", () => {
       10
     );
     expect(ranked.map((q) => q.id)).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("rankBankQuestions filtering", () => {
+  it("drops questions the candidate asks and discarded questions", () => {
+    const profile = { industries: [], themes: [], caseTypes: [], interviewFormats: [], values: [] };
+    const ranked = rankBankQuestions(profile, [
+      { id: "a", text: "Fortell om en feil?", category: "behavioral", tags: [], audience: "candidate" },
+      { id: "b", text: "Hva overrasket deg?", category: "personal", tags: [], audience: "ask_interviewer_personal" },
+      { id: "c", text: "Hva er neste steg?", category: "company", tags: [], audience: "ask_interviewer_company" },
+      { id: "d", text: "Spør alltid om en til?", category: "behavioral", tags: [], status: "discarded" },
+      { id: "e", text: "Legacy row without audience?", category: "behavioral", tags: [] }
+    ]);
+    expect(ranked.map((q) => q.id)).toEqual(["a", "e"]);
+  });
+});
+
+describe("categoryForDocKind", () => {
+  it("maps brainteasers and strengths/weaknesses to their own categories", () => {
+    expect(categoryForDocKind("brainteasers")).toBe("brainteaser");
+    expect(categoryForDocKind("strengths_weaknesses")).toBe("personal");
+    expect(categoryForDocKind("partner")).toBe("motivation");
+    expect(categoryForDocKind("other")).toBe("behavioral");
+  });
+});
+
+describe("normalizeQuestionKey", () => {
+  it("ignores case, quotes, list markers and whitespace", () => {
+    expect(normalizeQuestionKey("  - «Hva   gjør du på Fritiden?»")).toBe("hva gjør du på fritiden?");
+    expect(normalizeQuestionKey("1. Hva gjør du på fritiden?")).toBe("hva gjør du på fritiden?");
+    expect(normalizeQuestionKey("“Hva gjør du på fritiden?”")).toBe("hva gjør du på fritiden?");
   });
 });
 

@@ -1,4 +1,9 @@
-import type { KnowledgeDocKind, QuestionCategory } from "./interviewPrep.js";
+import type {
+  BankQuestionStatus,
+  KnowledgeDocKind,
+  QuestionAudience,
+  QuestionCategory
+} from "./interviewPrep.js";
 
 export interface ExtractableKnowledgeDoc {
   kind: KnowledgeDocKind;
@@ -18,6 +23,8 @@ export interface RankableBankQuestion {
   text: string;
   category: QuestionCategory;
   tags: string[];
+  audience?: QuestionAudience;
+  status?: BankQuestionStatus;
 }
 
 export interface BankQuestionRankProfile {
@@ -35,13 +42,30 @@ const KIND_TO_CATEGORY: Partial<Record<KnowledgeDocKind, QuestionCategory>> = {
   firm_profile: "company",
   tech_topics: "technical",
   practice: "behavioral",
-  strengths_weaknesses: "behavioral",
+  strengths_weaknesses: "personal",
   finance: "technical",
   ki: "technical",
-  brainteasers: "technical",
+  brainteasers: "brainteaser",
   partner: "motivation",
   core: "behavioral"
 };
+
+/** Default category for questions extracted from a document of this kind. */
+export function categoryForDocKind(kind: KnowledgeDocKind): QuestionCategory {
+  return KIND_TO_CATEGORY[kind] ?? "behavioral";
+}
+
+/**
+ * Identity key for a question text: case, quotes, list markers and whitespace do not matter.
+ * Used to recognise the same question across reindex runs, documents and cleanup rewrites.
+ */
+export function normalizeQuestionKey(text: string): string {
+  return stripListPrefix(text.trim())
+    .replace(/[«»"“”„]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
 
 /** Characters per extracted question below which a large doc should get LLM extraction. */
 export const QUESTION_DENSITY_CHARS = 3000;
@@ -51,7 +75,7 @@ export const QUESTION_DENSITY_CHARS = 3000;
  * Joins soft-wrapped lines (PDF-style) into paragraphs, then picks sentences ending with `?`.
  */
 export function extractBankQuestions(doc: ExtractableKnowledgeDoc): ExtractedBankQuestion[] {
-  const category = KIND_TO_CATEGORY[doc.kind] ?? "behavioral";
+  const category = categoryForDocKind(doc.kind);
   const tags = [doc.kind, ...tokenize(doc.title)];
   const paragraphs = joinSoftWrappedLines(doc.content);
   const seen = new Set<string>();
@@ -183,6 +207,7 @@ function tokenize(value: string): string[] {
 
 /**
  * Deterministic pre-ranking of bank questions for a company profile.
+ * Only active questions the interviewer asks the candidate are ranked.
  * Returns up to `limit` candidates (default 120), stable by score then id.
  */
 export function rankBankQuestions(
@@ -190,7 +215,9 @@ export function rankBankQuestions(
   questions: RankableBankQuestion[],
   limit = 120
 ): RankableBankQuestion[] {
-  const scored = questions.map((q) => ({ q, score: scoreBankQuestion(profile, q) }));
+  const scored = questions
+    .filter((q) => (q.audience ?? "candidate") === "candidate" && (q.status ?? "active") === "active")
+    .map((q) => ({ q, score: scoreBankQuestion(profile, q) }));
   scored.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
     return a.q.id.localeCompare(b.q.id);
@@ -217,7 +244,7 @@ function scoreBankQuestion(profile: BankQuestionRankProfile, q: RankableBankQues
     if (ct && (q.category === "case" || haystack.includes(ct.toLowerCase()))) score += 12;
   }
   if (q.category === "company" && profile.industries.length) score += 5;
-  if (q.category === "motivation") score += 2;
+  if (q.category === "motivation" || q.category === "personal") score += 2;
   return score;
 }
 
