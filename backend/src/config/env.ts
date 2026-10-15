@@ -14,7 +14,8 @@ const envSchema = z.object({
     .transform((value) => value === "true"),
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_TEXT_MODEL: z.string().default("gpt-6-astra"),
-  OPENAI_VOICE_MODEL: z.string().default("gpt-live-1"),
+  // Must be a Realtime model (client secrets + /v1/realtime/calls). gpt-live-* only works on /v1/live/sessions.
+  OPENAI_VOICE_MODEL: z.string().default("gpt-realtime-2.1"),
   OPENAI_TRANSCRIBE_MODEL: z.string().default("gpt-transcribe"),
   OPENAI_REASONING_EFFORT: z.enum(["low", "medium", "high"]).default("high"),
   OPENAI_FAST_MODE: z
