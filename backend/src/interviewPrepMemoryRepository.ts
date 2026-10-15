@@ -670,7 +670,14 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
 
   async createSession(
     userId: string,
-    input: { mode: InterviewMode; title: string; prepPlanId?: string; caseEntryId?: string; systemPrompt: string }
+    input: {
+      mode: InterviewMode;
+      title: string;
+      prepPlanId?: string;
+      caseEntryId?: string;
+      systemPrompt: string;
+      practice?: boolean;
+    }
   ): Promise<InterviewSessionRecord> {
     const timestamp = nowIso();
     const session: InterviewSessionRecord = {
@@ -680,6 +687,7 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       title: input.title,
       prepPlanId: input.prepPlanId,
       caseEntryId: input.caseEntryId,
+      practice: Boolean(input.practice),
       createdAt: timestamp,
       updatedAt: timestamp
     };
@@ -720,13 +728,13 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
   async finishSession(
     userId: string,
     sessionId: string,
-    feedback: InterviewFeedbackRubric
+    feedback: InterviewFeedbackRubric | null
   ): Promise<InterviewSessionRecord | null> {
     const session = await this.getSession(userId, sessionId);
     if (!session || session.finishedAt) return null;
     const updated: InterviewSessionRecord = {
       ...session,
-      feedback,
+      feedback: feedback ?? undefined,
       finishedAt: nowIso(),
       updatedAt: nowIso()
     };
@@ -785,6 +793,8 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       cardIndex: input.cardIndex,
       blobKey: input.blobKey,
       transcript: input.transcript,
+      prompt: input.prompt ?? "",
+      feedback: input.feedback,
       createdAt: timestamp,
       updatedAt: timestamp
     };

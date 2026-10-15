@@ -9,6 +9,15 @@ export const videoSimStates = [
 ] as const;
 export type VideoSimState = (typeof videoSimStates)[number];
 
+/** practice = local-only (no AI); scored = transcription + rubric. */
+export const practiceModes = ["practice", "scored"] as const;
+export type PracticeMode = (typeof practiceModes)[number];
+
+/** Single source of truth: AI rating/transcription only for scored rounds. */
+export function modeUsesAi(mode: PracticeMode): boolean {
+  return mode === "scored";
+}
+
 export type VideoSimEvent =
   | { type: "settings_confirmed" }
   | { type: "devices_ready" }

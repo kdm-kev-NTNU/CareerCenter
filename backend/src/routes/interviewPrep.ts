@@ -66,9 +66,10 @@ import {
 } from "../interview/meccaMappers.js";
 import {
   abilityAttemptInputSchema,
+  parseMultipartBool,
   transcriptMessageSchema,
   videoRunInputSchema,
-  videoTranscribeStubSchema
+  videoTranscribeFieldsSchema
 } from "../interview/meccaSchemas.js";
 import { PrepResearchService } from "../interview/prepResearchService.js";
 import { reindexAllBankQuestions, reindexBankQuestionsForDoc } from "../interview/reindexBankQuestions.js";
@@ -699,7 +700,8 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
       title: body.title || `${body.mode} simulering`,
       prepPlanId: body.prepPlanId,
       caseEntryId: body.caseEntryId,
-      systemPrompt
+      systemPrompt,
+      practice: body.practice
     });
     return reply.code(201).send(toSessionDto(session));
   });
@@ -743,13 +745,20 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
   });
 
   app.post("/api/interview/sessions/:id/finish", async (request, reply) => {
-    if (!deps.llmClient.isConfigured()) {
-      return reply.code(503).send({ message: "AI er ikke konfigurert." });
-    }
     const sessionId = (request.params as { id: string }).id;
     const session = await deps.interviewPrepRepository.getSession(request.user.id, sessionId);
     if (!session) return reply.code(404).send({ message: "Sesjon ikke funnet." });
     if (session.finishedAt) return reply.code(409).send({ message: "Sesjonen er allerede avsluttet." });
+
+    if (session.practice) {
+      const finished = await deps.interviewPrepRepository.finishSession(request.user.id, sessionId, null);
+      if (!finished) return reply.code(409).send({ message: "Sesjonen er allerede avsluttet." });
+      return toSessionDto(finished);
+    }
+
+    if (!deps.llmClient.isConfigured()) {
+      return reply.code(503).send({ message: "AI er ikke konfigurert." });
+    }
 
     const history = await deps.interviewPrepRepository.listSessionMessages(request.user.id, sessionId);
     const transcript = formatSessionTranscriptForRubric(history);
@@ -828,47 +837,89 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
   });
 
   app.post("/api/interview/video/transcribe", async (request, reply) => {
-    const body = videoTranscribeStubSchema.parse(request.body ?? {});
-    if (body.note.trim()) {
-      const stats = answerStats(body.note, body.durationMs ?? 60_000);
-      return { mock: true, transcript: body.note.trim(), blobKey: body.blobKey, stats };
+    const fields: Record<string, string> = {};
+    let fileBuffer: Buffer | undefined;
+    let filename = "answer.webm";
+    let mimeType: string | undefined;
+
+    const contentType = request.headers["content-type"] ?? "";
+    if (contentType.includes("multipart/form-data")) {
+      const parts = request.parts();
+      for await (const part of parts) {
+        if (part.type === "file") {
+          filename = part.filename || filename;
+          mimeType = part.mimetype || mimeType;
+          fileBuffer = await part.toBuffer();
+        } else {
+          fields[part.fieldname] = String(part.value ?? "");
+        }
+      }
+    } else {
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      for (const [key, value] of Object.entries(body)) {
+        if (value !== undefined && value !== null) fields[key] = String(value);
+      }
     }
-    if (!body.audioBase64) {
-      return reply.code(400).send({ message: "Mangler lyd for transkripsjon." });
-    }
-    if (!deps.llmClient.transcribe || !deps.llmClient.isConfigured()) {
-      return reply.code(503).send({ message: "AI er ikke konfigurert." });
-    }
-    const buffer = Buffer.from(body.audioBase64, "base64");
-    const transcript = await deps.llmClient.transcribe({
-      buffer,
-      filename: body.filename ?? "answer.webm",
-      mimeType: body.mimeType
+
+    const parsed = videoTranscribeFieldsSchema.parse({
+      ...fields,
+      filename: fields.filename ?? filename,
+      mimeType: fields.mimeType ?? mimeType
     });
-    const stats = answerStats(transcript, body.durationMs ?? 60_000);
+    const withRubric = parseMultipartBool(parsed.withRubric);
+    const prompt = parsed.prompt.trim();
+
+    let transcript = parsed.note.trim();
+    let mock = Boolean(transcript);
+
+    if (!transcript) {
+      if (!fileBuffer || fileBuffer.length === 0) {
+        return reply.code(400).send({ message: "Mangler lyd for transkripsjon." });
+      }
+      if (!deps.llmClient.transcribe || !deps.llmClient.isConfigured()) {
+        return reply.code(503).send({ message: "AI er ikke konfigurert." });
+      }
+      transcript = await deps.llmClient.transcribe({
+        buffer: fileBuffer,
+        filename: parsed.filename ?? filename,
+        mimeType: parsed.mimeType ?? mimeType
+      });
+      mock = false;
+    }
+
+    const stats = answerStats(transcript, parsed.durationMs ?? 60_000);
     let feedback = null;
-    if (body.withRubric) {
+    let feedbackFallback = false;
+    if (withRubric) {
       const defaultScores = Object.fromEntries(starRubricCriteria.map((key) => [key, 3])) as Record<
         (typeof starRubricCriteria)[number],
         number
       >;
+      const rubricUserContent = prompt
+        ? `Spørsmål: ${prompt}\n\nSvar: ${transcript}`
+        : transcript;
+      let usedFallback = false;
       feedback = await deps.llmClient
         .completeStructured(
           {
             messages: [
               { role: "system", content: buildFinishRubricPrompt() },
-              { role: "user", content: transcript }
+              { role: "user", content: rubricUserContent }
             ]
           },
           interviewFeedbackRubricSchema
         )
-        .catch(() => ({
-          scores: defaultScores,
-          sum: sumRubricScores(defaultScores),
-          improvement: "Stram inn strukturen og reduser fyllord."
-        }));
+        .catch(() => {
+          usedFallback = true;
+          return {
+            scores: defaultScores,
+            sum: sumRubricScores(defaultScores),
+            improvement: "Stram inn strukturen og reduser fyllord."
+          };
+        });
+      feedbackFallback = usedFallback;
     }
-    return { mock: false, transcript, blobKey: body.blobKey, stats, feedback };
+    return { mock, transcript, stats, feedback, feedbackFallback };
   });
 
   app.get("/api/interview/ability/attempts", async (request) => {

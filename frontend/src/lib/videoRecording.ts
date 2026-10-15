@@ -39,15 +39,30 @@ export async function loadVideoBlob(key: string): Promise<Blob | null> {
 }
 
 export function createVideoRecorder(stream: MediaStream, onChunk: (blob: Blob) => void): MediaRecorder {
-  const recorder = new MediaRecorder(stream, { mimeType: pickMimeType() });
+  const recorder = new MediaRecorder(stream, { mimeType: pickVideoMimeType() });
   recorder.ondataavailable = (event) => {
     if (event.data.size > 0) onChunk(event.data);
   };
   return recorder;
 }
 
-function pickMimeType(): string {
+/** Audio-only recorder for compact uploads (well under OpenAI's 25 MB limit). */
+export function createAudioRecorder(stream: MediaStream, onChunk: (blob: Blob) => void): MediaRecorder {
+  const audioOnly = new MediaStream(stream.getAudioTracks());
+  const recorder = new MediaRecorder(audioOnly, { mimeType: pickAudioMimeType() });
+  recorder.ondataavailable = (event) => {
+    if (event.data.size > 0) onChunk(event.data);
+  };
+  return recorder;
+}
+
+function pickVideoMimeType(): string {
   const candidates = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"];
+  return candidates.find((type) => MediaRecorder.isTypeSupported(type)) ?? "";
+}
+
+function pickAudioMimeType(): string {
+  const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"];
   return candidates.find((type) => MediaRecorder.isTypeSupported(type)) ?? "";
 }
 

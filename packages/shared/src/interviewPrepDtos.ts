@@ -143,6 +143,8 @@ export interface InterviewSessionDto {
   mode: InterviewMode;
   title: string;
   prepPlanId?: string;
+  /** When true, finish skips AI rubric (test session). */
+  practice: boolean;
   finishedAt?: string;
   feedback?: InterviewSessionFeedbackDto;
   createdAt: string;

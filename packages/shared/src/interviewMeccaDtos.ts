@@ -1,4 +1,5 @@
 import type { AbilityTestKind } from "./abilityTests.js";
+import type { InterviewSessionFeedbackDto } from "./interviewPrepDtos.js";
 import type { VideoSimulatorSettings } from "./videoSimulatorSettings.js";
 import type { VideoSimState } from "./videoSimState.js";
 
@@ -21,6 +22,8 @@ export interface InterviewVideoRunDto {
   cardIndex?: number;
   blobKey?: string;
   transcript: string;
+  prompt: string;
+  feedback?: InterviewSessionFeedbackDto;
   settings: VideoSimulatorSettings;
   createdAt: string;
   updatedAt: string;

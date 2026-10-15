@@ -186,7 +186,13 @@ export const interviewPrepApi = {
 
   sessions: (mode?: InterviewMode) =>
     request<InterviewSessionDto[]>(mode ? `/api/interview/sessions?mode=${mode}` : "/api/interview/sessions"),
-  createSession: (payload: { mode: InterviewMode; title?: string; prepPlanId?: string; caseEntryId?: string }) =>
+  createSession: (payload: {
+    mode: InterviewMode;
+    title?: string;
+    prepPlanId?: string;
+    caseEntryId?: string;
+    practice?: boolean;
+  }) =>
     request<InterviewSessionDto>("/api/interview/sessions", { method: "POST", body: JSON.stringify(payload) }),
   sessionMessages: (sessionId: string) =>
     request<InterviewMessageDto[]>(`/api/interview/sessions/${sessionId}/messages`),
@@ -221,6 +227,8 @@ export const interviewPrepApi = {
     cardIndex?: number;
     blobKey?: string;
     transcript?: string;
+    prompt?: string;
+    feedback?: InterviewSessionFeedbackDto;
     settings: VideoSimulatorSettings;
   }) =>
     request<InterviewVideoRunDto>("/api/interview/video/runs", {
@@ -228,24 +236,35 @@ export const interviewPrepApi = {
       body: JSON.stringify(payload)
     }),
   transcribeVideo: (payload: {
-    blobKey?: string;
-    note?: string;
-    audioBase64?: string;
+    file?: Blob;
     filename?: string;
+    note?: string;
     mimeType?: string;
     durationMs?: number;
+    prompt?: string;
     withRubric?: boolean;
-  }) =>
-    request<{
+  }) => {
+    const formData = new FormData();
+    if (payload.file) {
+      formData.append(
+        "file",
+        payload.file,
+        payload.filename ?? "answer.webm"
+      );
+    }
+    if (payload.note) formData.append("note", payload.note);
+    if (payload.mimeType) formData.append("mimeType", payload.mimeType);
+    if (payload.durationMs !== undefined) formData.append("durationMs", String(payload.durationMs));
+    if (payload.prompt) formData.append("prompt", payload.prompt);
+    formData.append("withRubric", payload.withRubric ? "true" : "false");
+    return uploadRequest<{
       mock: boolean;
       transcript: string;
-      blobKey?: string;
       stats?: AnswerStats;
       feedback?: InterviewSessionFeedbackDto | null;
-    }>("/api/interview/video/transcribe", {
-      method: "POST",
-      body: JSON.stringify(payload)
-    }),
+      feedbackFallback?: boolean;
+    }>("/api/interview/video/transcribe", formData);
+  },
 
   abilityAttempts: () => request<InterviewAbilityTestAttemptDto[]>("/api/interview/ability/attempts"),
   createAbilityAttempt: (payload: {

@@ -511,6 +511,7 @@ model InterviewSession {
   title        String              @default("")
   prepPlanId   String?
   caseEntryId  String?
+  practice     Boolean             @default(false)
   feedbackJson String?
   finishedAt   DateTime?
   createdAt    DateTime            @default(now())
@@ -565,6 +566,8 @@ model InterviewVideoRun {
   cardIndex    Int?
   blobKey      String?
   transcript   String   @default("")
+  prompt       String   @default("")
+  feedbackJson String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)

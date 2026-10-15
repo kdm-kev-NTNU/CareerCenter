@@ -37,6 +37,8 @@ export function toVideoRunDto(row: InterviewVideoRunRecord): InterviewVideoRunDt
     cardIndex: row.cardIndex,
     blobKey: row.blobKey,
     transcript: row.transcript,
+    prompt: row.prompt,
+    feedback: row.feedback,
     settings: videoSimulatorSettingsSchema.parse(JSON.parse(row.settingsJson)),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt
