@@ -54,6 +54,8 @@ export function renderCompanyReportPdf(
     writeBullets(doc, "Kultur og verdier", report.cultureAndValues, pageWidth);
     writeSection(doc, "Rollen i kontekst", report.roleInContext, pageWidth);
     writeRequirements(doc, report.jobAdRequirements, pageWidth);
+    writeBullets(doc, "Nisje-info til bedriftsspesifikke svar", report.nicheInsights, pageWidth);
+    writeCompanyQuestionPrep(doc, report.companyQuestionPrep, pageWidth);
     writeBullets(doc, "Intervju-vinkler", report.interviewAngles, pageWidth);
     writeBullets(doc, "Spørsmål du kan stille", report.questionsToAsk, pageWidth);
     writeBullets(doc, "Kilder", report.sources, pageWidth);
@@ -154,6 +156,28 @@ function writeRequirements(
     ensureSpace(doc, 28);
     doc.font("Helvetica-Bold").text(`• ${item.requirement}`, { width: pageWidth, lineGap: 1 });
     doc.font("Helvetica").text(`  → ${item.howToShowFit}`, { width: pageWidth, lineGap: 1 });
+  }
+  doc.moveDown(0.35);
+}
+
+function writeCompanyQuestionPrep(
+  doc: PDFKit.PDFDocument,
+  items: CompanyReport["companyQuestionPrep"],
+  pageWidth: number
+): void {
+  if (!items.length) return;
+  ensureSpace(doc, 32);
+  doc.font("Helvetica-Bold").fontSize(9.5).fillColor("#111111");
+  doc.text("Svarforslag – bedriftsspesifikke spørsmål", { width: pageWidth });
+  doc.moveDown(0.1);
+  doc.font("Helvetica").fontSize(8.5).fillColor("#222222");
+  for (const item of items) {
+    ensureSpace(doc, 36);
+    doc.font("Helvetica-Bold").text(`• ${item.question}`, { width: pageWidth, lineGap: 1 });
+    doc.font("Helvetica").text(`  Svarvinkel: ${item.answerAngle}`, { width: pageWidth, lineGap: 1 });
+    if (item.nicheHooks.length) {
+      doc.text(`  Hooks: ${item.nicheHooks.join("; ")}`, { width: pageWidth, lineGap: 1 });
+    }
   }
   doc.moveDown(0.35);
 }

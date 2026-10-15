@@ -465,6 +465,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
         bankQuestionId?: string;
         storyId?: string;
         gapReason?: string;
+        notes?: string;
       }>;
       tasks: Array<{ title: string; description: string }>;
       recommendedCaseIds?: string[];
@@ -488,7 +489,8 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
               source: item.source ?? "generated",
               bankQuestionId: item.bankQuestionId,
               storyId: item.storyId,
-              gapReason: item.gapReason
+              gapReason: item.gapReason,
+              notes: item.notes ?? ""
             }))
           },
           tasks: {

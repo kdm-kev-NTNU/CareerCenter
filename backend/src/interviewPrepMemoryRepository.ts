@@ -460,6 +460,7 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
         bankQuestionId?: string;
         storyId?: string;
         gapReason?: string;
+        notes?: string;
       }>;
       tasks: Array<{ title: string; description: string }>;
       recommendedCaseIds?: string[];
@@ -480,7 +481,7 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
         storyId: item.storyId,
         gapReason: item.gapReason,
         included: true,
-        notes: ""
+        notes: item.notes ?? ""
       })),
       tasks: input.tasks.map((item, index) => ({
         id: nanoid(),

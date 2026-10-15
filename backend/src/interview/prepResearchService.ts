@@ -397,6 +397,8 @@ export class PrepResearchService {
         120
       );
 
+      const report = safeParseReport(plan.companyReportJson);
+
       throwIfAborted(signal);
       const selection = await this.llmClient.completeStructured(
         {
@@ -409,6 +411,11 @@ export class PrepResearchService {
               content: [
                 `Research:\n${plan.researchNotes}`,
                 `Profil:\n${JSON.stringify(profile)}`,
+                `Bedriftsrapport (nisje-info og svarforslag):\n${JSON.stringify({
+                  nicheInsights: report.nicheInsights,
+                  companyQuestionPrep: report.companyQuestionPrep,
+                  interviewAngles: report.interviewAngles
+                })}`,
                 `Avklaringer:\n${plan.clarifications.map((c) => `${c.question}\nSvar: ${c.answer}`).join("\n\n")}`,
                 `Kandidater fra banken (velg ${MIN_CURATED_QUESTIONS}-${MAX_CURATED_QUESTIONS} id-er):\n${candidates
                   .map((q) => `${q.id} | ${q.category} | ${q.text}`)
@@ -436,6 +443,7 @@ export class PrepResearchService {
         source: "bank" | "generated";
         bankQuestionId?: string;
         gapReason?: string;
+        notes?: string;
       }> = [];
 
       for (const id of selection.selectedQuestionIds) {
@@ -459,6 +467,8 @@ export class PrepResearchService {
         });
       }
 
+      attachCompanyAnswerNotes(questions, report);
+
       throwIfAborted(signal);
       await this.repository.setPrepPlanPipeline(userId, planId, { pipelineStep: "curating_cases" });
       const cases = await this.repository.searchCaseEntries(userId, { approvalStatus: "approved" });
@@ -476,10 +486,11 @@ export class PrepResearchService {
         }))
       );
       const recommendedCaseIds = ranked.slice(0, 8).map((c) => c.id);
+      const tasks = mergeCompanyPrepTasks(selection.tasks, report);
 
       await this.repository.setPrepPlanCurated(userId, planId, {
         questions,
-        tasks: selection.tasks,
+        tasks,
         recommendedCaseIds
       });
       const ready = transitionPrepPlan("curating", { type: "curation_done" });
@@ -503,4 +514,77 @@ function safeParseProfile(json: string) {
   } catch {
     return companyProfileSchema.parse({});
   }
+}
+
+function safeParseReport(json: string) {
+  try {
+    return companyReportSchema.parse(JSON.parse(json || "{}"));
+  } catch {
+    return companyReportSchema.parse({});
+  }
+}
+
+/**
+ * Attaches answer-angle notes from the company report onto company-category questions.
+ * Invariant: only fills empty notes; never overwrites existing notes.
+ */
+function attachCompanyAnswerNotes(
+  questions: Array<{ category: QuestionCategory; text: string; notes?: string }>,
+  report: ReturnType<typeof safeParseReport>
+): void {
+  const prep = [...report.companyQuestionPrep];
+  if (prep.length === 0 && report.nicheInsights.length === 0) return;
+
+  let prepIndex = 0;
+  for (const question of questions) {
+    if (question.category !== "company") continue;
+    if (question.notes?.trim()) continue;
+
+    const match =
+      prep.find((item) =>
+        question.text.toLowerCase().includes(item.question.toLowerCase().slice(0, 24))
+      ) ?? prep[prepIndex++];
+
+    if (match) {
+      const hooks = match.nicheHooks.length ? ` Nisje-hooks: ${match.nicheHooks.join("; ")}.` : "";
+      question.notes = `Svarforslag: ${match.answerAngle}.${hooks}`;
+      continue;
+    }
+
+    if (report.nicheInsights.length) {
+      question.notes = `Bruk nisje-info: ${report.nicheInsights.slice(0, 2).join("; ")}.`;
+    }
+  }
+}
+
+/** Ensures at least one task drills company-specific answers using niche insights. */
+function mergeCompanyPrepTasks(
+  tasks: Array<{ title: string; description: string }>,
+  report: ReturnType<typeof safeParseReport>
+): Array<{ title: string; description: string }> {
+  const merged = [...tasks];
+  const hasCompanyPrepTask = merged.some(
+    (t) =>
+      /bedrift|hvorfor oss|nisje|company/i.test(`${t.title} ${t.description}`)
+  );
+  if (hasCompanyPrepTask) return merged;
+
+  const firstPrep = report.companyQuestionPrep[0];
+  if (firstPrep) {
+    merged.unshift({
+      title: "Øv bedriftsspesifikt svar",
+      description: `Skriv et 60-sekunders svar på «${firstPrep.question}». Vinkel: ${firstPrep.answerAngle}${
+        firstPrep.nicheHooks.length ? `. Bruk: ${firstPrep.nicheHooks.join("; ")}` : ""
+      }`
+    });
+    return merged;
+  }
+
+  if (report.nicheInsights.length) {
+    merged.unshift({
+      title: "Øv «Hvorfor oss?» med nisje-info",
+      description: `Lag et konkret svar som bruker: ${report.nicheInsights.slice(0, 3).join("; ")}.`
+    });
+  }
+  return merged;
 }
