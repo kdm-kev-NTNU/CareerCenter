@@ -27,6 +27,9 @@ describe("EssentialsSheetEditor", () => {
     const wrapper = mount(EssentialsSheetEditor, {
       props: { sheet: defaultEssentialsSheets.behavioral_mock, isDefault: true, mode: "behavioral_mock", aiConfigured: true }
     });
+    const details = wrapper.get("details");
+    expect(details.attributes("open")).toBeUndefined();
+    expect(wrapper.text()).toContain("Essentials-ark");
     expect(wrapper.text()).toContain("Standard");
     expect((wrapper.find("textarea").element as HTMLTextAreaElement).value).toContain("STAR");
     expect(findButton(wrapper, "Tilbakestill til standard").attributes("disabled")).toBeDefined();

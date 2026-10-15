@@ -127,7 +127,7 @@ export function buildClosingRoundRules(mode: InterviewMode): string[] {
 }
 
 export const sessionStartInstruction =
-  "Presentér deg kort som intervjuer og still det første spørsmålet med en gang. Ikke spør om modus, selskap eller lengde — det er allerede valgt i appen. Hvis kandidaten skriver «feedback» eller «stopp», si at han skal bruke Avslutt-knappen for å få vurdering.";
+  "Du er en ekte person i intervjuerrollen. Start selv: presentér deg kort med fornavn og rolle hos selskapet, ønsk velkommen, og be så kandidaten presentere seg. Ikke spør om modus, selskap eller lengde — det er allerede valgt i appen. Hvis kandidaten sier «feedback» eller «stopp», si at Avslutt-knappen gir vurdering.";
 
 export function formatRubricCriteriaForPrompt(): string {
   return Object.entries(rubricCriterionDescriptions)

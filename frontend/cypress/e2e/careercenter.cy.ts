@@ -202,7 +202,10 @@ describe("CareerCenter", () => {
 
   it("shows the default essentials sheet and the question bank segments", () => {
     cy.visit("/interview/simulator");
-    cy.get('textarea[aria-label="Essentials-ark"]').invoke("val").should("contain", "STAR");
+    cy.contains("summary", "Essentials-ark").should("be.visible");
+    cy.get("details.essentials-sheet").should("not.have.attr", "open");
+    cy.contains("summary", "Essentials-ark").click();
+    cy.get('textarea[aria-label="Essentials-ark"]').should("be.visible").invoke("val").should("contain", "STAR");
     cy.contains(".status-badge", "Standard").should("be.visible");
 
     cy.visit("/interview/bibel");

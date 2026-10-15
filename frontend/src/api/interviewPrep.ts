@@ -27,7 +27,7 @@ import type {
   VoiceSessionDto,
   InterviewSessionFeedbackDto
 } from "@careercenter/shared";
-import { request, requestBlob, uploadRequest } from "./client.js";
+import { LLM_REQUEST_TIMEOUT_MS, request, requestBlob, uploadRequest } from "./client.js";
 
 export interface InterviewAiStatus {
   aiConfigured: boolean;
@@ -250,7 +250,10 @@ export const interviewPrepApi = {
   sessionMessages: (sessionId: string) =>
     request<InterviewMessageDto[]>(`/api/interview/sessions/${sessionId}/messages`),
   finishSession: (sessionId: string) =>
-    request<InterviewSessionDto>(`/api/interview/sessions/${sessionId}/finish`, { method: "POST" }),
+    request<InterviewSessionDto>(`/api/interview/sessions/${sessionId}/finish`, {
+      method: "POST",
+      signal: AbortSignal.timeout(LLM_REQUEST_TIMEOUT_MS)
+    }),
 
   createVoiceSession: (sessionId: string) =>
     request<VoiceSessionDto>("/api/interview/voice/session", {
