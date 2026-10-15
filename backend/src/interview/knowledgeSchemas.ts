@@ -91,34 +91,34 @@ export const companyReportSchema = z.object({
       ownership: reportText(80).optional()
     })
     .default({}),
-  aboutCompany: reportText(600).default(""),
-  businessAreas: z.array(reportBullet()).max(5).default([]),
-  strategyAndNews: z.array(reportBullet(250)).max(5).default([]),
-  cultureAndValues: z.array(reportBullet()).max(5).default([]),
-  roleInContext: reportText(500).default(""),
+  aboutCompany: reportText(450).default(""),
+  businessAreas: z.array(reportBullet()).max(4).default([]),
+  strategyAndNews: z.array(reportBullet(200)).max(4).default([]),
+  cultureAndValues: z.array(reportBullet()).max(4).default([]),
+  roleInContext: reportText(350).default(""),
   jobAdRequirements: z
     .array(
       z.object({
-        requirement: reportBullet(160),
-        howToShowFit: reportBullet(200)
+        requirement: reportBullet(140),
+        howToShowFit: reportBullet(160)
       })
     )
-    .max(6)
+    .max(5)
     .default([]),
-  nicheInsights: z.array(reportBullet(220)).max(6).default([]),
+  nicheInsights: z.array(reportBullet(180)).max(5).default([]),
   companyQuestionPrep: z
     .array(
       z.object({
-        question: reportBullet(180),
-        answerAngle: reportBullet(280),
-        nicheHooks: z.array(reportBullet(120)).max(3).default([])
+        question: reportBullet(160),
+        answerAngle: reportBullet(220),
+        nicheHooks: z.array(reportBullet(100)).max(3).default([])
       })
     )
-    .max(6)
+    .max(5)
     .default([]),
-  interviewAngles: z.array(reportBullet(220)).max(5).default([]),
-  questionsToAsk: z.array(reportBullet(180)).max(5).default([]),
-  sources: z.array(reportBullet(200)).max(6).default([])
+  interviewAngles: z.array(reportBullet(180)).max(4).default([]),
+  questionsToAsk: z.array(reportBullet(160)).max(4).default([]),
+  sources: z.array(reportBullet(160)).max(5).default([])
 });
 
 export const clarificationListSchema = z.object({

@@ -16,24 +16,24 @@ function maxReport(): CompanyReport {
       size: fillWords(80),
       ownership: fillWords(80)
     },
-    aboutCompany: fillWords(600),
-    businessAreas: Array.from({ length: 5 }, () => fillWords(200)),
-    strategyAndNews: Array.from({ length: 5 }, () => fillWords(250)),
-    cultureAndValues: Array.from({ length: 5 }, () => fillWords(200)),
-    roleInContext: fillWords(500),
-    jobAdRequirements: Array.from({ length: 6 }, () => ({
-      requirement: fillWords(160),
-      howToShowFit: fillWords(200)
+    aboutCompany: fillWords(450),
+    businessAreas: Array.from({ length: 4 }, () => fillWords(200)),
+    strategyAndNews: Array.from({ length: 4 }, () => fillWords(200)),
+    cultureAndValues: Array.from({ length: 4 }, () => fillWords(200)),
+    roleInContext: fillWords(350),
+    jobAdRequirements: Array.from({ length: 5 }, () => ({
+      requirement: fillWords(140),
+      howToShowFit: fillWords(160)
     })),
-    nicheInsights: Array.from({ length: 6 }, () => fillWords(220)),
-    companyQuestionPrep: Array.from({ length: 6 }, () => ({
-      question: fillWords(180),
-      answerAngle: fillWords(280),
-      nicheHooks: [fillWords(120), fillWords(120)]
+    nicheInsights: Array.from({ length: 5 }, () => fillWords(180)),
+    companyQuestionPrep: Array.from({ length: 5 }, () => ({
+      question: fillWords(160),
+      answerAngle: fillWords(220),
+      nicheHooks: [fillWords(100), fillWords(100)]
     })),
-    interviewAngles: Array.from({ length: 5 }, () => fillWords(220)),
-    questionsToAsk: Array.from({ length: 5 }, () => fillWords(180)),
-    sources: Array.from({ length: 6 }, () => fillWords(200))
+    interviewAngles: Array.from({ length: 4 }, () => fillWords(180)),
+    questionsToAsk: Array.from({ length: 4 }, () => fillWords(160)),
+    sources: Array.from({ length: 5 }, () => fillWords(160))
   };
 }
 
