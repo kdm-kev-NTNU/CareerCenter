@@ -95,6 +95,11 @@ export class PrepResearchService {
     );
   }
 
+  /** True while a research or curation job for the plan is still running in this process. */
+  isRunning(planId: string): boolean {
+    return this.running.has(`research:${planId}`) || this.running.has(`curate:${planId}`);
+  }
+
   async cancel(userId: string, planId: string): Promise<{ ok: true } | { ok: false; status: number; message: string }> {
     const plan = await this.repository.getPrepPlan(userId, planId);
     if (!plan) return { ok: false, status: 404, message: "Plan ikke funnet." };

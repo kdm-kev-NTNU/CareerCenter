@@ -1,6 +1,7 @@
 import {
   answerStats,
   canDeleteImportJob,
+  canDeletePrepPlan,
   canStartSimulators,
   categoryForAudience,
   classifyCaseSource,
@@ -487,6 +488,19 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
     );
     if (!plan) return reply.code(404).send({ message: "Plan ikke funnet." });
     return { plan: toPrepPlanDto(plan), rankedCases: plan.recommendedCases };
+  });
+
+  app.delete("/api/interview/plans/:id", async (request, reply) => {
+    const planId = (request.params as { id: string }).id;
+    const plan = await deps.interviewPrepRepository.getPrepPlan(request.user.id, planId);
+    if (!plan) return reply.code(404).send({ message: "Plan ikke funnet." });
+    const busyMessage = "Planen kan ikke slettes mens research eller kuratering pågår. Stopp den eller vent til den er ferdig.";
+    // A further clarification round runs while the status is still awaiting_answers, so status alone is not enough.
+    if (!canDeletePrepPlan(plan.status) || researchService.isRunning(planId)) {
+      return reply.code(409).send({ message: busyMessage });
+    }
+    const deleted = await deps.interviewPrepRepository.deletePrepPlan(request.user.id, planId);
+    return deleted ? reply.code(204).send() : reply.code(409).send({ message: busyMessage });
   });
 
   app.get("/api/interview/plans/:id/company-report.pdf", async (request, reply) => {

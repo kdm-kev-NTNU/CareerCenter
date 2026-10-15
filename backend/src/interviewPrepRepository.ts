@@ -371,6 +371,12 @@ export interface InterviewPrepRepository {
   listPrepPlans(userId: string): Promise<InterviewPrepPlanRecord[]>;
   getPrepPlan(userId: string, id: string): Promise<InterviewPrepPlanRecord | null>;
   createPrepPlan(userId: string, input: PrepPlanCreateInput): Promise<InterviewPrepPlanRecord>;
+  /**
+   * Removes a plan with its questions, clarifications, tasks and case links.
+   * Sessions practised with the plan are kept but lose the link to it.
+   * Returns false when the plan is missing or research/curation is in progress.
+   */
+  deletePrepPlan(userId: string, id: string): Promise<boolean>;
   updatePrepPlanStatus(
     userId: string,
     id: string,

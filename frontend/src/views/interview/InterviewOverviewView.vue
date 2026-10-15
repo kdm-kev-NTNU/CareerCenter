@@ -11,6 +11,7 @@ const aiConfigured = ref(false);
 const error = ref<string | null>(null);
 
 const modules = [
+  { to: "/interview/plan", title: "Mine planer", desc: "Lagrede prep-planer. Fortsett der du slapp, eller øv med dem i simulatoren." },
   { to: "/interview/plan/ny", title: "Ny prep-plan", desc: "Fyll inn bedrift + annonse. Agenten researcher og lager spørsmål." },
   { to: "/interview/bibel", title: "Intervjubibel", desc: "Importer dokumenter og casebøker." },
   { to: "/interview/simulator", title: "Intervjussimulator", desc: "Stemmeintervju med STAR-scoring." },

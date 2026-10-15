@@ -157,6 +157,7 @@ export const interviewPrepApi = {
     request<InterviewPrepPlanDto>(`/api/interview/plans/${id}/research`, { method: "POST" }),
   cancelPlan: (id: string) =>
     request<InterviewPrepPlanDto>(`/api/interview/plans/${id}/cancel`, { method: "POST" }),
+  deletePlan: (id: string) => request<void>(`/api/interview/plans/${id}`, { method: "DELETE" }),
   downloadCompanyReport: async (planId: string, companyName: string) => {
     const blob = await requestBlob(`/api/interview/plans/${planId}/company-report.pdf`);
     const url = URL.createObjectURL(blob);

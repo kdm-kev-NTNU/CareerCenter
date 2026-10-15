@@ -10,6 +10,7 @@ import type {
 } from "@careercenter/shared";
 import {
   canCancelPrepPlan,
+  canDeletePrepPlan,
   canStartSimulators,
   isPrepPlanPipelineActive,
   questionAudienceLabels,
@@ -55,6 +56,7 @@ const pipelineActive = computed(() =>
   plan.value ? isPrepPlanPipelineActive(plan.value.pipelineStep, plan.value.status) : false
 );
 const canCancel = computed(() => (plan.value ? canCancelPrepPlan(plan.value.status) : false));
+const canDelete = computed(() => (plan.value ? canDeletePrepPlan(plan.value.status) : false));
 const canPractice = computed(() => (plan.value ? canStartSimulators(plan.value.status) : false));
 const canDownloadReport = computed(() => Boolean(plan.value?.companyReport));
 const downloadingReport = ref(false);
@@ -199,6 +201,24 @@ async function stopResearch() {
     stopPolling();
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Kunne ikke stoppe.";
+  } finally {
+    saving.value = false;
+  }
+}
+
+async function deletePlan() {
+  if (!plan.value) return;
+  if (!confirm(`Slette planen for «${plan.value.companyName}»? Spørsmål, svar og bedriftsrapport slettes. Øvingsøktene blir liggende.`)) {
+    return;
+  }
+  saving.value = true;
+  error.value = null;
+  try {
+    await interviewPrepApi.deletePlan(plan.value.id);
+    stopPolling();
+    await router.push({ name: "interview-plans" });
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : "Kunne ikke slette planen.";
   } finally {
     saving.value = false;
   }
@@ -451,6 +471,7 @@ async function downloadCompanyReport() {
           >
             Start på nytt
           </AppButton>
+          <AppButton v-if="canDelete" variant="ghost" :loading="saving" @click="deletePlan">Slett plan</AppButton>
         </div>
       </article>
 

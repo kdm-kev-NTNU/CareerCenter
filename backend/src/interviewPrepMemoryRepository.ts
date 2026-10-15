@@ -27,7 +27,7 @@ import type {
   VideoRunInput
 } from "./interviewPrepRepository.js";
 import type { InterviewFeedbackRubric } from "./interview/feedbackRubric.js";
-import { canDeleteImportJob, categoryForAudience } from "@careercenter/shared";
+import { canDeleteImportJob, canDeletePrepPlan, categoryForAudience } from "@careercenter/shared";
 import type {
   ImportJobKind,
   InterviewMode,
@@ -335,6 +335,16 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
     const plan = this.prepPlans.get(id);
     if (!plan || plan.userId !== userId) return null;
     return plan;
+  }
+
+  async deletePrepPlan(userId: string, id: string): Promise<boolean> {
+    const existing = await this.getPrepPlan(userId, id);
+    if (!existing || !canDeletePrepPlan(existing.status)) return false;
+    this.prepPlans.delete(id);
+    for (const [sessionId, session] of this.sessions) {
+      if (session.prepPlanId === id) this.sessions.set(sessionId, { ...session, prepPlanId: undefined });
+    }
+    return true;
   }
 
   async createPrepPlan(userId: string, input: PrepPlanCreateInput): Promise<InterviewPrepPlanRecord> {

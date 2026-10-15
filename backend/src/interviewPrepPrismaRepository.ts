@@ -22,6 +22,7 @@ import type {
 } from "@careercenter/shared";
 import {
   canDeleteImportJob,
+  canDeletePrepPlan,
   categoryForAudience,
   DEFAULT_RESEARCH_MODEL,
   defaultVideoSimulatorSettings,
@@ -358,6 +359,19 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       include: planIncludes
     });
     return row ? this.mapPlan(row) : null;
+  }
+
+  async deletePrepPlan(userId: string, id: string): Promise<boolean> {
+    const existing = await this.prisma.interviewPrepPlan.findFirst({
+      where: { id, userId },
+      select: { status: true }
+    });
+    if (!existing || !canDeletePrepPlan(existing.status as PrepPlanStatus)) return false;
+    // Matching the status just read keeps a plan that started research in the meantime.
+    const result = await this.prisma.interviewPrepPlan.deleteMany({
+      where: { id, userId, status: existing.status }
+    });
+    return result.count > 0;
   }
 
   async createPrepPlan(userId: string, input: PrepPlanCreateInput): Promise<InterviewPrepPlanRecord> {

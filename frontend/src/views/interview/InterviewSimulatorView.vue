@@ -8,10 +8,11 @@ import type {
   InterviewSimulatorSettingsDto,
   VoiceSessionDto
 } from "@careercenter/shared";
-import { interviewModes } from "@careercenter/shared";
+import { canStartSimulators, interviewModes } from "@careercenter/shared";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { useRoute } from "vue-router";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 import { interviewPrepApi } from "../../api/interviewPrep.js";
+import { toneForPrepPlanStatus } from "../../components/interview/statusTone.js";
 import EssentialsSheetEditor from "../../components/interview/EssentialsSheetEditor.vue";
 import MediaDeviceCheck from "../../components/interview/MediaDeviceCheck.vue";
 import { useMediaStream } from "../../composables/useMediaStream.js";
@@ -23,6 +24,7 @@ import PageHeader from "../../components/ui/PageHeader.vue";
 import StateView from "../../components/ui/StateView.vue";
 
 const route = useRoute();
+const router = useRouter();
 const mode = ref<InterviewMode>("behavioral_mock");
 const settings = ref<InterviewSimulatorSettingsDto | null>(null);
 const session = ref<InterviewSessionDto | null>(null);
@@ -34,15 +36,43 @@ const voiceDevices = ref<{ audioDeviceId?: string; videoDeviceId?: string }>({})
 const cases = ref<InterviewCasePublicDto[]>([]);
 const caseEntryId = ref("");
 const prepPlan = ref<InterviewPrepPlanDto | null>(null);
+const savedPlans = ref<InterviewPrepPlanDto[]>([]);
 const { stream: voiceStream, acquire: acquireVoiceStream, release: releaseVoiceStream } = useMediaStream();
 const loading = ref(false);
 const error = ref<string | null>(null);
 const aiConfigured = ref(false);
 let stopRealtime: (() => void) | null = null;
 
+const LAST_PLAN_KEY = "careercenter:simulator-plan";
+
+function readLastPlanId(): string | null {
+  try {
+    return localStorage.getItem(LAST_PLAN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeLastPlanId(planId: string | null) {
+  try {
+    if (planId) localStorage.setItem(LAST_PLAN_KEY, planId);
+    else localStorage.removeItem(LAST_PLAN_KEY);
+  } catch {
+    // Remembering the plan is a convenience; the simulator works without it.
+  }
+}
+
 const routePlanId = computed(() => {
   const value = route.query.planId;
   return typeof value === "string" && value ? value : undefined;
+});
+/** The URL owns the selected plan, so links from the plan list and reloads keep it. */
+const selectedPlanId = computed({
+  get: () => routePlanId.value ?? "",
+  set: (planId: string) => {
+    if (!planId) writeLastPlanId(null);
+    void router.replace({ query: { ...route.query, planId: planId || undefined } });
+  }
 });
 const planLabel = computed(() => {
   if (!prepPlan.value) return null;
@@ -75,6 +105,25 @@ async function loadSettings() {
   }
 }
 
+function planOptionLabel(plan: InterviewPrepPlanDto): string {
+  const name = plan.roleTitle ? `${plan.companyName} – ${plan.roleTitle}` : plan.companyName;
+  return canStartSimulators(plan.status) ? name : `${name} (${toneForPrepPlanStatus(plan.status).label})`;
+}
+
+async function loadSavedPlans() {
+  try {
+    savedPlans.value = await interviewPrepApi.plans();
+    // Coming back via the Simulator tab drops ?planId, so reopen the plan used last time.
+    const lastPlanId = readLastPlanId();
+    const lastPlan = savedPlans.value.find((plan) => plan.id === lastPlanId);
+    if (!routePlanId.value && lastPlan && canStartSimulators(lastPlan.status)) {
+      selectedPlanId.value = lastPlan.id;
+    }
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : "Kunne ikke hente lagrede planer.";
+  }
+}
+
 async function loadPlan() {
   if (!routePlanId.value) {
     prepPlan.value = null;
@@ -91,7 +140,7 @@ async function loadPlan() {
 
 onMounted(() => {
   void loadSettings();
-  void loadPlan();
+  void loadSavedPlans();
   void interviewPrepApi
     .getStatus()
     .then((status) => {
@@ -101,7 +150,14 @@ onMounted(() => {
       aiConfigured.value = false;
     });
 });
-watch(routePlanId, () => void loadPlan());
+watch(
+  routePlanId,
+  (planId) => {
+    if (planId) writeLastPlanId(planId);
+    void loadPlan();
+  },
+  { immediate: true }
+);
 
 onBeforeUnmount(() => {
   stopRealtime?.();
@@ -225,6 +281,26 @@ function printEssentials() {
     <p v-if="planLabel" class="field-hint" data-test="plan-practice-label">{{ planLabel }}</p>
 
     <article class="panel stack">
+      <label>
+        Plan
+        <select v-model="selectedPlanId" data-test="plan-select">
+          <option value="">Ingen plan (generell øving)</option>
+          <option
+            v-for="plan in savedPlans"
+            :key="plan.id"
+            :value="plan.id"
+            :disabled="!canStartSimulators(plan.status)"
+          >
+            {{ planOptionLabel(plan) }}
+          </option>
+        </select>
+      </label>
+      <p class="field-hint">
+        Planene dine er lagret.
+        <RouterLink v-if="routePlanId" :to="{ name: 'interview-plan', params: { id: routePlanId } }">Åpne valgt plan</RouterLink>
+        <template v-if="routePlanId"> · </template>
+        <RouterLink :to="{ name: 'interview-plans' }">Se alle planer</RouterLink>
+      </p>
       <label>
         Modus
         <select v-model="mode" @change="loadSettings">

@@ -76,6 +76,14 @@ export function canCancelPrepPlan(status: PrepPlanStatus): boolean {
   return status === "researching" || status === "curating";
 }
 
+/**
+ * Statuses where a plan may be deleted. Research and curation write to the plan until they stop,
+ * so those must be stopped first. The server also refuses while a job is still running.
+ */
+export function canDeletePrepPlan(status: PrepPlanStatus): boolean {
+  return !canCancelPrepPlan(status);
+}
+
 export const MAX_CLARIFICATION_ROUNDS = 2;
 export const MAX_CLARIFICATIONS_PER_ROUND = 5;
 export const MIN_CURATED_QUESTIONS = 30;
