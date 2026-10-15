@@ -1,6 +1,8 @@
 import { starRubricCriteria } from "@careercenter/shared";
 import { describe, expect, it } from "vitest";
+import type { z } from "zod";
 import { FakeLlmClient } from "../ai/fakeLlmClient.js";
+import type { LlmCompleteOptions } from "../ai/llmClient.js";
 import { sha256Content } from "../interview/contentHash.js";
 import { MemoryRepository } from "../memoryRepository.js";
 import { InterviewPrepMemoryRepository } from "../interviewPrepMemoryRepository.js";
@@ -33,6 +35,23 @@ async function waitForPlanStatus(
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
   throw new Error(`Tidsavbrudd mens planen skulle bli ${status}.`);
+}
+
+/** Holds every structured LLM call until `open()`, so a test can act while a plan job is running. */
+class GatedLlmClient extends FakeLlmClient {
+  private release!: () => void;
+  private readonly gate = new Promise<void>((resolve) => {
+    this.release = resolve;
+  });
+
+  open() {
+    this.release();
+  }
+
+  override async completeStructured<T extends z.ZodType>(options: LlmCompleteOptions, schema: T): Promise<z.infer<T>> {
+    await this.gate;
+    return super.completeStructured(options, schema);
+  }
 }
 
 describe("interview prep routes", () => {
@@ -337,7 +356,7 @@ describe("interview prep routes", () => {
     await app.close();
   });
 
-  it("finishes practice sessions without AI rubric even when AI is off", async () => {
+  it("refuses to finish a session without AI, so every session stays scored", async () => {
     const { app, llmClient } = await buildInterviewApp({ configured: false });
     const session = await app.inject({
       method: "POST",
@@ -345,14 +364,18 @@ describe("interview prep routes", () => {
       payload: { mode: "behavioral_mock", title: "Test", practice: true }
     });
     expect(session.statusCode).toBe(201);
-    expect(session.json().practice).toBe(true);
+    expect(session.json()).not.toHaveProperty("practice");
     const sessionId = session.json().id as string;
 
     const finished = await app.inject({ method: "POST", url: `/api/interview/sessions/${sessionId}/finish` });
-    expect(finished.statusCode).toBe(200);
-    expect(finished.json().feedback).toBeUndefined();
-    expect(finished.json().finishedAt).toBeTruthy();
+    expect(finished.statusCode).toBe(503);
     expect(llmClient.structuredCalls).toHaveLength(0);
+    const stored = await app.inject({ method: "GET", url: "/api/interview/sessions" });
+    const row = (stored.json() as Array<{ id: string; finishedAt?: string; feedback?: unknown }>).find(
+      (item) => item.id === sessionId
+    );
+    expect(row?.finishedAt).toBeUndefined();
+    expect(row?.feedback).toBeUndefined();
     await app.close();
   });
 
@@ -548,6 +571,88 @@ describe("interview prep routes", () => {
 
     const docs = await repo.listKnowledgeDocs(user.id);
     expect(docs.map((item) => item.id)).toContain(doc.id);
+    await app.close();
+  });
+
+  it("deletes plans that are not running and keeps sessions practised with them", async () => {
+    const mainRepo = new MemoryRepository();
+    const repo = new InterviewPrepMemoryRepository();
+    const user = await mainRepo.createUser("__test__", "x");
+    const llmClient = new GatedLlmClient({
+      configured: true,
+      structuredResult: { clarifications: [{ question: "Hvilket team?" }] }
+    });
+    const app = await buildServer({
+      repository: mainRepo,
+      authDisabled: true,
+      skipJobRecovery: true,
+      llmClient,
+      interviewPrepRepository: repo
+    });
+    await app.ready();
+    const newPlan = () =>
+      repo.createPrepPlan(user.id, {
+        companyName: "DNB",
+        roleTitle: "Analyst",
+        format: "interview",
+        researchModel: "gpt-6-astra"
+      });
+    const deletePlan = (id: string) => app.inject({ method: "DELETE", url: `/api/interview/plans/${id}` });
+
+    expect((await deletePlan("missing")).statusCode).toBe(404);
+
+    const researching = await newPlan();
+    await repo.updatePrepPlanStatus(user.id, researching.id, "researching");
+    expect((await deletePlan(researching.id)).statusCode).toBe(409);
+    expect(await repo.getPrepPlan(user.id, researching.id)).toBeTruthy();
+
+    // An unanswered clarification asks the LLM for another round while the status stays awaiting_answers.
+    const awaiting = await newPlan();
+    const withClarifications = await repo.setPrepPlanResearch(user.id, awaiting.id, {
+      researchNotes: "Notater",
+      clarifications: [{ question: "Hvilken rolle?", sortOrder: 0 }],
+      clarificationRound: 1
+    });
+    await repo.updatePrepPlanStatus(user.id, awaiting.id, "awaiting_answers");
+    const submitted = await app.inject({
+      method: "POST",
+      url: `/api/interview/plans/${awaiting.id}/clarifications`,
+      payload: { answers: [{ id: withClarifications!.clarifications[0]!.id, answer: "" }] }
+    });
+    expect(submitted.statusCode).toBe(202);
+    const busy = await deletePlan(awaiting.id);
+    expect(busy.statusCode).toBe(409);
+    expect((await repo.getPrepPlan(user.id, awaiting.id))?.status).toBe("awaiting_answers");
+
+    llmClient.open();
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      if ((await repo.getPrepPlan(user.id, awaiting.id))?.clarifications.length === 2) break;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect((await deletePlan(awaiting.id)).statusCode).toBe(204);
+    expect(await repo.getPrepPlan(user.id, awaiting.id)).toBeNull();
+
+    const ready = await newPlan();
+    await repo.setPrepPlanCurated(user.id, ready.id, {
+      questions: [{ text: "Why DNB?", category: "motivation", target: "interview", source: "custom" }],
+      tasks: []
+    });
+    await repo.updatePrepPlanStatus(user.id, ready.id, "ready");
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/interview/sessions",
+      payload: { mode: "behavioral_mock", prepPlanId: ready.id }
+    });
+    expect(created.statusCode).toBe(201);
+    const session = created.json() as { id: string };
+
+    expect((await deletePlan(ready.id)).statusCode).toBe(204);
+    const plans = (await app.inject({ method: "GET", url: "/api/interview/plans" })).json() as Array<{ id: string }>;
+    expect(plans.map((plan) => plan.id)).toEqual([researching.id]);
+    const kept = await repo.getSession(user.id, session.id);
+    expect(kept).toBeTruthy();
+    expect(kept?.prepPlanId).toBeUndefined();
     await app.close();
   });
 

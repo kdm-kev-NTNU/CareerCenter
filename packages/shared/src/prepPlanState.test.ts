@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  canDeletePrepPlan,
   canStartSimulators,
   isPrepPlanPipelineActive,
   prepPlanStepVisual,
@@ -19,6 +20,14 @@ describe("transitionPrepPlan", () => {
     s = transitionPrepPlan(s, { type: "curation_done" });
     expect(s).toBe("ready");
     expect(canStartSimulators(s)).toBe(true);
+  });
+
+  it("only allows deleting a plan when no research or curation is running", () => {
+    expect(canDeletePrepPlan("researching")).toBe(false);
+    expect(canDeletePrepPlan("curating")).toBe(false);
+    for (const status of ["draft", "awaiting_answers", "ready", "failed", "cancelled"] as const) {
+      expect(canDeletePrepPlan(status)).toBe(true);
+    }
   });
 
   it("cannot skip clarification to ready", () => {

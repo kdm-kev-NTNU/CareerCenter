@@ -8,10 +8,11 @@ import type {
   InterviewSimulatorSettingsDto,
   VoiceSessionDto
 } from "@careercenter/shared";
-import { interviewModes } from "@careercenter/shared";
+import { canStartSimulators, interviewModes } from "@careercenter/shared";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { useRoute } from "vue-router";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 import { interviewPrepApi } from "../../api/interviewPrep.js";
+import { toneForPrepPlanStatus } from "../../components/interview/statusTone.js";
 import EssentialsSheetEditor from "../../components/interview/EssentialsSheetEditor.vue";
 import MediaDeviceCheck from "../../components/interview/MediaDeviceCheck.vue";
 import { useMediaStream } from "../../composables/useMediaStream.js";
@@ -23,12 +24,11 @@ import PageHeader from "../../components/ui/PageHeader.vue";
 import StateView from "../../components/ui/StateView.vue";
 
 const route = useRoute();
-const channel = ref<"text" | "voice">("text");
+const router = useRouter();
 const mode = ref<InterviewMode>("behavioral_mock");
 const settings = ref<InterviewSimulatorSettingsDto | null>(null);
 const session = ref<InterviewSessionDto | null>(null);
 const messages = ref<InterviewMessageDto[]>([]);
-const draft = ref("");
 const voiceDraft = ref("");
 const voiceSession = ref<VoiceSessionDto | null>(null);
 const voiceReady = ref(false);
@@ -36,15 +36,43 @@ const voiceDevices = ref<{ audioDeviceId?: string; videoDeviceId?: string }>({})
 const cases = ref<InterviewCasePublicDto[]>([]);
 const caseEntryId = ref("");
 const prepPlan = ref<InterviewPrepPlanDto | null>(null);
+const savedPlans = ref<InterviewPrepPlanDto[]>([]);
 const { stream: voiceStream, acquire: acquireVoiceStream, release: releaseVoiceStream } = useMediaStream();
 const loading = ref(false);
 const error = ref<string | null>(null);
 const aiConfigured = ref(false);
 let stopRealtime: (() => void) | null = null;
 
+const LAST_PLAN_KEY = "careercenter:simulator-plan";
+
+function readLastPlanId(): string | null {
+  try {
+    return localStorage.getItem(LAST_PLAN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeLastPlanId(planId: string | null) {
+  try {
+    if (planId) localStorage.setItem(LAST_PLAN_KEY, planId);
+    else localStorage.removeItem(LAST_PLAN_KEY);
+  } catch {
+    // Remembering the plan is a convenience; the simulator works without it.
+  }
+}
+
 const routePlanId = computed(() => {
   const value = route.query.planId;
   return typeof value === "string" && value ? value : undefined;
+});
+/** The URL owns the selected plan, so links from the plan list and reloads keep it. */
+const selectedPlanId = computed({
+  get: () => routePlanId.value ?? "",
+  set: (planId: string) => {
+    if (!planId) writeLastPlanId(null);
+    void router.replace({ query: { ...route.query, planId: planId || undefined } });
+  }
 });
 const planLabel = computed(() => {
   if (!prepPlan.value) return null;
@@ -52,8 +80,7 @@ const planLabel = computed(() => {
   return `Plan: ${prepPlan.value.companyName} (${count} spørsmål)`;
 });
 
-const voiceDeviceCheckActive = () =>
-  channel.value === "voice" && Boolean(session.value) && !session.value?.finishedAt;
+const voiceDeviceCheckActive = () => Boolean(session.value) && !session.value?.finishedAt;
 
 async function syncVoiceStream() {
   if (!voiceDeviceCheckActive()) {
@@ -67,7 +94,7 @@ async function syncVoiceStream() {
   });
 }
 
-watch([channel, session], () => {
+watch(session, () => {
   void syncVoiceStream();
 });
 
@@ -75,6 +102,25 @@ async function loadSettings() {
   settings.value = await interviewPrepApi.simulatorSettings(mode.value);
   if (mode.value === "case_oral") {
     cases.value = await interviewPrepApi.cases({ approvalStatus: "approved" });
+  }
+}
+
+function planOptionLabel(plan: InterviewPrepPlanDto): string {
+  const name = plan.roleTitle ? `${plan.companyName} – ${plan.roleTitle}` : plan.companyName;
+  return canStartSimulators(plan.status) ? name : `${name} (${toneForPrepPlanStatus(plan.status).label})`;
+}
+
+async function loadSavedPlans() {
+  try {
+    savedPlans.value = await interviewPrepApi.plans();
+    // Coming back via the Simulator tab drops ?planId, so reopen the plan used last time.
+    const lastPlanId = readLastPlanId();
+    const lastPlan = savedPlans.value.find((plan) => plan.id === lastPlanId);
+    if (!routePlanId.value && lastPlan && canStartSimulators(lastPlan.status)) {
+      selectedPlanId.value = lastPlan.id;
+    }
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : "Kunne ikke hente lagrede planer.";
   }
 }
 
@@ -94,7 +140,7 @@ async function loadPlan() {
 
 onMounted(() => {
   void loadSettings();
-  void loadPlan();
+  void loadSavedPlans();
   void interviewPrepApi
     .getStatus()
     .then((status) => {
@@ -104,7 +150,14 @@ onMounted(() => {
       aiConfigured.value = false;
     });
 });
-watch(routePlanId, () => void loadPlan());
+watch(
+  routePlanId,
+  (planId) => {
+    if (planId) writeLastPlanId(planId);
+    void loadPlan();
+  },
+  { immediate: true }
+);
 
 onBeforeUnmount(() => {
   stopRealtime?.();
@@ -127,7 +180,7 @@ function onEssentialsChange(sheet: string, isDefault: boolean) {
   settings.value = { ...settings.value, essentialsSheet: sheet, essentialsIsDefault: isDefault };
 }
 
-async function startSession(practice = false) {
+async function startSession() {
   loading.value = true;
   error.value = null;
   voiceSession.value = null;
@@ -138,17 +191,12 @@ async function startSession(practice = false) {
     await saveSettings();
     session.value = await interviewPrepApi.createSession({
       mode: mode.value,
-      title: prepPlan.value
-        ? `${practice ? "Test" : "Øving"}: ${prepPlan.value.companyName}`
-        : `${mode.value} ${practice ? "test" : "sim"}`,
+      title: prepPlan.value ? `Øving: ${prepPlan.value.companyName}` : `${mode.value} sim`,
       prepPlanId: routePlanId.value,
-      caseEntryId: mode.value === "case_oral" && caseEntryId.value ? caseEntryId.value : undefined,
-      practice
+      caseEntryId: mode.value === "case_oral" && caseEntryId.value ? caseEntryId.value : undefined
     });
     messages.value = (await interviewPrepApi.sessionMessages(session.value.id)).filter((m) => m.role !== "system");
-    if (channel.value === "voice") {
-      voiceSession.value = await interviewPrepApi.createVoiceSession(session.value.id);
-    }
+    voiceSession.value = await interviewPrepApi.createVoiceSession(session.value.id);
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Kunne ikke starte sesjon.";
   } finally {
@@ -175,22 +223,6 @@ async function connectVoiceLive() {
     stopRealtime = connection.stop;
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Kunne ikke koble til stemme.";
-  }
-}
-
-async function sendMessage() {
-  if (!session.value || !draft.value.trim()) return;
-  loading.value = true;
-  try {
-    const userText = draft.value.trim();
-    draft.value = "";
-    messages.value.push({ id: `local-${Date.now()}`, role: "user", content: userText, createdAt: new Date().toISOString() });
-    const assistant = await interviewPrepApi.sendSessionMessage(session.value.id, userText);
-    messages.value.push(assistant);
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : "Melding feilet.";
-  } finally {
-    loading.value = false;
   }
 }
 
@@ -245,14 +277,30 @@ function printEssentials() {
 
 <template>
   <section class="stack">
-    <PageHeader title="Intervjussimulator" lead="Øv PEI og case med tekst eller stemme." />
+    <PageHeader title="Intervjussimulator" lead="Øv PEI og case med stemme." />
     <p v-if="planLabel" class="field-hint" data-test="plan-practice-label">{{ planLabel }}</p>
 
     <article class="panel stack">
-      <div class="toolbar">
-        <button type="button" :class="{ active: channel === 'text' }" @click="channel = 'text'">Tekst</button>
-        <button type="button" :class="{ active: channel === 'voice' }" @click="channel = 'voice'">Stemme</button>
-      </div>
+      <label>
+        Plan
+        <select v-model="selectedPlanId" data-test="plan-select">
+          <option value="">Ingen plan (generell øving)</option>
+          <option
+            v-for="plan in savedPlans"
+            :key="plan.id"
+            :value="plan.id"
+            :disabled="!canStartSimulators(plan.status)"
+          >
+            {{ planOptionLabel(plan) }}
+          </option>
+        </select>
+      </label>
+      <p class="field-hint">
+        Planene dine er lagret.
+        <RouterLink v-if="routePlanId" :to="{ name: 'interview-plan', params: { id: routePlanId } }">Åpne valgt plan</RouterLink>
+        <template v-if="routePlanId"> · </template>
+        <RouterLink :to="{ name: 'interview-plans' }">Se alle planer</RouterLink>
+      </p>
       <label>
         Modus
         <select v-model="mode" @change="loadSettings">
@@ -284,15 +332,12 @@ function printEssentials() {
         </div>
       </template>
       <div class="form-grid">
-        <AppButton :loading="loading" @click="startSession(false)">Start ny sesjon</AppButton>
-        <AppButton variant="ghost" :loading="loading" @click="startSession(true)">
-          Test-sesjon (uten vurdering)
-        </AppButton>
+        <AppButton :loading="loading" @click="startSession()">Start ny sesjon</AppButton>
       </div>
     </article>
 
     <MediaDeviceCheck
-      v-if="channel === 'voice' && session && !session.finishedAt"
+      v-if="session && !session.finishedAt"
       :stream="voiceStream"
       :need-camera="false"
       @ready="onVoiceDevicesReady"
@@ -300,7 +345,7 @@ function printEssentials() {
       @failed="onVoiceDevicesFailed"
     />
 
-    <article v-if="session && channel === 'voice' && voiceSession" class="panel stack">
+    <article v-if="session && voiceSession" class="panel stack">
       <h3>Stemme-sesjon</h3>
       <p class="field-hint">
         Modell {{ voiceSession.model }} · {{ voiceSession.mock ? "mock" : "live" }} · utløper
@@ -328,20 +373,13 @@ function printEssentials() {
           :content="message.content"
         />
       </div>
-      <form v-if="channel === 'text'" class="stack" @submit.prevent="sendMessage">
-        <textarea v-model="draft" rows="3" placeholder="Ditt svar …" />
-        <AppButton type="submit" :loading="loading">Send</AppButton>
-      </form>
       <AppButton variant="secondary" :disabled="!!session.finishedAt" @click="finishSession">
-        {{ session.practice ? "Avslutt test" : "Avslutt og hent feedback" }}
+        Avslutt og hent feedback
       </AppButton>
-      <div v-if="session.feedback && !session.practice" class="panel">
+      <div v-if="session.feedback" class="panel">
         <h4>Feedback (sum {{ session.feedback.sum }})</h4>
         <p>{{ session.feedback.improvement }}</p>
       </div>
-      <p v-else-if="session.finishedAt && session.practice" class="field-hint">
-        Test avsluttet uten KI-vurdering.
-      </p>
     </article>
 
     <StateView v-if="error" state="error" :message="error" />

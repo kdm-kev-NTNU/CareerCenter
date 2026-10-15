@@ -1,6 +1,7 @@
 import {
   answerStats,
   canDeleteImportJob,
+  canDeletePrepPlan,
   canStartSimulators,
   categoryForAudience,
   classifyCaseSource,
@@ -489,6 +490,19 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
     return { plan: toPrepPlanDto(plan), rankedCases: plan.recommendedCases };
   });
 
+  app.delete("/api/interview/plans/:id", async (request, reply) => {
+    const planId = (request.params as { id: string }).id;
+    const plan = await deps.interviewPrepRepository.getPrepPlan(request.user.id, planId);
+    if (!plan) return reply.code(404).send({ message: "Plan ikke funnet." });
+    const busyMessage = "Planen kan ikke slettes mens research eller kuratering pågår. Stopp den eller vent til den er ferdig.";
+    // A further clarification round runs while the status is still awaiting_answers, so status alone is not enough.
+    if (!canDeletePrepPlan(plan.status) || researchService.isRunning(planId)) {
+      return reply.code(409).send({ message: busyMessage });
+    }
+    const deleted = await deps.interviewPrepRepository.deletePrepPlan(request.user.id, planId);
+    return deleted ? reply.code(204).send() : reply.code(409).send({ message: busyMessage });
+  });
+
   app.get("/api/interview/plans/:id/company-report.pdf", async (request, reply) => {
     const plan = await deps.interviewPrepRepository.getPrepPlan(
       request.user.id,
@@ -811,8 +825,7 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
       title: body.title || `${body.mode} simulering`,
       prepPlanId: body.prepPlanId,
       caseEntryId: body.caseEntryId,
-      systemPrompt,
-      practice: body.practice
+      systemPrompt
     });
     return reply.code(201).send(toSessionDto(session));
   });
@@ -860,12 +873,6 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
     const session = await deps.interviewPrepRepository.getSession(request.user.id, sessionId);
     if (!session) return reply.code(404).send({ message: "Sesjon ikke funnet." });
     if (session.finishedAt) return reply.code(409).send({ message: "Sesjonen er allerede avsluttet." });
-
-    if (session.practice) {
-      const finished = await deps.interviewPrepRepository.finishSession(request.user.id, sessionId, null);
-      if (!finished) return reply.code(409).send({ message: "Sesjonen er allerede avsluttet." });
-      return toSessionDto(finished);
-    }
 
     if (!deps.llmClient.isConfigured()) {
       return reply.code(503).send({ message: "AI er ikke konfigurert." });

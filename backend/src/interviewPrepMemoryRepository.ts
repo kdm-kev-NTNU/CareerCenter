@@ -27,7 +27,7 @@ import type {
   VideoRunInput
 } from "./interviewPrepRepository.js";
 import type { InterviewFeedbackRubric } from "./interview/feedbackRubric.js";
-import { canDeleteImportJob, categoryForAudience } from "@careercenter/shared";
+import { canDeleteImportJob, canDeletePrepPlan, categoryForAudience } from "@careercenter/shared";
 import type {
   ImportJobKind,
   InterviewMode,
@@ -335,6 +335,16 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
     const plan = this.prepPlans.get(id);
     if (!plan || plan.userId !== userId) return null;
     return plan;
+  }
+
+  async deletePrepPlan(userId: string, id: string): Promise<boolean> {
+    const existing = await this.getPrepPlan(userId, id);
+    if (!existing || !canDeletePrepPlan(existing.status)) return false;
+    this.prepPlans.delete(id);
+    for (const [sessionId, session] of this.sessions) {
+      if (session.prepPlanId === id) this.sessions.set(sessionId, { ...session, prepPlanId: undefined });
+    }
+    return true;
   }
 
   async createPrepPlan(userId: string, input: PrepPlanCreateInput): Promise<InterviewPrepPlanRecord> {
@@ -726,7 +736,6 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       prepPlanId?: string;
       caseEntryId?: string;
       systemPrompt: string;
-      practice?: boolean;
     }
   ): Promise<InterviewSessionRecord> {
     const timestamp = nowIso();
@@ -737,7 +746,6 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       title: input.title,
       prepPlanId: input.prepPlanId,
       caseEntryId: input.caseEntryId,
-      practice: Boolean(input.practice),
       createdAt: timestamp,
       updatedAt: timestamp
     };
@@ -778,13 +786,13 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
   async finishSession(
     userId: string,
     sessionId: string,
-    feedback: InterviewFeedbackRubric | null
+    feedback: InterviewFeedbackRubric
   ): Promise<InterviewSessionRecord | null> {
     const session = await this.getSession(userId, sessionId);
     if (!session || session.finishedAt) return null;
     const updated: InterviewSessionRecord = {
       ...session,
-      feedback: feedback ?? undefined,
+      feedback,
       finishedAt: nowIso(),
       updatedAt: nowIso()
     };

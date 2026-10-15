@@ -66,8 +66,7 @@ export const createSessionSchema = z.object({
   mode: z.enum(interviewModes),
   title: z.string().default(""),
   prepPlanId: z.string().optional(),
-  caseEntryId: z.string().optional(),
-  practice: z.boolean().optional().default(false)
+  caseEntryId: z.string().optional()
 });
 
 export const sessionMessageSchema = z.object({

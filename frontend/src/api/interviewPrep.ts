@@ -157,6 +157,7 @@ export const interviewPrepApi = {
     request<InterviewPrepPlanDto>(`/api/interview/plans/${id}/research`, { method: "POST" }),
   cancelPlan: (id: string) =>
     request<InterviewPrepPlanDto>(`/api/interview/plans/${id}/cancel`, { method: "POST" }),
+  deletePlan: (id: string) => request<void>(`/api/interview/plans/${id}`, { method: "DELETE" }),
   downloadCompanyReport: async (planId: string, companyName: string) => {
     const blob = await requestBlob(`/api/interview/plans/${planId}/company-report.pdf`);
     const url = URL.createObjectURL(blob);
@@ -241,16 +242,10 @@ export const interviewPrepApi = {
     title?: string;
     prepPlanId?: string;
     caseEntryId?: string;
-    practice?: boolean;
   }) =>
     request<InterviewSessionDto>("/api/interview/sessions", { method: "POST", body: JSON.stringify(payload) }),
   sessionMessages: (sessionId: string) =>
     request<InterviewMessageDto[]>(`/api/interview/sessions/${sessionId}/messages`),
-  sendSessionMessage: (sessionId: string, content: string) =>
-    request<InterviewMessageDto>(`/api/interview/sessions/${sessionId}/messages`, {
-      method: "POST",
-      body: JSON.stringify({ content })
-    }),
   finishSession: (sessionId: string) =>
     request<InterviewSessionDto>(`/api/interview/sessions/${sessionId}/finish`, { method: "POST" }),
 

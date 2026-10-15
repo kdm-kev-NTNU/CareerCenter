@@ -498,6 +498,7 @@ export {
   transitionPrepPlan,
   canStartSimulators,
   canCancelPrepPlan,
+  canDeletePrepPlan,
   prepPlanPipelineSteps,
   parsePrepPlanPipelineStep,
   prepPlanStepVisual,

@@ -115,6 +115,7 @@ describe("interviewPrepApi", () => {
       jobAdText: "Vi søker en analyst."
     });
     await interviewPrepApi.plan("p1");
+    await interviewPrepApi.deletePlan("p1");
     await interviewPrepApi.submitClarifications("p1", [], true);
     await interviewPrepApi.replacePlanQuestion("p1", "q1", { text: "Alt?" });
     await interviewPrepApi.createVoiceSession("s1");
@@ -133,6 +134,7 @@ describe("interviewPrepApi", () => {
       })
     );
     expect(mockedRequest).toHaveBeenCalledWith("/api/interview/plans/p1");
+    expect(mockedRequest).toHaveBeenCalledWith("/api/interview/plans/p1", { method: "DELETE" });
     expect(mockedRequest).toHaveBeenCalledWith(
       "/api/interview/plans/p1/clarifications",
       expect.objectContaining({ method: "POST" })

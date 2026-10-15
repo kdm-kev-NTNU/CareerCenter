@@ -520,7 +520,6 @@ model InterviewSession {
   title        String              @default("")
   prepPlanId   String?
   caseEntryId  String?
-  practice     Boolean             @default(false)
   feedbackJson String?
   finishedAt   DateTime?
   createdAt    DateTime            @default(now())

@@ -183,6 +183,7 @@ describe("CareerCenter", () => {
   it("smoke-tests interview module headers and primary actions", () => {
     const routes: Array<{ path: string; title: string; primary?: string }> = [
       { path: "/interview", title: "Intervju" },
+      { path: "/interview/plan", title: "Mine planer", primary: "Ny plan" },
       { path: "/interview/plan/ny", title: "Ny prep-plan", primary: "Opprett og start research" },
       { path: "/interview/bibel", title: "Intervjubibel", primary: "Lagre" },
       { path: "/interview/simulator", title: "Intervjussimulator", primary: "Start ny sesjon" },

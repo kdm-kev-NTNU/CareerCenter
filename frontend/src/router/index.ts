@@ -14,6 +14,7 @@ import InterviewOverviewView from "../views/interview/InterviewOverviewView.vue"
 import InterviewBibelView from "../views/interview/InterviewBibelView.vue";
 import InterviewPlanNewView from "../views/interview/InterviewPlanNewView.vue";
 import InterviewPlanView from "../views/interview/InterviewPlanView.vue";
+import InterviewPlansView from "../views/interview/InterviewPlansView.vue";
 import InterviewSimulatorView from "../views/interview/InterviewSimulatorView.vue";
 import InterviewVideoView from "../views/interview/InterviewVideoView.vue";
 import AbilityTestsView from "../views/interview/AbilityTestsView.vue";
@@ -133,6 +134,12 @@ const router = createRouter({
               name: "interview-bibel",
               component: InterviewBibelView,
               meta: { title: "Intervjubibel" }
+            },
+            {
+              path: "plan",
+              name: "interview-plans",
+              component: InterviewPlansView,
+              meta: { title: "Mine planer" }
             },
             {
               path: "plan/ny",
