@@ -94,8 +94,77 @@ export function isResearchModel(value: string): value is ResearchModel {
 export const questionTargets = ["interview", "video", "both"] as const;
 export type QuestionTarget = (typeof questionTargets)[number];
 
-export const questionCategories = ["behavioral", "technical", "motivation", "company", "case"] as const;
+/** Categories for questions an interviewer asks the candidate. */
+export const questionCategories = [
+  "behavioral",
+  "situational",
+  "motivation",
+  "personal",
+  "technical",
+  "case",
+  "brainteaser",
+  "company"
+] as const;
 export type QuestionCategory = (typeof questionCategories)[number];
+
+export const questionCategoryLabels: Record<QuestionCategory, string> = {
+  behavioral: "Atferd (STAR)",
+  situational: "Situasjon",
+  motivation: "Motivasjon",
+  personal: "Personlig",
+  technical: "Faglig/teknisk",
+  case: "Case",
+  brainteaser: "Brainteaser/estimering",
+  company: "Selskapskunnskap"
+};
+
+/** Who asks the question: the interviewer asks the candidate, or the candidate asks the interviewer. */
+export const questionAudiences = ["candidate", "ask_interviewer_personal", "ask_interviewer_company"] as const;
+export type QuestionAudience = (typeof questionAudiences)[number];
+
+export const questionAudienceLabels: Record<QuestionAudience, string> = {
+  candidate: "Spørsmål til meg",
+  ask_interviewer_personal: "Jeg spør: personlig",
+  ask_interviewer_company: "Jeg spør: om bedriften"
+};
+
+export function isQuestionAudience(value: string): value is QuestionAudience {
+  return (questionAudiences as readonly string[]).includes(value);
+}
+
+/** Questions the candidate asks the interviewer always use a fixed category. */
+export function categoryForAudience(audience: QuestionAudience, category: QuestionCategory): QuestionCategory {
+  if (audience === "ask_interviewer_company") return "company";
+  if (audience === "ask_interviewer_personal") return "personal";
+  return category;
+}
+
+export const bankQuestionStatuses = ["active", "discarded"] as const;
+export type BankQuestionStatus = (typeof bankQuestionStatuses)[number];
+
+export const bankQuestionOrigins = ["rule", "llm", "split", "manual"] as const;
+export type BankQuestionOrigin = (typeof bankQuestionOrigins)[number];
+
+export const questionDiscardReasons = [
+  "instruks_til_intervjuer",
+  "tips",
+  "selvrefleksjon",
+  "mal",
+  "duplikat",
+  "ikke_sporsmal",
+  "manuelt"
+] as const;
+export type QuestionDiscardReason = (typeof questionDiscardReasons)[number];
+
+export const questionDiscardReasonLabels: Record<QuestionDiscardReason, string> = {
+  instruks_til_intervjuer: "Instruks til intervjuer",
+  tips: "Tips/råd",
+  selvrefleksjon: "Selvrefleksjon",
+  mal: "Mal/standardsvar",
+  duplikat: "Duplikat",
+  ikke_sporsmal: "Ikke et spørsmål",
+  manuelt: "Forkastet manuelt"
+};
 
 export const caseSourceKinds = ["casebook", "single_case", "exhibit_pack", "topic_list", "mini_cases"] as const;
 export type CaseSourceKind = (typeof caseSourceKinds)[number];
@@ -121,5 +190,11 @@ export function canDeleteImportJob(status: ImportJobStatus): boolean {
   return deletableImportJobStatusSet.has(status);
 }
 
-export const importJobKinds = ["cases", "questions"] as const;
+export const importJobKinds = ["cases", "questions", "questions_cleanup"] as const;
 export type ImportJobKind = (typeof importJobKinds)[number];
+
+export const importJobKindLabels: Record<ImportJobKind, string> = {
+  cases: "Case-import",
+  questions: "Spørsmålsuttrekk",
+  questions_cleanup: "KI-opprydding"
+};

@@ -2,6 +2,8 @@ import type { CompanyProfile } from "./companyProfile.js";
 import type { CompanyReport } from "./companyReport.js";
 import type { PrepPlanPipelineStep } from "./prepPlanState.js";
 import type {
+  BankQuestionOrigin,
+  BankQuestionStatus,
   CaseApprovalStatus,
   CaseSourceKind,
   CaseStyle,
@@ -12,7 +14,9 @@ import type {
   PrepFormat,
   PrepPlanStatus,
   PrepQuestionSource,
+  QuestionAudience,
   QuestionCategory,
+  QuestionDiscardReason,
   QuestionTarget,
   ResearchModel,
   StarRubricCriterion
@@ -48,9 +52,23 @@ export interface InterviewBankQuestionDto {
   knowledgeDocId: string;
   text: string;
   category: QuestionCategory;
+  audience: QuestionAudience;
+  status: BankQuestionStatus;
+  discardReason?: QuestionDiscardReason;
+  origin: BankQuestionOrigin;
+  /** Text as first extracted from the document, before any cleanup rewrite. */
+  sourceText: string;
   tags: string[];
   contentHash: string;
+  /** Set once the cleanup agent (or the user) has reviewed the question. */
+  cleanedAt?: string;
   createdAt: string;
+}
+
+export interface InterviewBankQuestionSummaryDto {
+  byAudience: Record<QuestionAudience, number>;
+  discarded: number;
+  uncleaned: number;
 }
 
 export interface InterviewCaseEntryDto extends InterviewCasePublicDto {
@@ -69,6 +87,7 @@ export interface InterviewPrepQuestionDto {
   id: string;
   text: string;
   category: QuestionCategory;
+  audience: QuestionAudience;
   target: QuestionTarget;
   sortOrder: number;
   source: PrepQuestionSource;
@@ -135,7 +154,23 @@ export interface InterviewSimulatorSettingsDto {
   companyName: string;
   tone: string;
   language: string;
+  /** Effective sheet: the user's own text, or the default for the mode. */
   essentialsSheet: string;
+  essentialsIsDefault: boolean;
+}
+
+/** Settings as saved by the client. `essentialsSheet: null` resets to the default. */
+export interface InterviewSimulatorSettingsInput {
+  mode: InterviewMode;
+  companyName: string;
+  tone: string;
+  language: string;
+  essentialsSheet: string | null;
+}
+
+export interface EssentialsDraftDto {
+  draft: string;
+  sourceDocTitles: string[];
 }
 
 export interface InterviewSessionDto {
