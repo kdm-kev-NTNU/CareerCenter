@@ -1,4 +1,4 @@
-import { defineComponent } from "vue";
+import { defineComponent, ref, shallowRef } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryHistory, createRouter } from "vue-router";
@@ -24,6 +24,20 @@ vi.mock("../../api/interviewPrep.js", () => ({
     createVoiceSession: vi.fn()
   }
 }));
+
+vi.mock("../../composables/useMediaStream.js", () => {
+  const stream = shallowRef({
+    getTracks: () => [{ kind: "audio", stop: vi.fn() }]
+  });
+  return {
+    useMediaStream: () => ({
+      stream,
+      acquire: vi.fn(async () => undefined),
+      release: vi.fn(),
+      error: ref(null)
+    })
+  };
+});
 
 const api = vi.mocked(interviewPrepApi);
 const Stub = defineComponent({ template: "<div />" });
@@ -77,7 +91,7 @@ async function mountView(path = "/interview/simulator") {
   });
   await router.push(path);
   const wrapper = mount(InterviewSimulatorView, {
-    global: { plugins: [router], stubs: { EssentialsSheetEditor: true, MediaDeviceCheck: true } }
+    global: { plugins: [router], stubs: { EssentialsSheetEditor: true } }
   });
   await flushPromises();
   return { wrapper, router };
@@ -164,11 +178,12 @@ describe("InterviewSimulatorView plan picker", () => {
     api.createSession.mockResolvedValue({ id: "s1" } as Awaited<ReturnType<typeof api.createSession>>);
     const { wrapper } = await mountView("/interview/simulator?planId=a");
 
-    await wrapper.findAll("button").find((b) => b.text() === "Start ny sesjon")!.trigger("click");
+    await wrapper.get("[data-test='start-recording']").trigger("click");
     await flushPromises();
 
     expect(wrapper.text()).not.toContain("Test-sesjon");
     expect(wrapper.text()).not.toContain("Tekst");
+    expect(wrapper.text()).not.toContain("Stemme-sesjon");
     expect(api.createSession).toHaveBeenCalledWith(
       expect.objectContaining({ prepPlanId: "a", title: "Øving: Bedrift a" })
     );

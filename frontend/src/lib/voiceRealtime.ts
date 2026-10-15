@@ -2,6 +2,7 @@
  * Minimal WebRTC connect to OpenAI Realtime using an ephemeral client secret.
  * Never receives or stores the API key.
  */
+
 export async function connectRealtimeVoice(input: {
   clientSecret: string;
   model: string;
@@ -19,6 +20,14 @@ export async function connectRealtimeVoice(input: {
   };
 
   const dc = pc.createDataChannel("oai-events");
+  dc.onopen = () => {
+    // Ephemeral sessions wait for a client trigger; kick off the interviewer intro.
+    try {
+      dc.send(JSON.stringify({ type: "response.create" }));
+    } catch {
+      // Channel may close during teardown.
+    }
+  };
   dc.onmessage = (event) => {
     try {
       const payload = JSON.parse(String(event.data)) as {
@@ -55,14 +64,13 @@ export async function connectRealtimeVoice(input: {
     },
     body: offer.sdp ?? ""
   });
+  const bodyText = await response.text().catch(() => "");
   if (!response.ok) {
     pc.close();
-    const detail = await response.text().catch(() => "");
-    const suffix = detail ? `: ${detail.slice(0, 200)}` : ".";
+    const suffix = bodyText ? `: ${bodyText.slice(0, 200)}` : ".";
     throw new Error(`Realtime-tilkobling feilet (${response.status})${suffix}`);
   }
-  const answer = await response.text();
-  await pc.setRemoteDescription({ type: "answer", sdp: answer });
+  await pc.setRemoteDescription({ type: "answer", sdp: bodyText });
 
   return {
     pc,

@@ -18,6 +18,8 @@ describe("connectRealtimeVoice", () => {
       ontrack: null
     };
 
+    const sent: string[] = [];
+    let openChannel: (() => void) | null = null;
     class FakeRTCPeerConnection {
       addTrack = vi.fn();
       createOffer = vi.fn(async () => ({ type: "offer", sdp: "v=0" }));
@@ -31,6 +33,10 @@ describe("connectRealtimeVoice", () => {
         set onmessage(fn: ((event: MessageEvent) => void) | null) {
           handlers.onmessage = fn;
         },
+        set onopen(fn: (() => void) | null) {
+          openChannel = fn;
+        },
+        send: (data: string) => sent.push(data),
         close: closeDc
       }));
       set ontrack(fn: ((event: RTCTrackEvent) => void) | null) {
@@ -77,6 +83,9 @@ describe("connectRealtimeVoice", () => {
         headers: expect.objectContaining({ Authorization: "Bearer ephemeral" })
       })
     );
+
+    openChannel?.();
+    expect(sent).toEqual([JSON.stringify({ type: "response.create" })]);
 
     handlers.ontrack?.({ streams: [stream] } as unknown as RTCTrackEvent);
     handlers.onmessage?.({

@@ -14,7 +14,6 @@ import { RouterLink, useRoute, useRouter } from "vue-router";
 import { interviewPrepApi } from "../../api/interviewPrep.js";
 import { toneForPrepPlanStatus } from "../../components/interview/statusTone.js";
 import EssentialsSheetEditor from "../../components/interview/EssentialsSheetEditor.vue";
-import MediaDeviceCheck from "../../components/interview/MediaDeviceCheck.vue";
 import { useMediaStream } from "../../composables/useMediaStream.js";
 import { printEssentialsSheet } from "../../lib/printEssentials.js";
 import { connectRealtimeVoice } from "../../lib/voiceRealtime.js";
@@ -29,19 +28,24 @@ const mode = ref<InterviewMode>("behavioral_mock");
 const settings = ref<InterviewSimulatorSettingsDto | null>(null);
 const session = ref<InterviewSessionDto | null>(null);
 const messages = ref<InterviewMessageDto[]>([]);
-const voiceDraft = ref("");
-const voiceSession = ref<VoiceSessionDto | null>(null);
-const voiceReady = ref(false);
-const voiceDevices = ref<{ audioDeviceId?: string; videoDeviceId?: string }>({});
+const voiceLive = ref(false);
 const cases = ref<InterviewCasePublicDto[]>([]);
 const caseEntryId = ref("");
 const prepPlan = ref<InterviewPrepPlanDto | null>(null);
 const savedPlans = ref<InterviewPrepPlanDto[]>([]);
-const { stream: voiceStream, acquire: acquireVoiceStream, release: releaseVoiceStream } = useMediaStream();
+const {
+  stream: voiceStream,
+  acquire: acquireVoiceStream,
+  release: releaseVoiceStream,
+  error: mediaError
+} = useMediaStream();
 const loading = ref(false);
+const finishing = ref(false);
 const error = ref<string | null>(null);
 const aiConfigured = ref(false);
 let stopRealtime: (() => void) | null = null;
+/** Ephemeral secrets are single-use; block overlapping connects. */
+let connectVoiceInFlight = false;
 
 const LAST_PLAN_KEY = "careercenter:simulator-plan";
 
@@ -78,24 +82,6 @@ const planLabel = computed(() => {
   if (!prepPlan.value) return null;
   const count = prepPlan.value.questions.filter((q) => q.included && q.audience === "candidate").length;
   return `Plan: ${prepPlan.value.companyName} (${count} spørsmål)`;
-});
-
-const voiceDeviceCheckActive = () => Boolean(session.value) && !session.value?.finishedAt;
-
-async function syncVoiceStream() {
-  if (!voiceDeviceCheckActive()) {
-    releaseVoiceStream();
-    return;
-  }
-  await acquireVoiceStream({
-    needCamera: false,
-    needMicrophone: true,
-    audioDeviceId: voiceDevices.value.audioDeviceId
-  });
-}
-
-watch(session, () => {
-  void syncVoiceStream();
 });
 
 async function loadSettings() {
@@ -180,13 +166,40 @@ function onEssentialsChange(sheet: string, isDefault: boolean) {
   settings.value = { ...settings.value, essentialsSheet: sheet, essentialsIsDefault: isDefault };
 }
 
+/** Mint immediately before /calls — ephemeral secrets are single-use. */
+async function connectFreshVoice(sessionId: string, voice: VoiceSessionDto) {
+  if (connectVoiceInFlight) return;
+  connectVoiceInFlight = true;
+  try {
+    if (!voiceStream.value) throw new Error("Mikrofon er ikke klar.");
+    const connection = await connectRealtimeVoice({
+      clientSecret: voice.clientSecret,
+      model: voice.model,
+      stream: voiceStream.value,
+      onTranscript: (role, text) => {
+        void interviewPrepApi.appendTranscript(sessionId, { role, content: text }).then((saved) => {
+          messages.value.push(saved);
+        });
+      },
+      onToolCall: (name) => {
+        if (name === "end_interview") void finishSession();
+      }
+    });
+    stopRealtime = connection.stop;
+    voiceLive.value = true;
+  } finally {
+    connectVoiceInFlight = false;
+  }
+}
+
 async function startSession() {
+  if (loading.value || connectVoiceInFlight) return;
   loading.value = true;
   error.value = null;
-  voiceSession.value = null;
-  voiceReady.value = false;
+  voiceLive.value = false;
   stopRealtime?.();
   stopRealtime = null;
+  releaseVoiceStream();
   try {
     await saveSettings();
     session.value = await interviewPrepApi.createSession({
@@ -196,69 +209,47 @@ async function startSession() {
       caseEntryId: mode.value === "case_oral" && caseEntryId.value ? caseEntryId.value : undefined
     });
     messages.value = (await interviewPrepApi.sessionMessages(session.value.id)).filter((m) => m.role !== "system");
-    voiceSession.value = await interviewPrepApi.createVoiceSession(session.value.id);
+
+    await acquireVoiceStream({ needCamera: false, needMicrophone: true });
+    if (!voiceStream.value) {
+      error.value = mediaError.value ?? "Tillat mikrofon for å starte opptak.";
+      return;
+    }
+
+    // Mint immediately before connect so the secret cannot be reused or go stale in the UI.
+    const voice = await interviewPrepApi.createVoiceSession(session.value.id);
+    if (voice.mock) {
+      error.value = "Stemme er ikke konfigurert (mock). Sett OPENAI_API_KEY for live intervju.";
+      return;
+    }
+
+    await connectFreshVoice(session.value.id, voice);
   } catch (err) {
-    error.value = err instanceof Error ? err.message : "Kunne ikke starte sesjon.";
+    error.value = err instanceof Error ? err.message : "Kunne ikke starte opptak.";
+    voiceLive.value = false;
+    stopRealtime?.();
+    stopRealtime = null;
   } finally {
     loading.value = false;
   }
 }
 
-async function connectVoiceLive() {
-  if (!voiceSession.value || voiceSession.value.mock || !voiceStream.value || !session.value) return;
-  try {
-    const connection = await connectRealtimeVoice({
-      clientSecret: voiceSession.value.clientSecret,
-      model: voiceSession.value.model,
-      stream: voiceStream.value,
-      onTranscript: (role, text) => {
-        void interviewPrepApi.appendTranscript(session.value!.id, { role, content: text }).then((saved) => {
-          messages.value.push(saved);
-        });
-      },
-      onToolCall: (name) => {
-        if (name === "end_interview") void finishSession();
-      }
-    });
-    stopRealtime = connection.stop;
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : "Kunne ikke koble til stemme.";
-  }
-}
-
-async function appendVoiceLine(role: "user" | "assistant") {
-  if (!session.value || !voiceDraft.value.trim()) return;
-  const content = voiceDraft.value.trim();
-  voiceDraft.value = "";
-  const saved = await interviewPrepApi.appendTranscript(session.value.id, { role, content });
-  messages.value.push(saved);
-}
-
 async function finishSession() {
-  if (!session.value) return;
+  if (!session.value || finishing.value) return;
+  finishing.value = true;
+  error.value = null;
+  // Tear down media first — finishSession API waits on LLM feedback and must not keep the call open.
+  stopRealtime?.();
+  stopRealtime = null;
+  voiceLive.value = false;
+  releaseVoiceStream();
   try {
     session.value = await interviewPrepApi.finishSession(session.value.id);
-    stopRealtime?.();
-    stopRealtime = null;
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Kunne ikke avslutte.";
+  } finally {
+    finishing.value = false;
   }
-}
-
-function onVoiceDevicesReady(devices: { audioDeviceId?: string; videoDeviceId?: string }) {
-  voiceDevices.value = { ...devices };
-  voiceReady.value = true;
-  if (voiceDeviceCheckActive()) void syncVoiceStream();
-}
-
-function onVoiceDevicesChange(devices: { audioDeviceId?: string; videoDeviceId?: string }) {
-  voiceDevices.value = { ...devices };
-  if (voiceDeviceCheckActive()) void syncVoiceStream();
-}
-
-function onVoiceDevicesFailed(reason: string) {
-  error.value = reason;
-  voiceReady.value = false;
 }
 
 function chatRole(role: string): "user" | "assistant" {
@@ -332,35 +323,16 @@ function printEssentials() {
         </div>
       </template>
       <div class="form-grid">
-        <AppButton :loading="loading" @click="startSession()">Start ny sesjon</AppButton>
+        <AppButton
+          data-test="start-recording"
+          :loading="loading"
+          :disabled="voiceLive"
+          @click="startSession()"
+        >
+          {{ voiceLive ? "Opptak pågår" : "Start opptak" }}
+        </AppButton>
       </div>
-    </article>
-
-    <MediaDeviceCheck
-      v-if="session && !session.finishedAt"
-      :stream="voiceStream"
-      :need-camera="false"
-      @ready="onVoiceDevicesReady"
-      @change="onVoiceDevicesChange"
-      @failed="onVoiceDevicesFailed"
-    />
-
-    <article v-if="session && voiceSession" class="panel stack">
-      <h3>Stemme-sesjon</h3>
-      <p class="field-hint">
-        Modell {{ voiceSession.model }} · {{ voiceSession.mock ? "mock" : "live" }} · utløper
-        {{ new Date(voiceSession.expiresAt).toLocaleTimeString("nb-NO") }}
-      </p>
-      <p v-if="!voiceReady" class="field-hint">Tillat mikrofon for å fortsette.</p>
-      <template v-else>
-        <AppButton v-if="!voiceSession.mock" @click="connectVoiceLive">Koble til live stemme</AppButton>
-        <p v-else class="field-hint">Mock: skriv det som «ble sagt» og lagre som transkripsjon.</p>
-        <textarea v-model="voiceDraft" rows="2" placeholder="Transkripsjonslinje …" />
-        <div class="form-grid">
-          <AppButton @click="appendVoiceLine('user')">Lagre som deg</AppButton>
-          <AppButton variant="ghost" @click="appendVoiceLine('assistant')">Lagre som intervjuer</AppButton>
-        </div>
-      </template>
+      <p v-if="voiceLive" class="field-hint" data-test="voice-live-hint">Live stemme er tilkoblet — intervjueren starter.</p>
     </article>
 
     <article v-if="session" class="panel stack">
@@ -373,8 +345,13 @@ function printEssentials() {
           :content="message.content"
         />
       </div>
-      <AppButton variant="secondary" :disabled="!!session.finishedAt" @click="finishSession">
-        Avslutt og hent feedback
+      <AppButton
+        variant="secondary"
+        :loading="finishing"
+        :disabled="!!session.finishedAt || finishing"
+        @click="finishSession"
+      >
+        {{ finishing ? "Henter feedback …" : "Avslutt og hent feedback" }}
       </AppButton>
       <div v-if="session.feedback" class="panel">
         <h4>Feedback (sum {{ session.feedback.sum }})</h4>
