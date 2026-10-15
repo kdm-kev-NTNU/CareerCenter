@@ -43,9 +43,19 @@ const loading = ref(false);
 const finishing = ref(false);
 const error = ref<string | null>(null);
 const aiConfigured = ref(false);
-let stopRealtime: (() => void) | null = null;
+/**
+ * Shared stop handle. connectFreshVoice writes it from another function, so a
+ * `let` would stay narrowed to null in startSession's catch.
+ */
+const voiceConnection: { stop: (() => void) | null } = { stop: null };
 /** Ephemeral secrets are single-use; block overlapping connects. */
 let connectVoiceInFlight = false;
+
+function stopVoiceConnection() {
+  const stop = voiceConnection.stop;
+  voiceConnection.stop = null;
+  stop?.();
+}
 
 const LAST_PLAN_KEY = "careercenter:simulator-plan";
 
@@ -146,8 +156,7 @@ watch(
 );
 
 onBeforeUnmount(() => {
-  stopRealtime?.();
-  stopRealtime = null;
+  stopVoiceConnection();
   releaseVoiceStream();
 });
 
@@ -185,7 +194,7 @@ async function connectFreshVoice(sessionId: string, voice: VoiceSessionDto) {
         if (name === "end_interview") void finishSession();
       }
     });
-    stopRealtime = connection.stop;
+    voiceConnection.stop = connection.stop;
     voiceLive.value = true;
   } finally {
     connectVoiceInFlight = false;
@@ -197,8 +206,7 @@ async function startSession() {
   loading.value = true;
   error.value = null;
   voiceLive.value = false;
-  stopRealtime?.();
-  stopRealtime = null;
+  stopVoiceConnection();
   releaseVoiceStream();
   try {
     await saveSettings();
@@ -227,8 +235,7 @@ async function startSession() {
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Kunne ikke starte opptak.";
     voiceLive.value = false;
-    stopRealtime?.();
-    stopRealtime = null;
+    stopVoiceConnection();
   } finally {
     loading.value = false;
   }
@@ -239,8 +246,7 @@ async function finishSession() {
   finishing.value = true;
   error.value = null;
   // Tear down media first — finishSession API waits on LLM feedback and must not keep the call open.
-  stopRealtime?.();
-  stopRealtime = null;
+  stopVoiceConnection();
   voiceLive.value = false;
   releaseVoiceStream();
   try {
