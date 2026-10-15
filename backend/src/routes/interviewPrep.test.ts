@@ -80,22 +80,25 @@ describe("interview prep routes", () => {
     structuredResult?: unknown;
     structuredResults?: unknown[];
     structuredError?: Error;
+    structuredErrors?: Error[];
     configured?: boolean;
     transcribeResult?: string;
+    transcribeError?: Error;
     repo?: InterviewPrepMemoryRepository;
   } = {}) {
     const interviewPrepRepository = options.repo ?? new InterviewPrepMemoryRepository();
     const llmClient = new FakeLlmClient({
       configured: options.configured ?? true,
       transcribeResult: options.transcribeResult ?? "Jeg ledet et prosjekt som reduserte feil med 20%.",
+      transcribeError: options.transcribeError,
       structuredResult: options.structuredResult ?? {
         clarifications: [{ question: "Hvilken rolle?" }],
         scores: Object.fromEntries(starRubricCriteria.map((key) => [key, 3])),
-        sum: 24,
         improvement: "ok"
       },
       structuredResults: options.structuredResults,
-      structuredError: options.structuredError
+      structuredError: options.structuredError,
+      structuredErrors: options.structuredErrors
     });
     const app = await buildServer({
       repository: new MemoryRepository(),
@@ -237,7 +240,7 @@ describe("interview prep routes", () => {
         },
         { clarifications: [{ question: "Hvilken rolle?" }] },
         {
-          selectedQuestionIds: bank.map((q) => q.id),
+          selectedRefs: bank.map((_, i) => `Q${i + 1}`),
           generatedQuestions: [],
           tasks: [{ title: "Les årsrapport", description: "" }]
         }
@@ -304,6 +307,102 @@ describe("interview prep routes", () => {
     const finished = await app.inject({ method: "POST", url: `/api/interview/sessions/${sessionId}/finish` });
     expect(finished.statusCode).toBe(200);
     expect(finished.json().feedback.sum).toBe(32);
+    await app.close();
+  });
+
+  it("resumes a failed curation plan from the failed step", async () => {
+    const mainRepo = new MemoryRepository();
+    const interviewPrepRepository = new InterviewPrepMemoryRepository();
+    const llmClient = new FakeLlmClient({
+      configured: true,
+      structuredResults: [
+        {
+          selectedRefs: Array.from({ length: 30 }, (_, i) => `Q${i + 1}`),
+          generatedQuestions: [],
+          tasks: []
+        }
+      ]
+    });
+    const app = await buildServer({
+      repository: mainRepo,
+      authDisabled: true,
+      llmClient,
+      interviewPrepRepository
+    });
+    await app.ready();
+    await app.inject({ method: "GET", url: "/api/interview/status" });
+    const user = await mainRepo.findUserByName("__test__");
+    expect(user).toBeTruthy();
+
+    const doc = await interviewPrepRepository.createKnowledgeDoc(user!.id, {
+      kind: "star",
+      title: "Bank",
+      content: "x",
+      contentHash: "resume-route-user"
+    });
+    await interviewPrepRepository.insertBankQuestions(
+      user!.id,
+      doc.id,
+      Array.from({ length: 35 }, (_, i) => ({
+        text: `Resume route Q ${i}?`,
+        category: "behavioral" as const,
+        tags: [],
+        origin: "rule" as const,
+        contentHash: `resume-route-q-${i}`
+      }))
+    );
+
+    const plan = await interviewPrepRepository.createPrepPlan(user!.id, {
+      companyName: "ResumeRoute",
+      roleTitle: "X",
+      format: "interview",
+      researchModel: "gpt-6-astra"
+    });
+    await interviewPrepRepository.setPrepPlanPipeline(user!.id, plan.id, {
+      pipelineStep: "curating_questions",
+      researchNotes: "notes",
+      companyProfileJson: JSON.stringify({
+        industries: [],
+        businessAreas: [],
+        interviewFormats: [],
+        caseTypes: [],
+        values: [],
+        themes: [],
+        summary: ""
+      }),
+      companyReportJson: JSON.stringify({
+        headline: "",
+        keyFacts: {},
+        aboutCompany: "",
+        businessAreas: [],
+        strategyAndNews: [],
+        cultureAndValues: [],
+        roleInContext: "",
+        jobAdRequirements: [],
+        nicheInsights: [],
+        companyQuestionPrep: [],
+        interviewAngles: [],
+        questionsToAsk: [],
+        sources: []
+      })
+    });
+    await interviewPrepRepository.setPrepPlanResearch(user!.id, plan.id, {
+      researchNotes: "notes",
+      clarificationRound: 1,
+      clarifications: [{ question: "Team?", sortOrder: 0 }]
+    });
+    await interviewPrepRepository.updatePrepPlanStatus(user!.id, plan.id, "failed", "Kuratering feilet.");
+    await interviewPrepRepository.setPrepPlanPipeline(user!.id, plan.id, {
+      pipelineStep: "curating_questions"
+    });
+
+    const resumed = await app.inject({ method: "POST", url: `/api/interview/plans/${plan.id}/resume` });
+    expect(resumed.statusCode).toBe(202);
+    expect(resumed.json().status).toBe("curating");
+
+    const ready = await waitForPlanStatus(app, plan.id, "ready");
+    expect(ready.questions.length).toBeGreaterThanOrEqual(30);
+    expect(ready.pipelineStep).toBe("ready");
     await app.close();
   });
 
@@ -382,7 +481,6 @@ describe("interview prep routes", () => {
   it("transcribes multipart audio and rates with prompt context", async () => {
     const rubric = {
       scores: Object.fromEntries(starRubricCriteria.map((key) => [key, 4])),
-      sum: 32,
       improvement: "Bra tempo."
     };
     const { app, llmClient } = await buildInterviewApp({
@@ -407,7 +505,7 @@ describe("interview prep routes", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json().transcript).toBe("Jeg leverte funksjonen før deadline.");
     expect(response.json().feedback.sum).toBe(32);
-    expect(response.json().feedbackFallback).toBe(false);
+    expect(response.json().rating).toBe("ok");
     expect(llmClient.transcribeCalls).toHaveLength(1);
     expect(llmClient.transcribeCalls[0]!.buffer.toString()).toContain("fake-audio-bytes");
     const rubricUser = llmClient.structuredCalls.at(-1)?.options.messages.find((m) => m.role === "user")?.content;
@@ -416,7 +514,7 @@ describe("interview prep routes", () => {
     await app.close();
   });
 
-  it("marks feedbackFallback when rubric AI fails", async () => {
+  it("returns rating unavailable without fake scores when rubric AI fails", async () => {
     const { app } = await buildInterviewApp({
       structuredError: new Error("rubric down"),
       transcribeResult: "Et kort svar."
@@ -433,8 +531,101 @@ describe("interview prep routes", () => {
       )
     });
     expect(response.statusCode).toBe(200);
-    expect(response.json().feedbackFallback).toBe(true);
-    expect(response.json().feedback.sum).toBe(24);
+    expect(response.json().rating).toBe("unavailable");
+    expect(response.json().feedback).toBeNull();
+    expect(response.json().transcript).toBe("Et kort svar.");
+    await app.close();
+  });
+
+  it("returns 422 when transcription is empty", async () => {
+    const { app } = await buildInterviewApp({
+      transcribeResult: "   "
+    });
+    const boundary = "----VideoEmptyBoundary";
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/interview/video/transcribe",
+      headers: { "content-type": `multipart/form-data; boundary=${boundary}` },
+      payload: multipartPayload(
+        boundary,
+        { withRubric: "true" },
+        { filename: "answer.webm", contentType: "audio/webm", body: "silence" }
+      )
+    });
+    expect(response.statusCode).toBe(422);
+    expect(response.json().message).toMatch(/ingen tale/i);
+    await app.close();
+  });
+
+  it("returns 502 when transcription fails after retry", async () => {
+    const { app, llmClient } = await buildInterviewApp({
+      transcribeError: new Error("upstream down")
+    });
+    const boundary = "----VideoTranscribeFailBoundary";
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/interview/video/transcribe",
+      headers: { "content-type": `multipart/form-data; boundary=${boundary}` },
+      payload: multipartPayload(
+        boundary,
+        { withRubric: "true" },
+        { filename: "answer.webm", contentType: "audio/webm", body: "audio" }
+      )
+    });
+    expect(response.statusCode).toBe(502);
+    expect(response.json().message).toMatch(/Transkribering feilet/i);
+    expect(llmClient.transcribeCalls.length).toBeGreaterThanOrEqual(2);
+    await app.close();
+  });
+
+  it("re-rates an existing transcript via /video/rate", async () => {
+    const { app } = await buildInterviewApp({
+      structuredResult: {
+        scores: Object.fromEntries(starRubricCriteria.map((key) => [key, 4])),
+        improvement: "Bra."
+      }
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/interview/video/rate",
+      payload: {
+        prompt: "Fortell om en utfordring",
+        transcript: "Jeg løste problemet.",
+        durationMs: 30_000
+      }
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().rating).toBe("ok");
+    expect(response.json().feedback.sum).toBe(32);
+    await app.close();
+  });
+
+  it("keeps session open when finish rubric fails", async () => {
+    const { app } = await buildInterviewApp({
+      structuredError: new Error("rubric down")
+    });
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/interview/sessions",
+      payload: { mode: "behavioral_mock", title: "Finish fail" }
+    });
+    const sessionId = created.json().id as string;
+    await app.inject({
+      method: "POST",
+      url: `/api/interview/sessions/${sessionId}/messages`,
+      payload: { content: "Jeg ledet teamet." }
+    });
+
+    const finish = await app.inject({
+      method: "POST",
+      url: `/api/interview/sessions/${sessionId}/finish`
+    });
+    expect(finish.statusCode).toBe(502);
+    expect(finish.json().message).toMatch(/KI-vurdering feilet/i);
+
+    const listed = await app.inject({ method: "GET", url: "/api/interview/sessions" });
+    const session = listed.json().find((row: { id: string }) => row.id === sessionId);
+    expect(session?.finishedAt).toBeFalsy();
     await app.close();
   });
 
