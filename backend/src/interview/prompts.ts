@@ -152,7 +152,7 @@ export function buildCompanyReportSystemPrompt(companyName: string, roleTitle: s
     "Du lager en kort bedriftsrapport på norsk (1–2 sider) som kandidaten kan lese før intervju.",
     "HOVEDMÅL: finn nisje-info om bedriften som kandidaten kan bruke til å svare på bedriftsspesifikke spørsmål (category company), ikke generisk bedriftsblabla.",
     "nicheInsights: konkrete, differensierende fakta (produkter, deals, strategiskift, kultur-signaler, konkurranseposisjon) som gjør «Hvorfor oss?»-svar unike.",
-    "companyQuestionPrep: 3–6 typiske bedriftsspesifikke spørsmål med answerAngle (hvordan svare) og nicheHooks (hvilke nisje-fakta som skal inn i svaret).",
+    "companyQuestionPrep: 3–4 typiske bedriftsspesifikke spørsmål med answerAngle (hvordan svare) og nicheHooks (hvilke nisje-fakta som skal inn i svaret).",
     "Alt innhold skal være relevant for stillingsannonsen og rollen.",
     "Ikke finn på tall, fakta eller sitater. Hvis noe er usikkert, utelat det.",
     "Hold tekstene korte: overhold feltgrensene i JSON-skjemaet.",

@@ -18,7 +18,7 @@ export function renderCompanyReportPdf(
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({
       size: "A4",
-      margins: { top: 40, bottom: 40, left: 48, right: 48 },
+      margins: { top: 36, bottom: 36, left: 42, right: 42 },
       info: {
         Title: `Bedriftsrapport – ${meta.companyName}`,
         Author: "CareerCenter"
@@ -32,19 +32,19 @@ export function renderCompanyReportPdf(
 
     const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
 
-    doc.font("Helvetica-Bold").fontSize(13).fillColor("#111111");
+    doc.font("Helvetica-Bold").fontSize(12).fillColor("#111111");
     doc.text(report.headline || `Bedriftsrapport: ${meta.companyName}`, {
       width: pageWidth,
       align: "left"
     });
-    doc.moveDown(0.2);
+    doc.moveDown(0.15);
 
-    doc.font("Helvetica").fontSize(8.5).fillColor("#444444");
+    doc.font("Helvetica").fontSize(8).fillColor("#444444");
     const subtitle = [meta.companyName, meta.roleTitle.trim() || null, formatDate(meta.generatedAt)]
       .filter(Boolean)
       .join(" · ");
     doc.text(subtitle, { width: pageWidth });
-    doc.moveDown(0.45);
+    doc.moveDown(0.3);
 
     writeKeyFacts(doc, report, pageWidth);
 
@@ -95,13 +95,13 @@ function writeKeyFacts(
 
   if (facts.length === 0) return;
 
-  ensureSpace(doc, 48);
-  doc.font("Helvetica-Bold").fontSize(9.5).fillColor("#111111");
+  ensureSpace(doc, 40);
+  doc.font("Helvetica-Bold").fontSize(9).fillColor("#111111");
   doc.text("Nøkkelfakta", { width: pageWidth });
-  doc.moveDown(0.12);
-  doc.font("Helvetica").fontSize(8.5).fillColor("#222222");
-  doc.text(facts.map((f) => `• ${f}`).join("  "), { width: pageWidth });
-  doc.moveDown(0.35);
+  doc.moveDown(0.08);
+  doc.font("Helvetica").fontSize(8).fillColor("#222222");
+  doc.text(facts.map((f) => `• ${f}`).join("  "), { width: pageWidth, lineGap: 0 });
+  doc.moveDown(0.25);
 }
 
 function writeSection(
@@ -112,13 +112,13 @@ function writeSection(
 ): void {
   const text = body.trim();
   if (!text) return;
-  ensureSpace(doc, 40);
-  doc.font("Helvetica-Bold").fontSize(9.5).fillColor("#111111");
+  ensureSpace(doc, 32);
+  doc.font("Helvetica-Bold").fontSize(9).fillColor("#111111");
   doc.text(title, { width: pageWidth });
-  doc.moveDown(0.1);
-  doc.font("Helvetica").fontSize(8.5).fillColor("#222222");
-  doc.text(text, { width: pageWidth, align: "left", lineGap: 1 });
-  doc.moveDown(0.35);
+  doc.moveDown(0.06);
+  doc.font("Helvetica").fontSize(8).fillColor("#222222");
+  doc.text(text, { width: pageWidth, align: "left", lineGap: 0 });
+  doc.moveDown(0.25);
 }
 
 function writeBullets(
@@ -129,16 +129,16 @@ function writeBullets(
 ): void {
   const cleaned = items.map((i) => i.trim()).filter(Boolean);
   if (cleaned.length === 0) return;
-  ensureSpace(doc, 32);
-  doc.font("Helvetica-Bold").fontSize(9.5).fillColor("#111111");
+  ensureSpace(doc, 28);
+  doc.font("Helvetica-Bold").fontSize(9).fillColor("#111111");
   doc.text(title, { width: pageWidth });
-  doc.moveDown(0.1);
-  doc.font("Helvetica").fontSize(8.5).fillColor("#222222");
+  doc.moveDown(0.06);
+  doc.font("Helvetica").fontSize(8).fillColor("#222222");
   for (const item of cleaned) {
-    ensureSpace(doc, 22);
-    doc.text(`• ${item}`, { width: pageWidth, lineGap: 1 });
+    ensureSpace(doc, 18);
+    doc.text(`• ${item}`, { width: pageWidth, lineGap: 0 });
   }
-  doc.moveDown(0.35);
+  doc.moveDown(0.25);
 }
 
 function writeRequirements(
@@ -147,17 +147,17 @@ function writeRequirements(
   pageWidth: number
 ): void {
   if (!requirements.length) return;
-  ensureSpace(doc, 32);
-  doc.font("Helvetica-Bold").fontSize(9.5).fillColor("#111111");
+  ensureSpace(doc, 28);
+  doc.font("Helvetica-Bold").fontSize(9).fillColor("#111111");
   doc.text("Krav fra annonsen – hvordan vise fit", { width: pageWidth });
-  doc.moveDown(0.1);
-  doc.font("Helvetica").fontSize(8.5).fillColor("#222222");
+  doc.moveDown(0.06);
+  doc.font("Helvetica").fontSize(8).fillColor("#222222");
   for (const item of requirements) {
-    ensureSpace(doc, 28);
-    doc.font("Helvetica-Bold").text(`• ${item.requirement}`, { width: pageWidth, lineGap: 1 });
-    doc.font("Helvetica").text(`  → ${item.howToShowFit}`, { width: pageWidth, lineGap: 1 });
+    ensureSpace(doc, 24);
+    doc.font("Helvetica-Bold").text(`• ${item.requirement}`, { width: pageWidth, lineGap: 0 });
+    doc.font("Helvetica").text(`  → ${item.howToShowFit}`, { width: pageWidth, lineGap: 0 });
   }
-  doc.moveDown(0.35);
+  doc.moveDown(0.25);
 }
 
 function writeCompanyQuestionPrep(
@@ -166,20 +166,20 @@ function writeCompanyQuestionPrep(
   pageWidth: number
 ): void {
   if (!items.length) return;
-  ensureSpace(doc, 32);
-  doc.font("Helvetica-Bold").fontSize(9.5).fillColor("#111111");
+  ensureSpace(doc, 28);
+  doc.font("Helvetica-Bold").fontSize(9).fillColor("#111111");
   doc.text("Svarforslag – bedriftsspesifikke spørsmål", { width: pageWidth });
-  doc.moveDown(0.1);
-  doc.font("Helvetica").fontSize(8.5).fillColor("#222222");
+  doc.moveDown(0.06);
+  doc.font("Helvetica").fontSize(8).fillColor("#222222");
   for (const item of items) {
-    ensureSpace(doc, 36);
-    doc.font("Helvetica-Bold").text(`• ${item.question}`, { width: pageWidth, lineGap: 1 });
-    doc.font("Helvetica").text(`  Svarvinkel: ${item.answerAngle}`, { width: pageWidth, lineGap: 1 });
+    ensureSpace(doc, 28);
+    doc.font("Helvetica-Bold").text(`• ${item.question}`, { width: pageWidth, lineGap: 0 });
+    doc.font("Helvetica").text(`  Svarvinkel: ${item.answerAngle}`, { width: pageWidth, lineGap: 0 });
     if (item.nicheHooks.length) {
-      doc.text(`  Hooks: ${item.nicheHooks.join("; ")}`, { width: pageWidth, lineGap: 1 });
+      doc.text(`  Hooks: ${item.nicheHooks.join("; ")}`, { width: pageWidth, lineGap: 0 });
     }
   }
-  doc.moveDown(0.35);
+  doc.moveDown(0.25);
 }
 
 function ensureSpace(doc: PDFKit.PDFDocument, needed: number): void {
