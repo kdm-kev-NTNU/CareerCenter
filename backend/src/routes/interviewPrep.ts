@@ -2,13 +2,20 @@ import {
   answerStats,
   canDeleteImportJob,
   canStartSimulators,
+  categoryForAudience,
   classifyCaseSource,
+  DEFAULT_SIMULATOR_LANGUAGE,
+  DEFAULT_SIMULATOR_TONE,
+  defaultSimulatorSettings,
   defaultVideoSimulatorSettings,
   extractBankQuestions,
   inferKnowledgeKind,
+  normalizeEssentialsInput,
+  resolveEssentialsSheet,
   starRubricCriteria,
   videoSimulatorSettingsSchema
 } from "@careercenter/shared";
+import type { QuestionAudience } from "@careercenter/shared";
 import type { FastifyInstance } from "fastify";
 import { nanoid } from "nanoid";
 import type { LlmClient } from "../ai/llmClient.js";
@@ -29,14 +36,17 @@ import { interviewFeedbackRubricSchema, sumRubricScores } from "../interview/fee
 import { shouldChunkImport } from "../interview/caseSpans.js";
 import { importDocumentText } from "../interview/importDocumentText.js";
 import {
-  cancelImportJob,
-  hasCompletedImportJob,
-  processImportJob
-} from "../interview/importJobService.js";
+  buildEssentialsDraftSystemPrompt,
+  buildEssentialsDraftUserMessage,
+  selectEssentialsSourceDocs
+} from "../interview/essentialsDraft.js";
+import { cancelImportJob, hasCompletedImportJob } from "../interview/importJobService.js";
 import {
   ensureImportJob,
+  queueQuestionCleanup,
   shouldQueueQuestionImport,
-  queueQuestionImportsForSparseDocs
+  queueQuestionImportsForSparseDocs,
+  startImportJob
 } from "../interview/importJobOrchestration.js";
 import { JobCancellationRegistry } from "../interview/jobCancellationRegistry.js";
 import { buildInterviewStoragePath, writeInterviewFile } from "../interview/interviewFileStorage.js";
@@ -46,13 +56,18 @@ import {
 } from "../interview/companyReportPdf.js";
 import {
   addPlanQuestionSchema,
+  bankQuestionQuerySchema,
   caseEntryInputSchema,
   clarificationAnswersSchema,
   companyReportSchema,
   createSessionSchema,
+  discardBankQuestionSchema,
+  essentialsDraftSchema,
   knowledgeDocInputSchema,
+  patchBankQuestionSchema,
   patchPlanQuestionSchema,
   prepPlanIntakeSchema,
+  questionCleanupRequestSchema,
   reorderPlanQuestionsSchema,
   replacePlanQuestionSchema,
   sessionMessageSchema,
@@ -124,6 +139,7 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
       contentHash
     });
     await reindexBankQuestionsForDoc(deps.interviewPrepRepository, request.user.id, doc.id);
+    await queueQuestionCleanup(importDeps, request.user.id, [doc.id]);
     return reply.code(201).send({ doc: toKnowledgeDocDto(doc), deduplicated: false });
   });
 
@@ -142,6 +158,7 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
     );
     if (!doc) return reply.code(404).send({ message: "Dokument ikke funnet." });
     await reindexBankQuestionsForDoc(deps.interviewPrepRepository, request.user.id, doc.id);
+    await queueQuestionCleanup(importDeps, request.user.id, [doc.id]);
     return toKnowledgeDocDto(doc);
   });
 
@@ -187,6 +204,7 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
       }));
 
     await reindexBankQuestionsForDoc(deps.interviewPrepRepository, request.user.id, doc.id);
+    await queueQuestionCleanup(importDeps, request.user.id, [doc.id]);
 
     let caseEntry = null;
     const sourceKind = classifyCaseSource({
@@ -248,23 +266,88 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
   });
 
   app.get("/api/interview/questions", async (request) => {
-    const query = request.query as { q?: string; category?: string; tag?: string };
+    const query = bankQuestionQuerySchema.parse(request.query ?? {});
     const rows = await deps.interviewPrepRepository.listBankQuestions(request.user.id, query);
     return rows.map(toBankQuestionDto);
   });
 
+  app.get("/api/interview/questions/summary", async (request) => {
+    return deps.interviewPrepRepository.summarizeBankQuestions(request.user.id);
+  });
+
+  app.patch("/api/interview/questions/:id", async (request, reply) => {
+    const body = patchBankQuestionSchema.parse(request.body);
+    const id = (request.params as { id: string }).id;
+    const [existing] = await deps.interviewPrepRepository.getBankQuestionsByIds(request.user.id, [id]);
+    if (!existing) return reply.code(404).send({ message: "Spørsmål ikke funnet." });
+    const audience = body.audience ?? existing.audience;
+    const updated = await deps.interviewPrepRepository.updateBankQuestion(request.user.id, id, {
+      ...(body.text !== undefined ? { text: body.text } : {}),
+      audience,
+      category: categoryForAudience(audience, body.category ?? existing.category),
+      origin: "manual",
+      cleanedAt: new Date().toISOString()
+    });
+    if (!updated) return reply.code(404).send({ message: "Spørsmål ikke funnet." });
+    return toBankQuestionDto(updated);
+  });
+
+  app.post("/api/interview/questions/:id/discard", async (request, reply) => {
+    const body = discardBankQuestionSchema.parse(request.body ?? {});
+    const updated = await deps.interviewPrepRepository.updateBankQuestion(
+      request.user.id,
+      (request.params as { id: string }).id,
+      { status: "discarded", discardReason: body.reason, origin: "manual", cleanedAt: new Date().toISOString() }
+    );
+    if (!updated) return reply.code(404).send({ message: "Spørsmål ikke funnet." });
+    return toBankQuestionDto(updated);
+  });
+
+  app.post("/api/interview/questions/:id/restore", async (request, reply) => {
+    const updated = await deps.interviewPrepRepository.updateBankQuestion(
+      request.user.id,
+      (request.params as { id: string }).id,
+      { status: "active", discardReason: null, origin: "manual", cleanedAt: new Date().toISOString() }
+    );
+    if (!updated) return reply.code(404).send({ message: "Spørsmål ikke funnet." });
+    return toBankQuestionDto(updated);
+  });
+
+  app.post("/api/interview/questions/cleanup", async (request, reply) => {
+    if (!deps.llmClient.isConfigured()) {
+      return reply.code(503).send({ message: "AI er ikke konfigurert." });
+    }
+    const body = questionCleanupRequestSchema.parse(request.body ?? {});
+    if (body.reset) await deps.interviewPrepRepository.resetBankQuestionCleanup(request.user.id);
+    const jobs = await queueQuestionCleanup(importDeps, request.user.id);
+    const summary = await deps.interviewPrepRepository.summarizeBankQuestions(request.user.id);
+    return {
+      queuedJobs: jobs,
+      uncleaned: summary.uncleaned,
+      message:
+        jobs.length === 0
+          ? summary.uncleaned === 0
+            ? "Alle spørsmål er ryddet."
+            : "Opprydding pågår allerede."
+          : `${summary.uncleaned} spørsmål i ${jobs.length} dokumenter ryddes`
+    };
+  });
+
   app.post("/api/interview/questions/reindex", async (request) => {
     const docs = await deps.interviewPrepRepository.listKnowledgeDocs(request.user.id);
-    const indexed = await reindexAllBankQuestions(deps.interviewPrepRepository, request.user.id);
+    const { inserted, removed } = await reindexAllBankQuestions(deps.interviewPrepRepository, request.user.id);
     const queuedJobs = await queueQuestionImportsForSparseDocs(importDeps, request.user.id);
+    const cleanupJobs = await queueQuestionCleanup(importDeps, request.user.id);
     return {
-      indexed,
+      indexed: inserted,
+      removed,
       queuedJobs,
+      cleanupJobs: cleanupJobs.length,
       documentCount: docs.length,
       message:
         docs.length === 0
           ? "0 dokumenter i biblioteket"
-          : `${indexed} spørsmål funnet, ${queuedJobs} dokumenter behandles`
+          : `${inserted} nye spørsmål, ${removed} fjernet, ${queuedJobs} dokumenter behandles, ${cleanupJobs.length} ryddes`
     };
   });
 
@@ -313,7 +396,7 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
       status: "queued",
       message: "Fortsetter fra første uferdige del…"
     });
-    void processImportJob(importDeps, request.user.id, jobId);
+    startImportJob(importDeps, request.user.id, job);
     return queued ? toImportJobDto(queued) : toImportJobDto(job);
   });
 
@@ -469,6 +552,9 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
         body.bankQuestionId
       ]);
       if (!bankQuestion) return reply.code(400).send({ message: "Bankspørsmål ikke funnet." });
+      if (bankQuestion.status === "discarded") {
+        return reply.code(400).send({ message: "Bankspørsmålet er forkastet." });
+      }
       const updated = await deps.interviewPrepRepository.replacePlanQuestion(
         request.user.id,
         planId,
@@ -520,6 +606,7 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
       questionId,
       {
         ...body,
+        ...(body.category !== undefined ? { category: categoryForAudience(existing.audience, body.category) } : {}),
         source: textChanged ? "edited" : undefined
       }
     );
@@ -602,25 +689,41 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
   app.get("/api/interview/simulator/settings/:mode", async (request, _reply) => {
     const mode = createSessionSchema.shape.mode.parse((request.params as { mode: string }).mode);
     const settings = await deps.interviewPrepRepository.getSimulatorSettings(request.user.id, mode);
-    if (!settings) {
-      return {
-        mode,
-        companyName: "",
-        tone: "profesjonell",
-        language: "nb",
-        essentialsSheet: ""
-      };
-    }
-    return toSimulatorSettingsDto(settings);
+    return settings ? toSimulatorSettingsDto(settings) : defaultSimulatorSettings(mode);
   });
 
   app.put("/api/interview/simulator/settings", async (request) => {
     const body = simulatorSettingsSchema.parse(request.body);
     const saved = await deps.interviewPrepRepository.upsertSimulatorSettings(request.user.id, {
       userId: request.user.id,
-      ...body
+      ...body,
+      essentialsSheet: normalizeEssentialsInput(body.mode, body.essentialsSheet)
     });
     return toSimulatorSettingsDto(saved);
+  });
+
+  app.post("/api/interview/simulator/settings/:mode/essentials-draft", async (request, reply) => {
+    const mode = createSessionSchema.shape.mode.parse((request.params as { mode: string }).mode);
+    if (!deps.llmClient.isConfigured()) {
+      return reply.code(503).send({ message: "AI er ikke konfigurert." });
+    }
+    const docs = await deps.interviewPrepRepository.listKnowledgeDocs(request.user.id);
+    const sources = selectEssentialsSourceDocs(mode, docs);
+    if (sources.length === 0) {
+      return reply.code(400).send({ message: "Fant ingen dokumenter å lage utkast fra." });
+    }
+    const result = await deps.llmClient.completeStructured(
+      {
+        messages: [
+          { role: "system", content: buildEssentialsDraftSystemPrompt(mode) },
+          { role: "user", content: buildEssentialsDraftUserMessage(sources) }
+        ]
+      },
+      essentialsDraftSchema
+    );
+    const draft = result.sheet.trim();
+    if (!draft) return reply.code(502).send({ message: "KI-en returnerte et tomt utkast." });
+    return { draft, sourceDocTitles: sources.map((source) => source.title) };
   });
 
   app.get("/api/interview/sessions", async (request) => {
@@ -637,12 +740,15 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
         userId: request.user.id,
         mode: body.mode,
         companyName: "",
-        tone: "profesjonell",
-        language: "nb",
-        essentialsSheet: ""
+        tone: DEFAULT_SIMULATOR_TONE,
+        language: DEFAULT_SIMULATOR_LANGUAGE,
+        essentialsSheet: null
       };
+    // Only a sheet the user wrote goes into the prompt; the default is a cheat sheet with placeholders.
+    const essentials = resolveEssentialsSheet(body.mode, settings.essentialsSheet);
 
     let planScript: string | undefined;
+    let questionsToAsk: Array<{ text: string; audience: QuestionAudience }> = [];
     let planCompanyName = settings.companyName;
     if (body.prepPlanId) {
       const plan = await deps.interviewPrepRepository.getPrepPlan(request.user.id, body.prepPlanId);
@@ -667,6 +773,10 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
       if (!planScript.trim()) {
         return reply.code(400).send({ message: "Planen har ingen spørsmål merket for øving." });
       }
+      questionsToAsk = plan.questions
+        .filter((q) => q.included && q.audience !== "candidate")
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((q) => ({ text: q.text, audience: q.audience }));
     }
 
     let casePrompt: string | undefined;
@@ -688,12 +798,13 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
       companyName: planCompanyName,
       tone: settings.tone,
       language: settings.language,
-      essentialsSheet: settings.essentialsSheet,
+      essentialsSheet: essentials.isDefault ? "" : essentials.text,
       caseStyle,
       casePrompt,
       interviewerInfo,
       solution,
-      planScript
+      planScript,
+      questionsToAsk
     });
     const session = await deps.interviewPrepRepository.createSession(request.user.id, {
       mode: body.mode,
