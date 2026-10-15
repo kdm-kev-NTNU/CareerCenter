@@ -116,7 +116,91 @@ describe("PrepResearchService", () => {
     expect(updated?.questions.length).toBe(30);
     expect(updated?.questions.every((q) => q.source === "bank")).toBe(true);
     expect(updated?.tasks.length).toBeGreaterThan(0);
+    expect(updated?.tasks.some((t) => /bedrift|Hvorfor DNB|nisje/i.test(`${t.title} ${t.description}`))).toBe(
+      true
+    );
     expect(llmClient.structuredCalls.every((call) => call.options.model === "gpt-5.5")).toBe(true);
+    const curationUser = llmClient.structuredCalls
+      .map((c) => c.options.messages.find((m) => m.role === "user")?.content ?? "")
+      .find((content) => content.includes("Bedriftsrapport"));
+    expect(curationUser).toContain("nicheInsights");
+  });
+
+  it("attaches answer notes to company questions from the report", async () => {
+    const repository = new InterviewPrepMemoryRepository();
+    const doc = await repository.createKnowledgeDoc("u1", {
+      kind: "star",
+      title: "Bank",
+      content: "x",
+      contentHash: sha256Content("bank-company-notes")
+    });
+    await repository.replaceBankQuestionsForDoc(
+      "u1",
+      doc.id,
+      Array.from({ length: 30 }, (_, i) => ({
+        text: i === 0 ? "Hvorfor vil du jobbe her?" : `Q ${i}?`,
+        category: (i === 0 ? "company" : "behavioral") as "company" | "behavioral",
+        tags: [],
+        contentHash: sha256Content(`company-note-q-${i}`)
+      }))
+    );
+    const bank = await repository.listBankQuestions("u1");
+    const llmClient = new FakeLlmClient({
+      structuredResults: [
+        {
+          industries: [],
+          businessAreas: [],
+          interviewFormats: [],
+          caseTypes: [],
+          values: [],
+          themes: [],
+          summary: ""
+        },
+        {
+          headline: "Acme",
+          keyFacts: {},
+          aboutCompany: "",
+          businessAreas: [],
+          strategyAndNews: [],
+          cultureAndValues: [],
+          roleInContext: "",
+          jobAdRequirements: [],
+          nicheInsights: ["Produkt Y"],
+          companyQuestionPrep: [
+            {
+              question: "Hvorfor vil du jobbe her?",
+              answerAngle: "Koble til Produkt Y og egen erfaring.",
+              nicheHooks: ["Produkt Y"]
+            }
+          ],
+          interviewAngles: [],
+          questionsToAsk: [],
+          sources: []
+        },
+        { clarifications: [{ question: "Team?" }] },
+        {
+          selectedQuestionIds: bank.map((q) => q.id),
+          generatedQuestions: [],
+          tasks: []
+        }
+      ]
+    });
+    const research = service(llmClient, repository);
+    const plan = await repository.createPrepPlan("u1", {
+      companyName: "Acme",
+      roleTitle: "Engineer",
+      format: "interview",
+      researchModel: "gpt-6-astra"
+    });
+    await research.startResearch("u1", plan.id);
+    const awaiting = await repository.getPrepPlan("u1", plan.id);
+    await research.submitClarificationsAndCurate("u1", plan.id, [], true);
+    const ready = await repository.getPrepPlan("u1", plan.id);
+    expect(ready?.status).toBe("ready");
+    const companyQ = ready?.questions.find((q) => q.category === "company");
+    expect(companyQ?.notes).toMatch(/Svarforslag/);
+    expect(companyQ?.notes).toMatch(/Produkt Y/);
+    expect(awaiting?.companyReportJson).toContain("Produkt Y");
   });
 
   it("allows skipping clarification round", async () => {

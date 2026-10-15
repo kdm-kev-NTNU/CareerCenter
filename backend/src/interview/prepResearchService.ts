@@ -187,7 +187,7 @@ export class PrepResearchService {
       throwIfAborted(signal);
       const searchSnippet = this.llmClient.webSearch
         ? await this.llmClient.webSearch(
-            `${plan.companyName} ${plan.roleTitle} company overview strategy news culture interview process`,
+            `${plan.companyName} ${plan.roleTitle} niche strategy products deals culture news interview why company`,
             { model, signal }
           )
         : "";
