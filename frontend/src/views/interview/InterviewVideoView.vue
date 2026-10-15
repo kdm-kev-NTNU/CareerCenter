@@ -11,6 +11,7 @@ import {
   type InterviewSessionFeedbackDto,
   type PracticeMode,
   type StarRubricCriterion,
+  type VideoRatingStatus,
   type VideoSimState,
   type VideoSimulatorSettings
 } from "@careercenter/shared";
@@ -69,12 +70,13 @@ const reviewUrl = ref<string | null>(null);
 const blobKey = ref<string | null>(null);
 const transcript = ref("");
 const feedback = ref<InterviewSessionFeedbackDto | null>(null);
-const feedbackFallback = ref(false);
+const ratingStatus = ref<VideoRatingStatus | null>(null);
 const stats = ref<AnswerStats | null>(null);
 const error = ref<string | null>(null);
 const saving = ref(false);
 const rating = ref(false);
 const recordedDurationMs = ref(0);
+const retainedAudioBlob = ref<Blob | null>(null);
 const liveVideoEl = ref<HTMLVideoElement | null>(null);
 
 let thinkTimer: ReturnType<typeof setInterval> | null = null;
@@ -156,13 +158,18 @@ watch(phase, async (value, prev) => {
 });
 
 async function confirmSettings(mode: PracticeMode) {
-  practiceMode.value = mode;
-  settings.value = await interviewPrepApi.saveVideoSettings(settingsDraft.value);
-  deckSeed.value = Date.now();
-  shuffledDeck.value = shuffleIndices(settings.value.prompts.length, deckSeed.value);
-  completedCards.value = [];
-  currentCard.value = 0;
-  phase.value = transitionVideoSim(phase.value, { type: "settings_confirmed" });
+  error.value = null;
+  try {
+    practiceMode.value = mode;
+    settings.value = await interviewPrepApi.saveVideoSettings(settingsDraft.value);
+    deckSeed.value = Date.now();
+    shuffledDeck.value = shuffleIndices(settings.value.prompts.length, deckSeed.value);
+    completedCards.value = [];
+    currentCard.value = 0;
+    phase.value = transitionVideoSim(phase.value, { type: "settings_confirmed" });
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : "Kunne ikke lagre innstillinger.";
+  }
 }
 
 function onDevicesReady(devices: { audioDeviceId?: string; videoDeviceId?: string }) {
@@ -292,17 +299,21 @@ async function stopRecording() {
 
   transcript.value = "";
   feedback.value = null;
-  feedbackFallback.value = false;
+  ratingStatus.value = null;
   stats.value = null;
+  retainedAudioBlob.value = null;
 
   if (!usesAi.value) return;
 
+  const audioBlob = audioChunks.value.length ? mergeChunks(audioChunks.value) : blob;
+  retainedAudioBlob.value = audioBlob;
+  await runTranscription(audioBlob);
+}
+
+async function runTranscription(audioBlob: Blob) {
   rating.value = true;
   error.value = null;
   try {
-    const audioBlob = audioChunks.value.length
-      ? mergeChunks(audioChunks.value)
-      : blob;
     const result = await interviewPrepApi.transcribeVideo({
       file: audioBlob,
       filename: "answer.webm",
@@ -313,18 +324,56 @@ async function stopRecording() {
     });
     transcript.value = result.transcript;
     feedback.value = result.feedback ?? null;
-    feedbackFallback.value = Boolean(result.feedbackFallback);
+    ratingStatus.value = result.rating;
     stats.value = result.stats ?? null;
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Transkribering feilet.";
+    ratingStatus.value = null;
   } finally {
     rating.value = false;
   }
 }
 
+async function retryTranscription() {
+  if (!retainedAudioBlob.value) return;
+  await runTranscription(retainedAudioBlob.value);
+}
+
+async function retryRating() {
+  if (!transcript.value.trim()) return;
+  rating.value = true;
+  error.value = null;
+  try {
+    const result = await interviewPrepApi.rateVideo({
+      prompt: activePrompt.value,
+      transcript: transcript.value,
+      durationMs: recordedDurationMs.value || settings.value.answerSeconds * 1000
+    });
+    feedback.value = result.feedback ?? null;
+    ratingStatus.value = result.rating;
+    if (result.stats) stats.value = result.stats;
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : "Vurdering feilet.";
+  } finally {
+    rating.value = false;
+  }
+}
+
+function clearReviewState() {
+  if (reviewUrl.value) URL.revokeObjectURL(reviewUrl.value);
+  reviewUrl.value = null;
+  transcript.value = "";
+  feedback.value = null;
+  ratingStatus.value = null;
+  stats.value = null;
+  blobKey.value = null;
+  retainedAudioBlob.value = null;
+}
+
 async function saveCardRun() {
   if (!usesAi.value) return;
   saving.value = true;
+  error.value = null;
   try {
     await interviewPrepApi.createVideoRun({
       state: "review",
@@ -332,36 +381,31 @@ async function saveCardRun() {
       blobKey: blobKey.value ?? undefined,
       transcript: transcript.value,
       prompt: activePrompt.value,
-      feedback: feedback.value ?? undefined,
+      feedback: ratingStatus.value === "ok" ? (feedback.value ?? undefined) : undefined,
       settings: settings.value
     });
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : "Kunne ikke lagre kort.";
+    throw err;
   } finally {
     saving.value = false;
   }
 }
 
 async function retake() {
-  if (reviewUrl.value) URL.revokeObjectURL(reviewUrl.value);
-  reviewUrl.value = null;
-  transcript.value = "";
-  feedback.value = null;
-  feedbackFallback.value = false;
-  stats.value = null;
-  blobKey.value = null;
+  clearReviewState();
   phase.value = transitionVideoSim(phase.value, { type: "retake" });
   startThinking();
 }
 
 async function nextCard() {
-  await saveCardRun();
+  try {
+    await saveCardRun();
+  } catch {
+    return;
+  }
   completedCards.value = [...completedCards.value, currentCard.value];
-  if (reviewUrl.value) URL.revokeObjectURL(reviewUrl.value);
-  reviewUrl.value = null;
-  transcript.value = "";
-  feedback.value = null;
-  feedbackFallback.value = false;
-  stats.value = null;
-  blobKey.value = null;
+  clearReviewState();
   if (completedCards.value.length >= settings.value.prompts.length) {
     phase.value = transitionVideoSim(phase.value, { type: "all_done" });
     return;
@@ -467,21 +511,37 @@ function restartFromDone() {
       <video v-if="reviewUrl" class="review-video" :src="reviewUrl" controls playsinline />
       <p v-if="rating" class="field-hint">Transkriberer og vurderer …</p>
       <template v-else-if="usesAi">
-        <p v-if="transcript"><strong>Transkripsjon:</strong> {{ transcript }}</p>
-        <p v-if="stats" class="field-hint">
-          {{ stats.wordCount }} ord · {{ stats.wordsPerMinute }} wpm · fyllord {{ stats.fillerCount }}
-        </p>
-        <div v-if="feedback" class="stack-tight">
-          <p v-if="feedbackFallback" class="field-hint">
-            KI-vurdering feilet midlertidig — viser standardscore.
+        <template v-if="transcript">
+          <p><strong>Transkripsjon:</strong> {{ transcript }}</p>
+          <p v-if="stats" class="field-hint">
+            {{ stats.wordCount }} ord · {{ stats.wordsPerMinute }} wpm · fyllord {{ stats.fillerCount }}
           </p>
-          <h4>STAR-vurdering (sum {{ feedback.sum }})</h4>
-          <ul class="plain-list score-list">
-            <li v-for="entry in scoreEntries" :key="entry.key">
-              {{ entry.label }}: {{ entry.score }}/4
-            </li>
-          </ul>
-          <p>{{ feedback.improvement }}</p>
+          <div v-if="ratingStatus === 'ok' && feedback" class="stack-tight">
+            <h4>STAR-vurdering (sum {{ feedback.sum }})</h4>
+            <ul class="plain-list score-list">
+              <li v-for="entry in scoreEntries" :key="entry.key">
+                {{ entry.label }}: {{ entry.score }}/4
+              </li>
+            </ul>
+            <p>{{ feedback.improvement }}</p>
+          </div>
+          <div v-else-if="ratingStatus === 'unavailable'" class="stack-tight">
+            <p class="field-hint">KI-vurdering er ikke tilgjengelig akkurat nå.</p>
+            <AppButton variant="ghost" :disabled="rating || saving" @click="retryRating">
+              Prøv vurdering på nytt
+            </AppButton>
+          </div>
+        </template>
+        <div v-else class="stack-tight">
+          <p class="field-hint">Transkribering feilet.</p>
+          <AppButton
+            v-if="retainedAudioBlob"
+            variant="ghost"
+            :disabled="rating || saving"
+            @click="retryTranscription"
+          >
+            Prøv transkribering på nytt
+          </AppButton>
         </div>
       </template>
       <p v-else class="field-hint">Øverunde: ingen transkribering eller KI-vurdering.</p>

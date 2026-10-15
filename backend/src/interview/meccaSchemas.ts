@@ -38,6 +38,13 @@ export const videoTranscribeFieldsSchema = z.object({
   withRubric: z.string().optional().default("false")
 });
 
+/** Body for POST /api/interview/video/rate (re-rate without re-uploading audio). */
+export const videoRateBodySchema = z.object({
+  prompt: z.string().default(""),
+  transcript: z.string().min(1),
+  durationMs: z.number().int().min(0).optional()
+});
+
 export function parseMultipartBool(value: string | undefined): boolean {
   return value === "true" || value === "1";
 }

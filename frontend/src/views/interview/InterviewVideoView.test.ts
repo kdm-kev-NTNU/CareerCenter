@@ -10,6 +10,7 @@ vi.mock("../../api/interviewPrep.js", () => ({
     videoSettings: vi.fn(),
     saveVideoSettings: vi.fn(),
     transcribeVideo: vi.fn(),
+    rateVideo: vi.fn(),
     createVideoRun: vi.fn()
   }
 }));
@@ -79,7 +80,25 @@ describe("InterviewVideoView", () => {
         sum: 24,
         improvement: "Stram inn."
       },
-      feedbackFallback: false,
+      rating: "ok",
+      stats: { wordCount: 2, durationMs: 1000, wordsPerMinute: 120, fillerCount: 0, fillers: {} }
+    });
+    api.rateVideo.mockResolvedValue({
+      feedback: {
+        scores: {
+          openingAndStructure: 4,
+          situationAndTask: 4,
+          action: 4,
+          result: 4,
+          learning: 4,
+          ownership: 4,
+          tempoAndLength: 4,
+          relevance: 4
+        },
+        sum: 32,
+        improvement: "Bra."
+      },
+      rating: "ok",
       stats: { wordCount: 2, durationMs: 1000, wordsPerMinute: 120, fillerCount: 0, fillers: {} }
     });
     api.createVideoRun.mockResolvedValue({
@@ -175,5 +194,84 @@ describe("InterviewVideoView", () => {
     await flushPromises();
     expect(api.createVideoRun).toHaveBeenCalledTimes(1);
     expect(api.createVideoRun.mock.calls[0]![0].transcript).toBe("Mitt svar");
+    expect(api.createVideoRun.mock.calls[0]![0].feedback).toBeDefined();
+  });
+
+  it("shows rating retry without scores when rating is unavailable", async () => {
+    api.transcribeVideo.mockResolvedValue({
+      mock: false,
+      transcript: "Mitt svar",
+      feedback: null,
+      rating: "unavailable",
+      stats: { wordCount: 2, durationMs: 1000, wordsPerMinute: 120, fillerCount: 0, fillers: {} }
+    });
+    const wrapper = mount(InterviewVideoView, {
+      global: { stubs: { MediaDeviceCheck: MediaDeviceCheckStub } }
+    });
+    await advanceToRecording(wrapper, "Start ekte runde");
+    await wrapper.findAll("button").find((b) => b.text() === "Stopp opptak")!.trigger("click");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("KI-vurdering er ikke tilgjengelig");
+    expect(wrapper.text()).not.toContain("STAR-vurdering");
+    expect(wrapper.text()).toContain("Mitt svar");
+
+    await wrapper.findAll("button").find((b) => b.text() === "Prøv vurdering på nytt")!.trigger("click");
+    await flushPromises();
+    expect(api.rateVideo).toHaveBeenCalledTimes(1);
+    expect(wrapper.text()).toContain("STAR-vurdering");
+  });
+
+  it("shows transcription retry when transcription fails", async () => {
+    api.transcribeVideo.mockRejectedValue(new Error("Transkribering feilet midlertidig."));
+    const wrapper = mount(InterviewVideoView, {
+      global: { stubs: { MediaDeviceCheck: MediaDeviceCheckStub } }
+    });
+    await advanceToRecording(wrapper, "Start ekte runde");
+    await wrapper.findAll("button").find((b) => b.text() === "Stopp opptak")!.trigger("click");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Prøv transkribering på nytt");
+    api.transcribeVideo.mockResolvedValue({
+      mock: false,
+      transcript: "Kom tilbake",
+      feedback: {
+        scores: {
+          openingAndStructure: 3,
+          situationAndTask: 3,
+          action: 3,
+          result: 3,
+          learning: 3,
+          ownership: 3,
+          tempoAndLength: 3,
+          relevance: 3
+        },
+        sum: 24,
+        improvement: "Ok."
+      },
+      rating: "ok",
+      stats: { wordCount: 2, durationMs: 1000, wordsPerMinute: 120, fillerCount: 0, fillers: {} }
+    });
+    await wrapper.findAll("button").find((b) => b.text() === "Prøv transkribering på nytt")!.trigger("click");
+    await flushPromises();
+    expect(api.transcribeVideo).toHaveBeenCalledTimes(2);
+    expect(wrapper.text()).toContain("Kom tilbake");
+  });
+
+  it("stays on the card with an error when createVideoRun fails", async () => {
+    api.createVideoRun.mockRejectedValue(new Error("Lagring feilet."));
+    const wrapper = mount(InterviewVideoView, {
+      global: { stubs: { MediaDeviceCheck: MediaDeviceCheckStub } }
+    });
+    await advanceToRecording(wrapper, "Start ekte runde");
+    await wrapper.findAll("button").find((b) => b.text() === "Stopp opptak")!.trigger("click");
+    await flushPromises();
+
+    await wrapper.findAll("button").find((b) => b.text() === "Neste kort")!.trigger("click");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Lagring feilet.");
+    expect(wrapper.text()).toContain("Gjennomgang");
+    expect(wrapper.text()).toContain("Neste kort");
   });
 });
