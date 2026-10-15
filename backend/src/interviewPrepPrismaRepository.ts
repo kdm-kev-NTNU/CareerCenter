@@ -723,7 +723,14 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
 
   async createSession(
     userId: string,
-    input: { mode: InterviewMode; title: string; prepPlanId?: string; caseEntryId?: string; systemPrompt: string }
+    input: {
+      mode: InterviewMode;
+      title: string;
+      prepPlanId?: string;
+      caseEntryId?: string;
+      systemPrompt: string;
+      practice?: boolean;
+    }
   ): Promise<InterviewSessionRecord> {
     const row = await this.prisma.interviewSession.create({
       data: {
@@ -732,6 +739,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
         title: input.title,
         prepPlanId: input.prepPlanId,
         caseEntryId: input.caseEntryId,
+        practice: Boolean(input.practice),
         messages: {
           create: { role: "system", content: input.systemPrompt }
         }
@@ -771,14 +779,14 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
   async finishSession(
     userId: string,
     sessionId: string,
-    feedback: InterviewFeedbackRubric
+    feedback: InterviewFeedbackRubric | null
   ): Promise<InterviewSessionRecord | null> {
     const session = await this.getSession(userId, sessionId);
     if (!session) return null;
     const result = await this.prisma.interviewSession.updateMany({
       where: { id: sessionId, userId, finishedAt: null },
       data: {
-        feedbackJson: JSON.stringify(feedback),
+        feedbackJson: feedback ? JSON.stringify(feedback) : null,
         finishedAt: new Date()
       }
     });
@@ -843,7 +851,9 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
         state: input.state,
         cardIndex: input.cardIndex,
         blobKey: input.blobKey,
-        transcript: input.transcript
+        transcript: input.transcript,
+        prompt: input.prompt ?? "",
+        feedbackJson: input.feedback ? JSON.stringify(input.feedback) : null
       }
     });
     return this.mapVideoRun(row);
@@ -1101,6 +1111,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
     title: string;
     prepPlanId: string | null;
     caseEntryId: string | null;
+    practice: boolean;
     feedbackJson: string | null;
     finishedAt: Date | null;
     createdAt: Date;
@@ -1113,6 +1124,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       title: row.title,
       prepPlanId: row.prepPlanId ?? undefined,
       caseEntryId: row.caseEntryId ?? undefined,
+      practice: row.practice,
       feedback: row.feedbackJson ? (JSON.parse(row.feedbackJson) as InterviewFeedbackRubric) : undefined,
       finishedAt: row.finishedAt?.toISOString(),
       createdAt: row.createdAt.toISOString(),
@@ -1206,6 +1218,8 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
     cardIndex: number | null;
     blobKey: string | null;
     transcript: string;
+    prompt: string;
+    feedbackJson: string | null;
     createdAt: Date;
     updatedAt: Date;
   }): InterviewVideoRunRecord {
@@ -1217,6 +1231,8 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       cardIndex: row.cardIndex ?? undefined,
       blobKey: row.blobKey ?? undefined,
       transcript: row.transcript,
+      prompt: row.prompt,
+      feedback: row.feedbackJson ? (JSON.parse(row.feedbackJson) as InterviewFeedbackRubric) : undefined,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString()
     };

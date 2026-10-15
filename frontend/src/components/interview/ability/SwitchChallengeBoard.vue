@@ -119,7 +119,7 @@ function isStage2Wrong(row: 0 | 1, index: number): boolean {
   display: grid;
   justify-items: center;
   gap: 10px;
-  width: min(420px, 100%);
+  width: min(480px, 100%);
   margin: 0 auto;
   padding: 20px 16px;
   background: var(--surface);
@@ -153,9 +153,11 @@ function isStage2Wrong(row: 0 | 1, index: number): boolean {
 .switch-funnel.is-flipped { transform: rotate(180deg); }
 .switch-rail {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   justify-content: center;
-  padding: 10px 14px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px;
   border-radius: 14px;
   border: 6px solid #e4e5e7;
 }
@@ -168,16 +170,18 @@ function isStage2Wrong(row: 0 | 1, index: number): boolean {
   width: 100%;
 }
 .switch-code {
-  min-width: 72px;
-  padding: 10px 12px;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 12px 6px;
   border: 2px solid transparent;
   border-radius: 6px;
   background: #d9dadc;
   color: #6b6d70;
-  font-size: 1.15rem;
+  font-size: clamp(0.85rem, 3.4vw, 1.15rem);
   font-weight: 500;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .switch-code:hover:not(:disabled) { background: #cfd0d3; }
 .switch-code.is-selected {
@@ -228,6 +232,7 @@ function isStage2Wrong(row: 0 | 1, index: number): boolean {
   font-weight: 500;
   letter-spacing: 0.08em;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .switch-preview {
   display: grid;

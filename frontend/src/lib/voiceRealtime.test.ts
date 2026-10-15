@@ -71,7 +71,7 @@ describe("connectRealtimeVoice", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining("model=gpt-live-1"),
+      "https://api.openai.com/v1/realtime/calls",
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({ Authorization: "Bearer ephemeral" })
@@ -80,7 +80,7 @@ describe("connectRealtimeVoice", () => {
 
     handlers.ontrack?.({ streams: [stream] } as unknown as RTCTrackEvent);
     handlers.onmessage?.({
-      data: JSON.stringify({ type: "response.audio_transcript.done", transcript: "assistant hi" })
+      data: JSON.stringify({ type: "response.output_audio_transcript.done", transcript: "assistant hi" })
     } as MessageEvent);
     handlers.onmessage?.({
       data: JSON.stringify({
@@ -140,7 +140,7 @@ describe("connectRealtimeVoice", () => {
         model: "gpt-live-1",
         stream: { getTracks: () => [] } as unknown as MediaStream
       })
-    ).rejects.toThrow(/Realtime-tilkobling feilet \(401\)/);
+    ).rejects.toThrow(/Realtime-tilkobling feilet \(401\): nope/);
     expect(closePc).toHaveBeenCalled();
   });
 });

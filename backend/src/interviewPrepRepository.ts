@@ -151,6 +151,7 @@ export interface InterviewSessionRecord {
   title: string;
   prepPlanId?: string;
   caseEntryId?: string;
+  practice: boolean;
   feedback?: InterviewFeedbackRubric;
   finishedAt?: string;
   createdAt: string;
@@ -198,6 +199,8 @@ export interface InterviewVideoRunRecord {
   cardIndex?: number;
   blobKey?: string;
   transcript: string;
+  prompt: string;
+  feedback?: InterviewFeedbackRubric;
   createdAt: string;
   updatedAt: string;
 }
@@ -207,6 +210,8 @@ export interface VideoRunInput {
   cardIndex?: number;
   blobKey?: string;
   transcript: string;
+  prompt?: string;
+  feedback?: InterviewFeedbackRubric;
   settings: VideoSimulatorSettings;
 }
 
@@ -423,7 +428,14 @@ export interface InterviewPrepRepository {
   getSession(userId: string, id: string): Promise<InterviewSessionRecord | null>;
   createSession(
     userId: string,
-    input: { mode: InterviewMode; title: string; prepPlanId?: string; caseEntryId?: string; systemPrompt: string }
+    input: {
+      mode: InterviewMode;
+      title: string;
+      prepPlanId?: string;
+      caseEntryId?: string;
+      systemPrompt: string;
+      practice?: boolean;
+    }
   ): Promise<InterviewSessionRecord>;
   listSessionMessages(userId: string, sessionId: string): Promise<InterviewMessageRecord[]>;
   appendSessionMessage(
@@ -435,7 +447,7 @@ export interface InterviewPrepRepository {
   finishSession(
     userId: string,
     sessionId: string,
-    feedback: InterviewFeedbackRubric
+    feedback: InterviewFeedbackRubric | null
   ): Promise<InterviewSessionRecord | null>;
 
   listAbilityAttempts(userId: string, limit?: number): Promise<InterviewAbilityTestAttemptRecord[]>;

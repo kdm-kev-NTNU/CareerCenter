@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  modeUsesAi,
   phaseNeedsCamera,
   phaseRevealsPrompt,
+  practiceModes,
   videoSimStates,
   type VideoSimState
 } from "./videoSimState.js";
@@ -25,4 +27,18 @@ describe("phaseRevealsPrompt", () => {
       expect(phaseRevealsPrompt(state)).toBe(expected);
     }
   );
+});
+
+describe("modeUsesAi", () => {
+  it("is false for practice and true for scored", () => {
+    expect(modeUsesAi("practice")).toBe(false);
+    expect(modeUsesAi("scored")).toBe(true);
+  });
+
+  it("covers every practice mode", () => {
+    expect(practiceModes).toEqual(["practice", "scored"]);
+    for (const mode of practiceModes) {
+      expect(typeof modeUsesAi(mode)).toBe("boolean");
+    }
+  });
 });

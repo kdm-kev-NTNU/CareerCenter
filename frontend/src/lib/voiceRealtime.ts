@@ -27,7 +27,9 @@ export async function connectRealtimeVoice(input: {
         name?: string;
         item?: { content?: Array<{ transcript?: string }> };
       };
-      if (payload.type === "response.audio_transcript.done" && payload.transcript) {
+      const isAssistantTranscript =
+        payload.type === "response.output_audio_transcript.done" || payload.type === "response.audio_transcript.done";
+      if (isAssistantTranscript && payload.transcript) {
         input.onTranscript?.("assistant", payload.transcript);
       }
       if (payload.type === "conversation.item.input_audio_transcription.completed" && payload.transcript) {
@@ -44,7 +46,8 @@ export async function connectRealtimeVoice(input: {
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
 
-  const response = await fetch(`https://api.openai.com/v1/realtime?model=${encodeURIComponent(input.model)}`, {
+  // GA client secrets (from /v1/realtime/client_secrets) must use /calls; the model is bound to the secret.
+  const response = await fetch("https://api.openai.com/v1/realtime/calls", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${input.clientSecret}`,
@@ -54,7 +57,9 @@ export async function connectRealtimeVoice(input: {
   });
   if (!response.ok) {
     pc.close();
-    throw new Error(`Realtime-tilkobling feilet (${response.status}).`);
+    const detail = await response.text().catch(() => "");
+    const suffix = detail ? `: ${detail.slice(0, 200)}` : ".";
+    throw new Error(`Realtime-tilkobling feilet (${response.status})${suffix}`);
   }
   const answer = await response.text();
   await pc.setRemoteDescription({ type: "answer", sdp: answer });

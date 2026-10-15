@@ -11,6 +11,7 @@ export interface FakeLlmClientOptions {
   completeResult?: string;
   structuredResult?: unknown;
   structuredResults?: unknown[];
+  structuredError?: Error;
   webSearchResult?: string;
   transcribeResult?: string;
 }
@@ -25,6 +26,7 @@ export class FakeLlmClient implements LlmClient {
   private completeResult: string;
   private structuredResult: unknown;
   private structuredResults: unknown[];
+  private structuredError?: Error;
   private webSearchResult: string;
   private transcribeResult: string;
 
@@ -33,6 +35,7 @@ export class FakeLlmClient implements LlmClient {
     this.completeResult = options.completeResult ?? "fake completion";
     this.structuredResult = options.structuredResult ?? { ok: true };
     this.structuredResults = options.structuredResults ?? [];
+    this.structuredError = options.structuredError;
     this.webSearchResult = options.webSearchResult ?? "fake search result";
     this.transcribeResult = options.transcribeResult ?? "fake transcript";
   }
@@ -57,6 +60,7 @@ export class FakeLlmClient implements LlmClient {
       throw Object.assign(new Error("Avbrutt"), { name: "AbortError" });
     }
     this.structuredCalls.push({ options, schema });
+    if (this.structuredError) throw this.structuredError;
     const next = this.structuredResults.shift() ?? this.structuredResult;
     return schema.parse(next);
   }

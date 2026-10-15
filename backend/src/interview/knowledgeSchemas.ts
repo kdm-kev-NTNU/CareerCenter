@@ -61,7 +61,8 @@ export const createSessionSchema = z.object({
   mode: z.enum(interviewModes),
   title: z.string().default(""),
   prepPlanId: z.string().optional(),
-  caseEntryId: z.string().optional()
+  caseEntryId: z.string().optional(),
+  practice: z.boolean().optional().default(false)
 });
 
 export const sessionMessageSchema = z.object({
@@ -80,15 +81,17 @@ export const companyProfileSchema = z.object({
 
 const reportText = (max: number) => z.string().max(max);
 const reportBullet = (max = 200) => z.string().min(1).max(max);
+// Required strings: optional fields make the parent `.default({})` unrepresentable in strict Structured Outputs.
+const reportFact = (max: number) => reportText(max).default("");
 
 export const companyReportSchema = z.object({
   headline: reportText(120).default(""),
   keyFacts: z
     .object({
-      industry: reportText(80).optional(),
-      headquarters: reportText(80).optional(),
-      size: reportText(80).optional(),
-      ownership: reportText(80).optional()
+      industry: reportFact(80),
+      headquarters: reportFact(80),
+      size: reportFact(80),
+      ownership: reportFact(80)
     })
     .default({}),
   aboutCompany: reportText(320).default(""),

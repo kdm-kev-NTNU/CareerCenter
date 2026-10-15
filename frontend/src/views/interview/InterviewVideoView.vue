@@ -2,9 +2,15 @@
 import {
   canStartRecording,
   defaultVideoSimulatorSettings,
+  modeUsesAi,
   phaseNeedsCamera,
   phaseRevealsPrompt,
+  starRubricCriterionLabels,
   transitionVideoSim,
+  type AnswerStats,
+  type InterviewSessionFeedbackDto,
+  type PracticeMode,
+  type StarRubricCriterion,
   type VideoSimState,
   type VideoSimulatorSettings
 } from "@careercenter/shared";
@@ -16,7 +22,12 @@ import StatusBadge from "../../components/listing/StatusBadge.vue";
 import AppButton from "../../components/ui/AppButton.vue";
 import PageHeader from "../../components/ui/PageHeader.vue";
 import { useMediaStream } from "../../composables/useMediaStream.js";
-import { createVideoRecorder, mergeChunks, saveVideoBlob } from "../../lib/videoRecording.js";
+import {
+  createAudioRecorder,
+  createVideoRecorder,
+  mergeChunks,
+  saveVideoBlob
+} from "../../lib/videoRecording.js";
 
 function mulberry32(seed: number) {
   return () => {
@@ -38,13 +49,16 @@ function shuffleIndices(count: number, seed: number): number[] {
 }
 
 const phase = ref<VideoSimState>("setup");
+const practiceMode = ref<PracticeMode>("scored");
 const settings = ref<VideoSimulatorSettings>({ ...defaultVideoSimulatorSettings });
 const settingsDraft = ref({ ...defaultVideoSimulatorSettings });
 const { stream: mediaStream, acquire: acquireMedia, release: releaseMedia, error: mediaError } =
   useMediaStream();
 const selectedDevices = ref<{ audioDeviceId?: string; videoDeviceId?: string }>({});
 const recorder = ref<MediaRecorder | null>(null);
+const audioRecorder = ref<MediaRecorder | null>(null);
 const chunks = ref<Blob[]>([]);
+const audioChunks = ref<Blob[]>([]);
 const currentCard = ref(0);
 const completedCards = ref<number[]>([]);
 const deckSeed = ref<number | null>(null);
@@ -54,18 +68,33 @@ const answerLeft = ref(0);
 const reviewUrl = ref<string | null>(null);
 const blobKey = ref<string | null>(null);
 const transcript = ref("");
+const feedback = ref<InterviewSessionFeedbackDto | null>(null);
+const feedbackFallback = ref(false);
+const stats = ref<AnswerStats | null>(null);
 const error = ref<string | null>(null);
 const saving = ref(false);
+const rating = ref(false);
+const recordedDurationMs = ref(0);
 const liveVideoEl = ref<HTMLVideoElement | null>(null);
 
 let thinkTimer: ReturnType<typeof setInterval> | null = null;
 let answerTimer: ReturnType<typeof setInterval> | null = null;
+let recordingStartedAt = 0;
 
 const promptCount = computed(() => settingsDraft.value.prompts.length);
 const activePrompt = computed(() => settings.value.prompts[currentCard.value] ?? "Ingen flere spørsmål.");
 const deckDone = computed(() => completedCards.value.length >= settings.value.prompts.length);
 const phaseTone = computed(() => toneForVideoPhase(phase.value));
 const showPrompt = computed(() => phaseRevealsPrompt(phase.value));
+const usesAi = computed(() => modeUsesAi(practiceMode.value));
+const scoreEntries = computed(() => {
+  if (!feedback.value) return [];
+  return (Object.keys(starRubricCriterionLabels) as StarRubricCriterion[]).map((key) => ({
+    key,
+    label: starRubricCriterionLabels[key],
+    score: feedback.value!.scores[key]
+  }));
+});
 
 watch(mediaError, (value) => {
   if (value) error.value = value;
@@ -124,10 +153,10 @@ watch(phase, async (value, prev) => {
     await syncMediaForPhase(value);
   }
   if (value === "recording" && prev !== "recording") await startRecording();
-  if (value === "done" && !saving.value) void saveRun();
 });
 
-async function confirmSettings() {
+async function confirmSettings(mode: PracticeMode) {
+  practiceMode.value = mode;
   settings.value = await interviewPrepApi.saveVideoSettings(settingsDraft.value);
   deckSeed.value = Date.now();
   shuffledDeck.value = shuffleIndices(settings.value.prompts.length, deckSeed.value);
@@ -190,10 +219,19 @@ function startThinking() {
   }, 1000);
 }
 
+function waitForRecorderStop(rec: MediaRecorder): Promise<void> {
+  if (rec.state === "inactive") return Promise.resolve();
+  return new Promise((resolve) => {
+    rec.addEventListener("stop", () => resolve(), { once: true });
+    rec.stop();
+  });
+}
+
 async function startRecording() {
   if (!canStartRecording(phase.value)) return;
   error.value = null;
   chunks.value = [];
+  audioChunks.value = [];
   const stream = mediaStream.value;
   if (!stream) {
     error.value = mediaError.value ?? "Kunne ikke starte opptak.";
@@ -204,6 +242,12 @@ async function startRecording() {
     const rec = createVideoRecorder(stream, (chunk) => chunks.value.push(chunk));
     recorder.value = rec;
     rec.start(250);
+    if (stream.getAudioTracks().length > 0) {
+      const audioRec = createAudioRecorder(stream, (chunk) => audioChunks.value.push(chunk));
+      audioRecorder.value = audioRec;
+      audioRec.start(250);
+    }
+    recordingStartedAt = Date.now();
     answerLeft.value = settings.value.answerSeconds;
     answerTimer = setInterval(() => {
       answerLeft.value -= 1;
@@ -219,30 +263,76 @@ function stopRecordingInternal(review: boolean) {
   clearTimers();
   recorder.value?.stop();
   recorder.value = null;
+  audioRecorder.value?.stop();
+  audioRecorder.value = null;
   if (review) {
     phase.value = transitionVideoSim(phase.value, { type: "stop_recording" });
   }
 }
 
 async function stopRecording() {
-  stopRecordingInternal(true);
+  const videoRec = recorder.value;
+  const audioRec = audioRecorder.value;
+  clearTimers();
+  recordedDurationMs.value = recordingStartedAt ? Date.now() - recordingStartedAt : 0;
+  const stopJobs: Promise<void>[] = [];
+  if (videoRec) stopJobs.push(waitForRecorderStop(videoRec));
+  if (audioRec) stopJobs.push(waitForRecorderStop(audioRec));
+  recorder.value = null;
+  audioRecorder.value = null;
+  await Promise.all(stopJobs);
+
+  phase.value = transitionVideoSim(phase.value, { type: "stop_recording" });
+
   const blob = mergeChunks(chunks.value);
   blobKey.value = `video-${Date.now()}`;
   await saveVideoBlob(blobKey.value, blob);
   if (reviewUrl.value) URL.revokeObjectURL(reviewUrl.value);
   reviewUrl.value = URL.createObjectURL(blob);
-  const result = await interviewPrepApi.transcribeVideo({ blobKey: blobKey.value });
-  transcript.value = result.transcript;
+
+  transcript.value = "";
+  feedback.value = null;
+  feedbackFallback.value = false;
+  stats.value = null;
+
+  if (!usesAi.value) return;
+
+  rating.value = true;
+  error.value = null;
+  try {
+    const audioBlob = audioChunks.value.length
+      ? mergeChunks(audioChunks.value)
+      : blob;
+    const result = await interviewPrepApi.transcribeVideo({
+      file: audioBlob,
+      filename: "answer.webm",
+      mimeType: audioBlob.type || "audio/webm",
+      durationMs: recordedDurationMs.value || settings.value.answerSeconds * 1000,
+      prompt: activePrompt.value,
+      withRubric: true
+    });
+    transcript.value = result.transcript;
+    feedback.value = result.feedback ?? null;
+    feedbackFallback.value = Boolean(result.feedbackFallback);
+    stats.value = result.stats ?? null;
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : "Transkribering feilet.";
+  } finally {
+    rating.value = false;
+  }
 }
 
-async function saveRun() {
+async function saveCardRun() {
+  if (!usesAi.value) return;
   saving.value = true;
   try {
     await interviewPrepApi.createVideoRun({
-      state: phase.value,
+      state: "review",
       cardIndex: currentCard.value,
       blobKey: blobKey.value ?? undefined,
       transcript: transcript.value,
+      prompt: activePrompt.value,
+      feedback: feedback.value ?? undefined,
       settings: settings.value
     });
   } finally {
@@ -254,20 +344,26 @@ async function retake() {
   if (reviewUrl.value) URL.revokeObjectURL(reviewUrl.value);
   reviewUrl.value = null;
   transcript.value = "";
+  feedback.value = null;
+  feedbackFallback.value = false;
+  stats.value = null;
   blobKey.value = null;
   phase.value = transitionVideoSim(phase.value, { type: "retake" });
   startThinking();
 }
 
 async function nextCard() {
+  await saveCardRun();
   completedCards.value = [...completedCards.value, currentCard.value];
   if (reviewUrl.value) URL.revokeObjectURL(reviewUrl.value);
   reviewUrl.value = null;
   transcript.value = "";
+  feedback.value = null;
+  feedbackFallback.value = false;
+  stats.value = null;
   blobKey.value = null;
-  if (deckDone.value) {
+  if (completedCards.value.length >= settings.value.prompts.length) {
     phase.value = transitionVideoSim(phase.value, { type: "all_done" });
-    await saveRun();
     return;
   }
   phase.value = transitionVideoSim(phase.value, { type: "next_card" });
@@ -279,6 +375,7 @@ function restartFromDone() {
   shuffledDeck.value = [];
   completedCards.value = [];
   currentCard.value = 0;
+  practiceMode.value = "scored";
 }
 </script>
 
@@ -287,6 +384,11 @@ function restartFromDone() {
     <PageHeader title="Videosøknad" lead="Tenketid → opptak → gjennomgang.">
       <template #meta>
         <StatusBadge :label="phaseTone.label" :variant="phaseTone.variant" />
+        <StatusBadge
+          v-if="phase !== 'setup' && practiceMode === 'practice'"
+          label="Øving"
+          variant="muted"
+        />
       </template>
     </PageHeader>
 
@@ -304,7 +406,10 @@ function restartFromDone() {
           <input v-model="settingsDraft.prompts[index]" />
         </label>
       </details>
-      <AppButton @click="confirmSettings">Bekreft og gå til enhetssjekk</AppButton>
+      <div class="form-grid">
+        <AppButton variant="ghost" @click="confirmSettings('practice')">Øverunde (uten KI)</AppButton>
+        <AppButton @click="confirmSettings('scored')">Start ekte runde</AppButton>
+      </div>
     </article>
 
     <MediaDeviceCheck
@@ -360,16 +465,41 @@ function restartFromDone() {
       <h3>Gjennomgang</h3>
       <p v-if="showPrompt" class="lead">{{ activePrompt }}</p>
       <video v-if="reviewUrl" class="review-video" :src="reviewUrl" controls playsinline />
-      <p v-if="transcript"><strong>Transkripsjon:</strong> {{ transcript }}</p>
+      <p v-if="rating" class="field-hint">Transkriberer og vurderer …</p>
+      <template v-else-if="usesAi">
+        <p v-if="transcript"><strong>Transkripsjon:</strong> {{ transcript }}</p>
+        <p v-if="stats" class="field-hint">
+          {{ stats.wordCount }} ord · {{ stats.wordsPerMinute }} wpm · fyllord {{ stats.fillerCount }}
+        </p>
+        <div v-if="feedback" class="stack-tight">
+          <p v-if="feedbackFallback" class="field-hint">
+            KI-vurdering feilet midlertidig — viser standardscore.
+          </p>
+          <h4>STAR-vurdering (sum {{ feedback.sum }})</h4>
+          <ul class="plain-list score-list">
+            <li v-for="entry in scoreEntries" :key="entry.key">
+              {{ entry.label }}: {{ entry.score }}/4
+            </li>
+          </ul>
+          <p>{{ feedback.improvement }}</p>
+        </div>
+      </template>
+      <p v-else class="field-hint">Øverunde: ingen transkribering eller KI-vurdering.</p>
       <div class="form-grid">
-        <AppButton variant="ghost" @click="retake">Ta på nytt</AppButton>
-        <AppButton @click="nextCard">Neste kort</AppButton>
+        <AppButton variant="ghost" :disabled="rating || saving" @click="retake">Ta på nytt</AppButton>
+        <AppButton :loading="saving" :disabled="rating" @click="nextCard">Neste kort</AppButton>
       </div>
     </article>
 
     <article v-else-if="phase === 'done'" class="panel stack">
       <h3>Ferdig</h3>
-      <p>Du har gjennomført runden. Opptak lagres lokalt (IndexedDB) og kjøringen er logget.</p>
+      <p v-if="practiceMode === 'practice'">
+        Øverunde fullført, ingenting ble lagret eller vurdert.
+      </p>
+      <p v-else>
+        Du har gjennomført runden. Opptak lagres lokalt (IndexedDB) og hvert kort er logget med
+        transkripsjon og vurdering.
+      </p>
       <AppButton variant="ghost" @click="restartFromDone">Start på nytt</AppButton>
     </article>
   </section>
@@ -439,5 +569,10 @@ function restartFromDone() {
 .review-video {
   width: min(480px, 100%);
   border-radius: 8px;
+}
+
+.score-list {
+  display: grid;
+  gap: 0.25rem;
 }
 </style>

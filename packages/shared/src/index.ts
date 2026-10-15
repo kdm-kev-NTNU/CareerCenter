@@ -494,9 +494,11 @@ export {
   canStartRecording,
   phaseNeedsCamera,
   phaseRevealsPrompt,
-  videoSimStates
+  videoSimStates,
+  practiceModes,
+  modeUsesAi
 } from "./videoSimState.js";
-export type { VideoSimState, VideoSimEvent } from "./videoSimState.js";
+export type { VideoSimState, VideoSimEvent, PracticeMode } from "./videoSimState.js";
 export {
   videoSimulatorSettingsSchema,
   defaultVideoSimulatorSettings
