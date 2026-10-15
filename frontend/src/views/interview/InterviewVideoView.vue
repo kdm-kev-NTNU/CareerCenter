@@ -116,12 +116,14 @@ async function syncMediaForPhase(value: VideoSimState) {
   }
 }
 
-watch(phase, (value, prev) => {
+// Sole owner of the camera lifecycle: media is acquired here and recording starts only after it resolves.
+watch(phase, async (value, prev) => {
   const needsCamera = phaseNeedsCamera(value);
   const neededBefore = prev !== undefined && phaseNeedsCamera(prev);
   if (needsCamera !== neededBefore) {
-    void syncMediaForPhase(value);
+    await syncMediaForPhase(value);
   }
+  if (value === "recording" && prev !== "recording") await startRecording();
   if (value === "done" && !saving.value) void saveRun();
 });
 
@@ -172,11 +174,9 @@ function selectCard(deckIndex: number) {
   startThinking();
 }
 
-async function skipThinkingAndRecord() {
+function skipThinkingAndRecord() {
   clearTimers();
   phase.value = transitionVideoSim(phase.value, { type: "think_elapsed" });
-  await syncMediaForPhase(phase.value);
-  await startRecording();
 }
 
 function startThinking() {
@@ -196,7 +196,7 @@ async function startRecording() {
   chunks.value = [];
   const stream = mediaStream.value;
   if (!stream) {
-    error.value = "Kunne ikke starte opptak.";
+    error.value = mediaError.value ?? "Kunne ikke starte opptak.";
     phase.value = transitionVideoSim(phase.value, { type: "devices_failed" });
     return;
   }
