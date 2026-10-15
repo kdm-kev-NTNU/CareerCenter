@@ -1,5 +1,7 @@
 import type {
   AbilityTestKind,
+  BankQuestionOrigin,
+  BankQuestionStatus,
   CaseApprovalStatus,
   CaseSourceKind,
   CaseStyle,
@@ -11,7 +13,9 @@ import type {
   PrepPlanPipelineStep,
   PrepPlanStatus,
   PrepQuestionSource,
+  QuestionAudience,
   QuestionCategory,
+  QuestionDiscardReason,
   QuestionTarget,
   ResearchModel,
   VideoSimState,
@@ -56,8 +60,15 @@ export interface InterviewBankQuestionRecord {
   knowledgeDocId: string;
   text: string;
   category: QuestionCategory;
+  audience: QuestionAudience;
+  status: BankQuestionStatus;
+  discardReason?: QuestionDiscardReason;
+  origin: BankQuestionOrigin;
+  /** Text as first extracted from the document; identity for reindex and dedupe. */
+  sourceText: string;
   tags: string[];
   contentHash: string;
+  cleanedAt?: string;
   createdAt: string;
 }
 
@@ -72,6 +83,7 @@ export interface InterviewPrepQuestionRecord {
   id: string;
   text: string;
   category: QuestionCategory;
+  audience: QuestionAudience;
   target: QuestionTarget;
   sortOrder: number;
   source: PrepQuestionSource;
@@ -141,7 +153,8 @@ export interface InterviewSimulatorSettingsRecord {
   companyName: string;
   tone: string;
   language: string;
-  essentialsSheet: string;
+  /** `null` = use the shared default for the mode. */
+  essentialsSheet: string | null;
 }
 
 export interface InterviewSessionRecord {
@@ -258,6 +271,46 @@ export interface ImportJobUpdateInput {
   resultJson?: string;
 }
 
+export interface BankQuestionInput {
+  text: string;
+  category: QuestionCategory;
+  audience?: QuestionAudience;
+  tags: string[];
+  contentHash: string;
+  origin: BankQuestionOrigin;
+  /** Defaults to `text`. */
+  sourceText?: string;
+  cleanedAt?: string;
+}
+
+export interface BankQuestionFilter {
+  q?: string;
+  category?: string;
+  tag?: string;
+  audience?: QuestionAudience;
+  /** Defaults to `active`. */
+  status?: BankQuestionStatus | "all";
+  knowledgeDocId?: string;
+  /** Only questions the cleanup agent has not reviewed yet. */
+  uncleaned?: boolean;
+}
+
+export interface BankQuestionPatch {
+  text?: string;
+  category?: QuestionCategory;
+  audience?: QuestionAudience;
+  status?: BankQuestionStatus;
+  discardReason?: QuestionDiscardReason | null;
+  origin?: BankQuestionOrigin;
+  cleanedAt?: string | null;
+}
+
+export interface BankQuestionSummary {
+  byAudience: Record<QuestionAudience, number>;
+  discarded: number;
+  uncleaned: number;
+}
+
 export interface PlanQuestionPatchInput {
   text?: string;
   category?: QuestionCategory;
@@ -269,6 +322,7 @@ export interface PlanQuestionPatchInput {
 export interface PlanQuestionCreateInput {
   text: string;
   category: QuestionCategory;
+  audience?: QuestionAudience;
   target?: QuestionTarget;
   notes?: string;
   included?: boolean;
@@ -285,22 +339,19 @@ export interface InterviewPrepRepository {
   ): Promise<InterviewKnowledgeDoc | null>;
   deleteKnowledgeDoc(userId: string, id: string): Promise<boolean>;
 
-  replaceBankQuestionsForDoc(
-    userId: string,
-    knowledgeDocId: string,
-    questions: Array<{ text: string; category: QuestionCategory; tags: string[]; contentHash: string }>
-  ): Promise<void>;
-  /** Insert questions that are not already present (by contentHash) for the document. */
-  upsertBankQuestionsForDoc(
-    userId: string,
-    knowledgeDocId: string,
-    questions: Array<{ text: string; category: QuestionCategory; tags: string[]; contentHash: string }>
-  ): Promise<number>;
-  listBankQuestions(
-    userId: string,
-    filter?: { q?: string; category?: string; tag?: string }
-  ): Promise<InterviewBankQuestionRecord[]>;
+  /** Insert questions; rows whose (userId, contentHash) already exists are skipped. Returns inserted count. */
+  insertBankQuestions(userId: string, knowledgeDocId: string, questions: BankQuestionInput[]): Promise<number>;
+  listBankQuestions(userId: string, filter?: BankQuestionFilter): Promise<InterviewBankQuestionRecord[]>;
   getBankQuestionsByIds(userId: string, ids: string[]): Promise<InterviewBankQuestionRecord[]>;
+  updateBankQuestion(
+    userId: string,
+    id: string,
+    patch: BankQuestionPatch
+  ): Promise<InterviewBankQuestionRecord | null>;
+  deleteBankQuestions(userId: string, ids: string[]): Promise<number>;
+  /** Mark active, non-manual questions as not cleaned so the cleanup agent reviews them again. */
+  resetBankQuestionCleanup(userId: string): Promise<number>;
+  summarizeBankQuestions(userId: string): Promise<BankQuestionSummary>;
 
   listCaseEntries(userId: string): Promise<InterviewCaseEntryRecord[]>;
   searchCaseEntries(
@@ -366,6 +417,7 @@ export interface InterviewPrepRepository {
       questions: Array<{
         text: string;
         category: QuestionCategory;
+        audience?: QuestionAudience;
         target: QuestionTarget;
         source?: PrepQuestionSource;
         bankQuestionId?: string;

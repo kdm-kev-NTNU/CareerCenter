@@ -2,6 +2,7 @@ import {
   emptyCompanyProfile,
   emptyCompanyReport,
   findRepeatedStories,
+  resolveEssentialsSheet,
   type CompanyProfile,
   type CompanyReport,
   type InterviewBankQuestionDto,
@@ -42,8 +43,14 @@ export function toBankQuestionDto(row: InterviewBankQuestionRecord): InterviewBa
     knowledgeDocId: row.knowledgeDocId,
     text: row.text,
     category: row.category,
+    audience: row.audience,
+    status: row.status,
+    discardReason: row.discardReason,
+    origin: row.origin,
+    sourceText: row.sourceText,
     tags: row.tags,
     contentHash: row.contentHash,
+    cleanedAt: row.cleanedAt,
     createdAt: row.createdAt
   };
 }
@@ -68,6 +75,7 @@ export function toPrepPlanDto(plan: InterviewPrepPlanRecord): InterviewPrepPlanD
       id: q.id,
       text: q.text,
       category: q.category,
+      audience: q.audience,
       target: q.target,
       sortOrder: q.sortOrder,
       source: q.source,
@@ -99,12 +107,14 @@ export function toImportJobDto(job: InterviewImportJobRecord): InterviewImportJo
 }
 
 export function toSimulatorSettingsDto(settings: InterviewSimulatorSettingsRecord): InterviewSimulatorSettingsDto {
+  const essentials = resolveEssentialsSheet(settings.mode, settings.essentialsSheet);
   return {
     mode: settings.mode,
     companyName: settings.companyName,
     tone: settings.tone,
     language: settings.language,
-    essentialsSheet: settings.essentialsSheet
+    essentialsSheet: essentials.text,
+    essentialsIsDefault: essentials.isDefault
   };
 }
 

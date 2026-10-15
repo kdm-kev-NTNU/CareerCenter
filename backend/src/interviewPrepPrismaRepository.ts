@@ -1,6 +1,8 @@
 import { PrismaClient } from "@prisma/client";
 import type {
   AbilityTestKind,
+  BankQuestionOrigin,
+  BankQuestionStatus,
   CaseApprovalStatus,
   CaseSourceKind,
   CaseStyle,
@@ -11,13 +13,16 @@ import type {
   PrepFormat,
   PrepPlanStatus,
   PrepQuestionSource,
+  QuestionAudience,
   QuestionCategory,
+  QuestionDiscardReason,
   QuestionTarget,
   VideoSimState,
   VideoSimulatorSettings
 } from "@careercenter/shared";
 import {
   canDeleteImportJob,
+  categoryForAudience,
   DEFAULT_RESEARCH_MODEL,
   defaultVideoSimulatorSettings,
   deletableImportJobStatuses,
@@ -27,6 +32,10 @@ import {
 import { ensureInterviewBibleCatalog } from "./interview/bibleCatalog.js";
 import type {
   AbilityAttemptInput,
+  BankQuestionFilter,
+  BankQuestionInput,
+  BankQuestionPatch,
+  BankQuestionSummary,
   CaseEntryInput,
   ImportJobCreateInput,
   ImportJobUpdateInput,
@@ -112,64 +121,40 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
     return true;
   }
 
-  async replaceBankQuestionsForDoc(
+  async insertBankQuestions(
     userId: string,
     knowledgeDocId: string,
-    questions: Array<{ text: string; category: QuestionCategory; tags: string[]; contentHash: string }>
-  ): Promise<void> {
-    await this.prisma.$transaction([
-      this.prisma.interviewBankQuestion.deleteMany({ where: { userId, knowledgeDocId } }),
-      ...(questions.length > 0
-        ? [
-            this.prisma.interviewBankQuestion.createMany({
-              data: questions.map((item) => ({
-                userId,
-                knowledgeDocId,
-                text: item.text,
-                category: item.category,
-                tags: item.tags,
-                contentHash: item.contentHash
-              }))
-            })
-          ]
-        : [])
-    ]);
-  }
-
-  async upsertBankQuestionsForDoc(
-    userId: string,
-    knowledgeDocId: string,
-    questions: Array<{ text: string; category: QuestionCategory; tags: string[]; contentHash: string }>
+    questions: BankQuestionInput[]
   ): Promise<number> {
     if (questions.length === 0) return 0;
-    const existing = await this.prisma.interviewBankQuestion.findMany({
-      where: { userId, knowledgeDocId },
-      select: { contentHash: true }
-    });
-    const hashes = new Set(existing.map((row) => row.contentHash));
-    const toInsert = questions.filter((item) => !hashes.has(item.contentHash));
-    if (toInsert.length === 0) return 0;
-    await this.prisma.interviewBankQuestion.createMany({
-      data: toInsert.map((item) => ({
+    const result = await this.prisma.interviewBankQuestion.createMany({
+      data: questions.map((item) => ({
         userId,
         knowledgeDocId,
         text: item.text,
         category: item.category,
+        audience: item.audience ?? "candidate",
+        origin: item.origin,
+        sourceText: item.sourceText ?? item.text,
+        cleanedAt: item.cleanedAt ? new Date(item.cleanedAt) : null,
         tags: item.tags,
         contentHash: item.contentHash
-      }))
+      })),
+      skipDuplicates: true
     });
-    return toInsert.length;
+    return result.count;
   }
 
-  async listBankQuestions(
-    userId: string,
-    filter?: { q?: string; category?: string; tag?: string }
-  ): Promise<InterviewBankQuestionRecord[]> {
+  async listBankQuestions(userId: string, filter?: BankQuestionFilter): Promise<InterviewBankQuestionRecord[]> {
     await ensureInterviewBibleCatalog(this.prisma, userId);
+    const status = filter?.status ?? "active";
     const rows = await this.prisma.interviewBankQuestion.findMany({
       where: {
         userId,
+        ...(status !== "all" ? { status } : {}),
+        ...(filter?.audience ? { audience: filter.audience } : {}),
+        ...(filter?.knowledgeDocId ? { knowledgeDocId: filter.knowledgeDocId } : {}),
+        ...(filter?.uncleaned ? { cleanedAt: null } : {}),
         ...(filter?.category ? { category: filter.category } : {}),
         ...(filter?.tag ? { tags: { has: filter.tag } } : {}),
         ...(filter?.q
@@ -189,6 +174,69 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       where: { userId, id: { in: ids } }
     });
     return rows.map((row) => this.mapBankQuestion(row));
+  }
+
+  async updateBankQuestion(
+    userId: string,
+    id: string,
+    patch: BankQuestionPatch
+  ): Promise<InterviewBankQuestionRecord | null> {
+    const existing = await this.prisma.interviewBankQuestion.findFirst({ where: { id, userId } });
+    if (!existing) return null;
+    const row = await this.prisma.interviewBankQuestion.update({
+      where: { id },
+      data: {
+        ...(patch.text !== undefined ? { text: patch.text } : {}),
+        ...(patch.category !== undefined ? { category: patch.category } : {}),
+        ...(patch.audience !== undefined ? { audience: patch.audience } : {}),
+        ...(patch.status !== undefined ? { status: patch.status } : {}),
+        ...(patch.discardReason !== undefined ? { discardReason: patch.discardReason } : {}),
+        ...(patch.origin !== undefined ? { origin: patch.origin } : {}),
+        ...(patch.cleanedAt !== undefined
+          ? { cleanedAt: patch.cleanedAt === null ? null : new Date(patch.cleanedAt) }
+          : {})
+      }
+    });
+    return this.mapBankQuestion(row);
+  }
+
+  async deleteBankQuestions(userId: string, ids: string[]): Promise<number> {
+    if (ids.length === 0) return 0;
+    const result = await this.prisma.interviewBankQuestion.deleteMany({ where: { userId, id: { in: ids } } });
+    return result.count;
+  }
+
+  async resetBankQuestionCleanup(userId: string): Promise<number> {
+    const result = await this.prisma.interviewBankQuestion.updateMany({
+      where: { userId, status: "active", origin: { not: "manual" } },
+      data: { cleanedAt: null }
+    });
+    return result.count;
+  }
+
+  async summarizeBankQuestions(userId: string): Promise<BankQuestionSummary> {
+    await ensureInterviewBibleCatalog(this.prisma, userId);
+    const [groups, uncleaned] = await Promise.all([
+      this.prisma.interviewBankQuestion.groupBy({
+        by: ["audience", "status"],
+        where: { userId },
+        _count: { _all: true }
+      }),
+      this.prisma.interviewBankQuestion.count({ where: { userId, status: "active", cleanedAt: null } })
+    ]);
+    const summary: BankQuestionSummary = {
+      byAudience: { candidate: 0, ask_interviewer_personal: 0, ask_interviewer_company: 0 },
+      discarded: 0,
+      uncleaned
+    };
+    for (const group of groups) {
+      if (group.status === "discarded") {
+        summary.discarded += group._count._all;
+      } else if (group.audience in summary.byAudience) {
+        summary.byAudience[group.audience as QuestionAudience] += group._count._all;
+      }
+    }
+    return summary;
   }
 
   async listCaseEntries(userId: string): Promise<InterviewCaseEntryRecord[]> {
@@ -460,8 +508,9 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       questions: Array<{
         text: string;
         category: QuestionCategory;
+        audience?: QuestionAudience;
         target: QuestionTarget;
-        source: PrepQuestionSource;
+        source?: PrepQuestionSource;
         bankQuestionId?: string;
         storyId?: string;
         gapReason?: string;
@@ -483,7 +532,8 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
           questions: {
             create: input.questions.map((item, index) => ({
               text: item.text,
-              category: item.category,
+              category: categoryForAudience(item.audience ?? "candidate", item.category),
+              audience: item.audience ?? "candidate",
               target: item.target,
               sortOrder: index,
               source: item.source ?? "generated",
@@ -589,7 +639,8 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       data: {
         planId,
         text: input.text,
-        category: input.category,
+        category: categoryForAudience(input.audience ?? "candidate", input.category),
+        audience: input.audience ?? "candidate",
         target: input.target ?? "interview",
         sortOrder: maxOrder + 1,
         source: "custom",
@@ -971,6 +1022,12 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
     knowledgeDocId: string;
     text: string;
     category: string;
+    audience: string;
+    status: string;
+    discardReason: string | null;
+    origin: string;
+    sourceText: string | null;
+    cleanedAt: Date | null;
     tags: string[];
     contentHash: string;
     createdAt: Date;
@@ -981,8 +1038,14 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       knowledgeDocId: row.knowledgeDocId,
       text: row.text,
       category: row.category as QuestionCategory,
+      audience: row.audience as QuestionAudience,
+      status: row.status as BankQuestionStatus,
+      discardReason: (row.discardReason as QuestionDiscardReason | null) ?? undefined,
+      origin: row.origin as BankQuestionOrigin,
+      sourceText: row.sourceText ?? row.text,
       tags: row.tags,
       contentHash: row.contentHash,
+      cleanedAt: row.cleanedAt?.toISOString(),
       createdAt: row.createdAt.toISOString()
     };
   }
@@ -1053,6 +1116,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
           id: item.id,
           text: item.text,
           category: item.category as QuestionCategory,
+          audience: item.audience as QuestionAudience,
           target: item.target as QuestionTarget,
           sortOrder: item.sortOrder,
           source: (item.source as PrepQuestionSource | null) ?? "generated",
@@ -1092,7 +1156,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
     companyName: string;
     tone: string;
     language: string;
-    essentialsSheet: string;
+    essentialsSheet: string | null;
   }): InterviewSimulatorSettingsRecord {
     return {
       userId: row.userId,
@@ -1272,6 +1336,7 @@ type PlanRow = {
     id: string;
     text: string;
     category: string;
+    audience: string;
     target: string;
     sortOrder: number;
     source: string | null;
