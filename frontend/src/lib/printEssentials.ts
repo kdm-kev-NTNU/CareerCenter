@@ -7,13 +7,39 @@ export function escapeHtml(text: string): string {
     .replaceAll('"', "&quot;");
 }
 
+/** Popup surface required to render and print an essentials sheet. */
+export interface EssentialsPrintWindow {
+  document: {
+    open(): void;
+    write(markup: string): void;
+    close(): void;
+  };
+  focus(): void;
+  print(): void;
+  close(): void;
+}
+
+export type OpenEssentialsPrintWindow = (
+  url?: string | URL,
+  target?: string,
+  features?: string
+) => EssentialsPrintWindow | null;
+
+function openBrowserPrintWindow(
+  url?: string | URL,
+  target?: string,
+  features?: string
+): EssentialsPrintWindow | null {
+  return window.open(url, target, features);
+}
+
 /**
  * Opens a minimal document with only the essentials sheet and triggers print.
  * Returns false if the sheet is empty or the popup was blocked.
  */
 export function printEssentialsSheet(
   text: string,
-  openWindow: typeof window.open = window.open.bind(window)
+  openWindow: OpenEssentialsPrintWindow = openBrowserPrintWindow
 ): boolean {
   const body = text.trim();
   if (!body) return false;

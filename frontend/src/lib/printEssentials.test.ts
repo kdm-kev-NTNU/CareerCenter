@@ -21,9 +21,9 @@ describe("printEssentialsSheet", () => {
       write: vi.fn(),
       close: vi.fn()
     };
-    const openWindow = vi.fn(() => ({ document: doc, print, close, focus }));
+    const openWindow = () => ({ document: doc, print, close, focus });
 
-    const ok = printEssentialsSheet("STAR: konflikt\nResult: løst", openWindow as typeof window.open);
+    const ok = printEssentialsSheet("STAR: konflikt\nResult: løst", openWindow);
 
     expect(ok).toBe(true);
     expect(doc.write).toHaveBeenCalledOnce();
