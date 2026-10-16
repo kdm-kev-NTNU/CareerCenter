@@ -1,4 +1,4 @@
-import type { AbilityTestKind } from "./abilityTests.js";
+import type { PuzzleAbilityTestKind } from "./abilityTests.js";
 import {
   generateSwitchChallenge,
   isCorrectSwitchAnswer,
@@ -26,7 +26,7 @@ export interface AbilitySessionItem {
 }
 
 export interface AbilitySession {
-  kind: AbilityTestKind;
+  kind: PuzzleAbilityTestKind;
   durationMs: number;
   startedAt: number;
   /** Current adaptive level (Switch only; Scales stays at 1). */
@@ -40,7 +40,7 @@ export interface AbilitySession {
 }
 
 export interface AbilitySessionReport {
-  kind: AbilityTestKind;
+  kind: PuzzleAbilityTestKind;
   correctCount: number;
   wrongCount: number;
   answeredCount: number;
@@ -53,14 +53,18 @@ function newSeed(now: number, ordinal: number): number {
   return Math.floor((now + ordinal * 7919) % 1_000_000_000);
 }
 
-function makePuzzle(kind: AbilityTestKind, seed: number, level: number): AbilityPuzzle {
+function makePuzzle(kind: PuzzleAbilityTestKind, seed: number, level: number): AbilityPuzzle {
   if (kind === "switch_challenge") {
     return generateSwitchChallenge(seed, level);
   }
   return generateScalesClx(seed);
 }
 
-function isAnswerCorrect(kind: AbilityTestKind, puzzle: AbilityPuzzle, answer: AbilityAnswer): boolean {
+function isAnswerCorrect(
+  kind: PuzzleAbilityTestKind,
+  puzzle: AbilityPuzzle,
+  answer: AbilityAnswer
+): boolean {
   if (kind === "switch_challenge") {
     return isCorrectSwitchAnswer(puzzle as SwitchChallengePuzzle, answer as SwitchAnswer);
   }
@@ -92,7 +96,11 @@ export function remainingMs(session: AbilitySession, now: number): number {
  * Start a timed ability session and open the first puzzle.
  * `minutes` must be a positive number; duration is minutes × 60_000.
  */
-export function startSession(kind: AbilityTestKind, minutes: number, now: number): AbilitySession {
+export function startSession(
+  kind: PuzzleAbilityTestKind,
+  minutes: number,
+  now: number
+): AbilitySession {
   if (!(minutes > 0)) {
     throw new Error("Øktlengde må være et positivt antall minutter.");
   }

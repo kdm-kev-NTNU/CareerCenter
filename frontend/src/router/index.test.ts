@@ -41,4 +41,15 @@ describe("router guards", () => {
     await router.push("/login");
     expect(router.currentRoute.value.name).toBe("dashboard");
   });
+
+  it("opens AON ability folder and redirects unknown providers", async () => {
+    mockedMe.mockResolvedValue({ id: "u1", name: "Kevin" });
+    const auth = useAuthStore();
+    await auth.fetchMe();
+    await router.push("/interview/evnetester/aon");
+    expect(router.currentRoute.value.name).toBe("interview-ability-provider");
+    expect(router.currentRoute.value.params.provider).toBe("aon");
+    await router.push("/interview/evnetester/ukjent");
+    expect(router.currentRoute.value.name).toBe("interview-ability");
+  });
 });

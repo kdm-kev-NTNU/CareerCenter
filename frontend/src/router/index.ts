@@ -17,7 +17,9 @@ import InterviewPlanView from "../views/interview/InterviewPlanView.vue";
 import InterviewPlansView from "../views/interview/InterviewPlansView.vue";
 import InterviewSimulatorView from "../views/interview/InterviewSimulatorView.vue";
 import InterviewVideoView from "../views/interview/InterviewVideoView.vue";
+import AbilityProvidersView from "../views/interview/AbilityProvidersView.vue";
 import AbilityTestsView from "../views/interview/AbilityTestsView.vue";
+import { isKnownAbilityProvider } from "../components/interview/ability/abilityProviders.js";
 import EducationPlatformsView from "../views/education/EducationPlatformsView.vue";
 import LoginView from "../views/LoginView.vue";
 import ApplicationsView from "../views/ApplicationsView.vue";
@@ -168,6 +170,12 @@ const router = createRouter({
             {
               path: "evnetester",
               name: "interview-ability",
+              component: AbilityProvidersView,
+              meta: { title: "Evnetester" }
+            },
+            {
+              path: "evnetester/:provider",
+              name: "interview-ability-provider",
               component: AbilityTestsView,
               meta: { title: "Evnetester" }
             },
@@ -198,6 +206,14 @@ router.beforeEach(async (to) => {
 
   if (!authStore.isAuthenticated) {
     return { name: "login", query: { redirect: to.fullPath } };
+  }
+
+  // Param changes reuse the same route record, so this cannot live in beforeEnter alone.
+  if (to.name === "interview-ability-provider") {
+    const id = String(to.params.provider ?? "");
+    if (!isKnownAbilityProvider(id)) {
+      return { name: "interview-ability" };
+    }
   }
 
   return true;
