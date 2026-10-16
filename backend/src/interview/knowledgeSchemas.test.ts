@@ -22,12 +22,14 @@ describe("LLM schemas", () => {
     }
   });
 
-  it("defaults reverse questions to an empty list in curation", () => {
+  it("defaults generated questions to an empty list in curation", () => {
     const parsed = curatedBankSelectionSchema.parse({
       selectedRefs: Array.from({ length: 30 }, (_, i) => `Q${i + 1}`)
     });
-    expect(parsed.reverseQuestions).toEqual([]);
+    expect(parsed.generatedQuestions).toEqual([]);
     expect(parsed.selectedRefs).toHaveLength(30);
+    expect(parsed).not.toHaveProperty("reverseQuestions");
+    expect(parsed).not.toHaveProperty("tasks");
   });
 
   it("accepts fewer than 30 selectedRefs (domain fill happens later)", () => {
@@ -84,30 +86,58 @@ describe("prepPlanIntakeSchema", () => {
   });
 });
 
+function sampleQuestionPrep(count: number) {
+  return Array.from({ length: count }, (_, i) => ({
+    question: `Spørsmål ${i + 1}?`,
+    whyTheyAsk: "Tester fit.",
+    suggestedAnswer: "Jeg …",
+    backgroundUsed: ["CV-faktum"],
+    companyHooks: ["Bedriftsfaktum"]
+  }));
+}
+
+function sampleQuestionsToAsk(count: number) {
+  return Array.from({ length: count }, (_, i) => ({
+    question: `Spørsmål til dem ${i + 1}?`,
+    why: "Lurt fordi …"
+  }));
+}
+
 describe("companyReportSchema", () => {
   it("converts to strict structured outputs", () => {
     expect(() => zodTextFormat(companyReportSchema, "structured_response")).not.toThrow();
   });
 
-  it("fills missing key facts with empty strings", () => {
-    const parsed = companyReportSchema.parse({});
-    expect(parsed.keyFacts).toEqual({
-      industry: "",
-      headquarters: "",
-      size: "",
-      ownership: ""
+  it("accepts a full question-prep report", () => {
+    const parsed = companyReportSchema.parse({
+      headline: "DNB",
+      mustKnow: ["Markets"],
+      questionPrep: sampleQuestionPrep(6),
+      questionsToAsk: sampleQuestionsToAsk(4),
+      sources: ["dnb.no"]
     });
-    expect(parsed.headline).toBe("");
-    expect(parsed.nicheInsights).toEqual([]);
+    expect(parsed.questionPrep).toHaveLength(6);
+    expect(parsed.questionsToAsk).toHaveLength(4);
+    expect(parsed.mustKnow).toEqual(["Markets"]);
   });
 
-  it("keeps a provided key fact and defaults the rest", () => {
-    const parsed = companyReportSchema.parse({ keyFacts: { industry: "Bank" } });
-    expect(parsed.keyFacts).toEqual({
-      industry: "Bank",
-      headquarters: "",
-      size: "",
-      ownership: ""
-    });
+  it("rejects legacy report shapes", () => {
+    expect(() =>
+      companyReportSchema.parse({
+        headline: "Gammel",
+        nicheInsights: ["x"],
+        companyQuestionPrep: [{ question: "Hvorfor?", answerAngle: "vinkel", nicheHooks: [] }],
+        questionsToAsk: ["En string"]
+      })
+    ).toThrow();
+  });
+
+  it("rejects too few questionPrep items", () => {
+    expect(() =>
+      companyReportSchema.parse({
+        questionPrep: sampleQuestionPrep(3),
+        questionsToAsk: sampleQuestionsToAsk(4)
+      })
+    ).toThrow();
   });
 });

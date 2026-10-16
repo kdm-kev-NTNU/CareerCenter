@@ -3,10 +3,8 @@ import {
   MAX_CURATED_QUESTIONS,
   MIN_CURATED_QUESTIONS,
   canCancelPrepPlan,
-  categoryForAudience,
   prepPlanResumePoint,
   rankBankQuestions,
-  rankCasesForCompany,
   resolveCuratedSelection,
   transitionPrepPlan,
   type PrepQuestionSource,
@@ -16,7 +14,8 @@ import {
   type ResearchPipelineStep
 } from "@careercenter/shared";
 import type { LlmClient } from "../ai/llmClient.js";
-import type { InterviewBankQuestionRecord, InterviewPrepRepository } from "../interviewPrepRepository.js";
+import type { InterviewPrepRepository } from "../interviewPrepRepository.js";
+import { formatCandidateBackgroundForPrompt } from "./candidateBackgroundText.js";
 import {
   JobCancellationRegistry,
   USER_CANCEL_MESSAGE
@@ -382,6 +381,19 @@ export class PrepResearchService {
       if (startIndex <= stepIndex("company_report") || !report) {
         throwIfAborted(signal);
         await this.repository.setPrepPlanPipeline(userId, planId, { pipelineStep: "company_report" });
+        const backgroundRow = await this.repository.getCandidateBackground(userId);
+        const backgroundBlock =
+          formatCandidateBackgroundForPrompt({
+            cvText: backgroundRow?.cvText ?? "",
+            transcriptText: backgroundRow?.transcriptText ?? "",
+            notes: backgroundRow?.notes ?? ""
+          }) || "Ingen CV/karakterutskrift lastet opp. Skriv generiske svarforslag med plassholdere.";
+        const reverseBank = await this.repository.listBankQuestions(userId, { status: "active" });
+        const askInspiration = reverseBank
+          .filter((q) => q.audience === "ask_interviewer_company" || q.audience === "ask_interviewer_personal")
+          .slice(0, 20)
+          .map((q, index) => `R${index + 1} | ${q.audience} | ${q.text}`)
+          .join("\n");
         report = await this.llmClient.completeStructured(
           {
             model,
@@ -397,9 +409,11 @@ export class PrepResearchService {
                 content: [
                   `Lag en companyReport-JSON (bedriftsrapport) for kandidaten.`,
                   jobAdBlock.trim(),
+                  `Kandidatbakgrunn:\n${backgroundBlock}`,
                   `Research:\n${researchNotes}`,
                   `Profil:\n${profileJson}`,
-                  `Nettfunn:\n${searchSnippet}`
+                  `Nettfunn:\n${searchSnippet}`,
+                  `Inspirasjon til questionsToAsk (valgfritt):\n${askInspiration || "–"}`
                 ].join("\n\n")
               }
             ]
@@ -541,7 +555,6 @@ export class PrepResearchService {
       const profile = safeParseProfile(plan.companyProfileJson);
       const bank = await this.repository.listBankQuestions(userId, { status: "active" });
       const candidateBank = bank.filter((q) => q.audience === "candidate");
-      const reverseBank = bank.filter((q) => q.audience !== "candidate");
 
       if (candidateBank.length < MIN_CURATED_QUESTIONS) {
         throw new PrepPipelineError(
@@ -573,8 +586,6 @@ export class PrepResearchService {
       const candidateLines = candidates
         .map((q, index) => `Q${index + 1} | ${q.category} | ${q.text}`)
         .join("\n");
-      const reverseLines =
-        reverseBank.map((q, index) => `R${index + 1} | ${q.audience} | ${q.text}`).join("\n") || "–";
 
       throwIfAborted(signal);
       const selection = await this.llmClient.completeStructured(
@@ -589,15 +600,12 @@ export class PrepResearchService {
               content: [
                 `Research:\n${plan.researchNotes}`,
                 `Profil:\n${JSON.stringify(profile)}`,
-                `Bedriftsrapport (nisje-info og svarforslag):\n${JSON.stringify({
-                  nicheInsights: report.nicheInsights,
-                  companyQuestionPrep: report.companyQuestionPrep,
-                  interviewAngles: report.interviewAngles
+                `Bedriftsrapport (må-vite og svarforslag):\n${JSON.stringify({
+                  mustKnow: report.mustKnow,
+                  questionPrep: report.questionPrep
                 })}`,
                 `Avklaringer:\n${plan.clarifications.map((c) => `${c.question}\nSvar: ${c.answer}`).join("\n\n")}`,
-                `Kandidater fra banken (velg ${MIN_CURATED_QUESTIONS}-${MAX_CURATED_QUESTIONS} alias Q1…):\n${candidateLines}`,
-                `Spørsmål kandidaten kan stille intervjueren (alias R1…):\n${reverseLines}`,
-                `Forslag fra bedriftsrapporten:\n${report.questionsToAsk.join("\n") || "–"}`
+                `Kandidater fra banken (velg ${MIN_CURATED_QUESTIONS}-${MAX_CURATED_QUESTIONS} alias Q1…):\n${candidateLines}`
               ].join("\n\n")
             }
           ]
@@ -627,6 +635,7 @@ export class PrepResearchService {
         questions.push({
           text: q.text,
           category: q.category,
+          audience: "candidate",
           target: "interview",
           source: "bank",
           bankQuestionId: q.id
@@ -637,6 +646,7 @@ export class PrepResearchService {
         questions.push({
           text: generated.text,
           category: generated.category,
+          audience: "candidate",
           target: generated.target,
           source: "generated",
           gapReason: generated.gapReason
@@ -645,36 +655,9 @@ export class PrepResearchService {
 
       attachCompanyAnswerNotes(questions, report);
 
-      const reversePicks = selection.reverseQuestions.map((pick) => ({
-        text: pick.text,
-        audience: pick.audience,
-        bankQuestionId: resolveReverseBankRef(pick.bankRef, reverseBank)
-      }));
-      questions.push(...buildReverseQuestions(reversePicks, reverseBank, report.questionsToAsk));
-
       throwIfAborted(signal);
-      await this.repository.setPrepPlanPipeline(userId, planId, { pipelineStep: "curating_cases" });
-      const cases = await this.repository.searchCaseEntries(userId, { approvalStatus: "approved" });
-      const ranked = rankCasesForCompany(
-        {
-          industries: profile.industries,
-          caseTypes: profile.caseTypes.length ? profile.caseTypes : ["case"],
-          style: undefined
-        },
-        cases.map((entry) => ({
-          id: entry.id,
-          industry: entry.companyTags[0] ?? null,
-          caseType: entry.sourceKind,
-          style: entry.caseStyle ?? null
-        }))
-      );
-      const recommendedCaseIds = ranked.slice(0, 8).map((c) => c.id);
-      const tasks = mergeCompanyPrepTasks(selection.tasks, report);
-
       await this.repository.setPrepPlanCurated(userId, planId, {
         questions,
-        tasks,
-        recommendedCaseIds,
         curationFilledCount: resolved.filledCount
       });
       const ready = transitionPrepPlan("curating", { type: "curation_done" });
@@ -703,69 +686,6 @@ interface CuratedQuestion {
   bankQuestionId?: string;
   gapReason?: string;
   notes?: string;
-}
-
-const MAX_REVERSE_COMPANY = 5;
-const MAX_REVERSE_PERSONAL = 3;
-
-function resolveReverseBankRef(
-  bankRef: string | null | undefined,
-  reverseBank: InterviewBankQuestionRecord[]
-): string | null {
-  if (!bankRef) return null;
-  const match = /^R(\d+)$/i.exec(bankRef.trim());
-  if (!match) return null;
-  const index = Number(match[1]) - 1;
-  return reverseBank[index]?.id ?? null;
-}
-
-/**
- * Questions the candidate asks the interviewer, from the curation result.
- * Falls back to the company report suggestions and personal bank questions when the model returns none.
- */
-export function buildReverseQuestions(
-  picks: Array<{ text: string; audience: "ask_interviewer_company" | "ask_interviewer_personal"; bankQuestionId: string | null }>,
-  reverseBank: InterviewBankQuestionRecord[],
-  reportSuggestions: string[]
-): CuratedQuestion[] {
-  const byId = new Map(reverseBank.map((q) => [q.id, q]));
-  const counts = { ask_interviewer_company: 0, ask_interviewer_personal: 0 };
-  const limits = { ask_interviewer_company: MAX_REVERSE_COMPANY, ask_interviewer_personal: MAX_REVERSE_PERSONAL };
-  const seen = new Set<string>();
-  const out: CuratedQuestion[] = [];
-
-  for (const pick of picks) {
-    const text = pick.text.trim();
-    const key = text.toLowerCase();
-    if (!text || seen.has(key) || counts[pick.audience] >= limits[pick.audience]) continue;
-    seen.add(key);
-    counts[pick.audience] += 1;
-    const bankQuestion = pick.bankQuestionId ? byId.get(pick.bankQuestionId) : undefined;
-    out.push({
-      text,
-      category: categoryForAudience(pick.audience, "company"),
-      audience: pick.audience,
-      target: "interview",
-      source: bankQuestion ? (bankQuestion.text.trim() === text ? "bank" : "edited") : "generated",
-      bankQuestionId: bankQuestion?.id
-    });
-  }
-  if (out.length > 0) return out;
-
-  for (const text of reportSuggestions.slice(0, 3)) {
-    out.push({ text, category: "company", audience: "ask_interviewer_company", target: "interview", source: "generated" });
-  }
-  for (const q of reverseBank.filter((item) => item.audience === "ask_interviewer_personal").slice(0, 2)) {
-    out.push({
-      text: q.text,
-      category: "personal",
-      audience: "ask_interviewer_personal",
-      target: "interview",
-      source: "bank",
-      bankQuestionId: q.id
-    });
-  }
-  return out;
 }
 
 /** Strict parse: returns null when JSON is missing or invalid (forces re-run on resume). */
@@ -804,15 +724,15 @@ function safeParseReport(json: string) {
 }
 
 /**
- * Attaches answer-angle notes from the company report onto company-category questions.
+ * Attaches answer-draft notes from the company report onto company-category questions.
  * Invariant: only fills empty notes; never overwrites existing notes.
  */
 function attachCompanyAnswerNotes(
   questions: Array<{ category: QuestionCategory; audience?: QuestionAudience; text: string; notes?: string }>,
   report: ReturnType<typeof safeParseReport>
 ): void {
-  const prep = [...report.companyQuestionPrep];
-  if (prep.length === 0 && report.nicheInsights.length === 0) return;
+  const prep = [...report.questionPrep];
+  if (prep.length === 0 && report.mustKnow.length === 0) return;
 
   let prepIndex = 0;
   for (const question of questions) {
@@ -825,45 +745,13 @@ function attachCompanyAnswerNotes(
       ) ?? prep[prepIndex++];
 
     if (match) {
-      const hooks = match.nicheHooks.length ? ` Nisje-hooks: ${match.nicheHooks.join("; ")}.` : "";
-      question.notes = `Svarforslag: ${match.answerAngle}.${hooks}`;
+      const hooks = match.companyHooks.length ? ` Hooks: ${match.companyHooks.join("; ")}.` : "";
+      question.notes = `Svarforslag: ${match.suggestedAnswer.slice(0, 280)}.${hooks}`;
       continue;
     }
 
-    if (report.nicheInsights.length) {
-      question.notes = `Bruk nisje-info: ${report.nicheInsights.slice(0, 2).join("; ")}.`;
+    if (report.mustKnow.length) {
+      question.notes = `Bruk må-vite: ${report.mustKnow.slice(0, 2).join("; ")}.`;
     }
   }
-}
-
-/** Ensures at least one task drills company-specific answers using niche insights. */
-function mergeCompanyPrepTasks(
-  tasks: Array<{ title: string; description: string }>,
-  report: ReturnType<typeof safeParseReport>
-): Array<{ title: string; description: string }> {
-  const merged = [...tasks];
-  const hasCompanyPrepTask = merged.some(
-    (t) =>
-      /bedrift|hvorfor oss|nisje|company/i.test(`${t.title} ${t.description}`)
-  );
-  if (hasCompanyPrepTask) return merged;
-
-  const firstPrep = report.companyQuestionPrep[0];
-  if (firstPrep) {
-    merged.unshift({
-      title: "Øv bedriftsspesifikt svar",
-      description: `Skriv et 60-sekunders svar på «${firstPrep.question}». Vinkel: ${firstPrep.answerAngle}${
-        firstPrep.nicheHooks.length ? `. Bruk: ${firstPrep.nicheHooks.join("; ")}` : ""
-      }`
-    });
-    return merged;
-  }
-
-  if (report.nicheInsights.length) {
-    merged.unshift({
-      title: "Øv «Hvorfor oss?» med nisje-info",
-      description: `Lag et konkret svar som bruker: ${report.nicheInsights.slice(0, 3).join("; ")}.`
-    });
-  }
-  return merged;
 }

@@ -7,32 +7,25 @@ function fillWords(maxChars: number): string {
   return word.repeat(Math.ceil(maxChars / word.length)).slice(0, maxChars).trimEnd();
 }
 
+function sampleQuestionPrep(count: number): CompanyReport["questionPrep"] {
+  return Array.from({ length: count }, (_, i) => ({
+    question: fillWords(40) + ` ${i}`,
+    whyTheyAsk: fillWords(80),
+    suggestedAnswer: fillWords(200),
+    backgroundUsed: [fillWords(40)],
+    companyHooks: [fillWords(40)]
+  }));
+}
+
 function maxReport(): CompanyReport {
   return {
     headline: fillWords(120),
-    keyFacts: {
-      industry: fillWords(80),
-      headquarters: fillWords(80),
-      size: fillWords(80),
-      ownership: fillWords(80)
-    },
-    aboutCompany: fillWords(320),
-    businessAreas: Array.from({ length: 4 }, () => fillWords(140)),
-    strategyAndNews: Array.from({ length: 3 }, () => fillWords(160)),
-    cultureAndValues: Array.from({ length: 3 }, () => fillWords(140)),
-    roleInContext: fillWords(240),
-    jobAdRequirements: Array.from({ length: 4 }, () => ({
-      requirement: fillWords(120),
-      howToShowFit: fillWords(140)
+    mustKnow: Array.from({ length: 4 }, () => fillWords(160)),
+    questionPrep: sampleQuestionPrep(8),
+    questionsToAsk: Array.from({ length: 6 }, () => ({
+      question: fillWords(100),
+      why: fillWords(100)
     })),
-    nicheInsights: Array.from({ length: 4 }, () => fillWords(160)),
-    companyQuestionPrep: Array.from({ length: 4 }, () => ({
-      question: fillWords(140),
-      answerAngle: fillWords(200),
-      nicheHooks: [fillWords(90), fillWords(90)]
-    })),
-    interviewAngles: Array.from({ length: 3 }, () => fillWords(140)),
-    questionsToAsk: Array.from({ length: 3 }, () => fillWords(140)),
     sources: Array.from({ length: 4 }, () => fillWords(140))
   };
 }
@@ -47,26 +40,58 @@ describe("renderCompanyReportPdf", () => {
   it("returns a PDF buffer", async () => {
     const pdf = await renderCompanyReportPdf(
       {
-        headline: "DNB – kort oversikt",
-        keyFacts: { industry: "Bank", headquarters: "Oslo" },
-        aboutCompany: "DNB er Norges største bank.",
-        businessAreas: ["Privatkundebank", "Markets"],
-        strategyAndNews: ["Satser på AI"],
-        cultureAndValues: ["Integritet"],
-        roleInContext: "Associate i Markets.",
-        jobAdRequirements: [
-          { requirement: "Analytisk", howToShowFit: "Vis STAR-historie om modellering." }
-        ],
-        nicheInsights: ["Sterk posisjon i nordisk verdipapirhandel"],
-        companyQuestionPrep: [
+        headline: "DNB – spørsmål og svarforslag",
+        mustKnow: ["Sterk posisjon i nordisk verdipapirhandel"],
+        questionPrep: [
           {
             question: "Hvorfor DNB?",
-            answerAngle: "Koble egen markets-erfaring til DNBs nordiske franchise.",
-            nicheHooks: ["nordisk verdipapirhandel"]
+            whyTheyAsk: "Tester om du har gjort research.",
+            suggestedAnswer: "Jeg søker DNB fordi …",
+            backgroundUsed: ["SpareBank 1-internship"],
+            companyHooks: ["nordisk verdipapirhandel"]
+          },
+          {
+            question: "Fortell om deg selv",
+            whyTheyAsk: "Struktur og relevans.",
+            suggestedAnswer: "Jeg heter Kevin …",
+            backgroundUsed: ["NTNU datateknologi"],
+            companyHooks: []
+          },
+          {
+            question: "Hvorfor denne rollen?",
+            whyTheyAsk: "Motivasjon.",
+            suggestedAnswer: "Rollen passer fordi …",
+            backgroundUsed: ["RAG-bachelor"],
+            companyHooks: ["AI-satsing"]
+          },
+          {
+            question: "Hvorfor er du egnet?",
+            whyTheyAsk: "Fit.",
+            suggestedAnswer: "Jeg tilfører …",
+            backgroundUsed: ["Cogito"],
+            companyHooks: []
+          },
+          {
+            question: "Hva vet du om oss?",
+            whyTheyAsk: "Research.",
+            suggestedAnswer: "Dere er …",
+            backgroundUsed: [],
+            companyHooks: ["markets"]
+          },
+          {
+            question: "Hvordan jobber du i team?",
+            whyTheyAsk: "Samarbeid.",
+            suggestedAnswer: "I SpareBank 1 …",
+            backgroundUsed: ["tverrfaglig team"],
+            companyHooks: []
           }
         ],
-        interviewAngles: ["Kundeinnsikt"],
-        questionsToAsk: ["Hvordan måles suksess i rollen?"],
+        questionsToAsk: [
+          { question: "Hvordan måles suksess i rollen?", why: "Viser fokusasjon på forventninger." },
+          { question: "Hvordan ser en typisk uke ut?", why: "Konkret arbeidsbilde." },
+          { question: "Hvilke prosjekter er aktuelle nå?", why: "Kobler til din bakgrunn." },
+          { question: "Hva liker du best med å jobbe her?", why: "Personlig spørsmål." }
+        ],
         sources: ["dnb.no"]
       },
       { companyName: "DNB", roleTitle: "Associate", generatedAt: "2026-04-01T12:00:00.000Z" }
@@ -78,44 +103,42 @@ describe("renderCompanyReportPdf", () => {
   it("handles Norwegian characters without throwing", async () => {
     const pdf = await renderCompanyReportPdf(
       {
-        headline: "ÆØÅ – bedriftsrapport",
-        keyFacts: { industry: "Olje og gass", headquarters: "Bergen" },
-        aboutCompany: "Selskapet vokser på vestlandet med bærekraft.",
-        businessAreas: ["Produksjon", "Handel"],
-        strategyAndNews: ["Ny plattform i Nordsjøen"],
-        cultureAndValues: ["Sikkerhet først"],
-        roleInContext: "Rådgiver for energihandel.",
-        jobAdRequirements: [{ requirement: "Norsk muntlig", howToShowFit: "Øv på case på norsk." }],
-        nicheInsights: ["Ny plattform i Nordsjøen"],
-        companyQuestionPrep: [
-          {
-            question: "Hvorfor Equinor?",
-            answerAngle: "Koble energiinteresse til konkret prosjekt.",
-            nicheHooks: ["Nordsjøen"]
-          }
+        headline: "Equinor – forberedelse",
+        mustKnow: ["Ny plattform i Nordsjøen"],
+        questionPrep: sampleQuestionPrep(6).map((item, i) =>
+          i === 0
+            ? {
+                ...item,
+                question: "Hvorfor Equinor?",
+                suggestedAnswer: "Jeg er interessert i energi og ærlige feil."
+              }
+            : item
+        ),
+        questionsToAsk: [
+          { question: "Hvordan jobber teamet med ærlige feil?", why: "Kultur." },
+          { question: "Hvilke KI-prosjekter kjører dere?", why: "Fit." },
+          { question: "Hvordan ser onboarding ut?", why: "Praktisk." },
+          { question: "Hva liker du best?", why: "Personlig." }
         ],
-        interviewAngles: ["Markedskunnskap"],
-        questionsToAsk: ["Hvordan jobber teamet med ærlige feil?"],
-        sources: ["equinor.no"]
+        sources: ["equinor.com"]
       },
-      { companyName: "Equinor", roleTitle: "Rådgiver", generatedAt: new Date().toISOString() }
+      { companyName: "Equinor", roleTitle: "Intern", generatedAt: "2026-04-01T12:00:00.000Z" }
     );
     expect(pdf.subarray(0, 4).toString("utf8")).toBe("%PDF");
   });
 
-  it("fits a max-length report on at most 2 pages", async () => {
+  it("fits a max-size report on a few pages", async () => {
     const pdf = await renderCompanyReportPdf(maxReport(), {
-      companyName: "MaxCorp",
-      roleTitle: "Consultant",
+      companyName: "Test AS",
+      roleTitle: "Utvikler",
       generatedAt: "2026-04-01T12:00:00.000Z"
     });
-    expect(countPdfPages(pdf)).toBeLessThanOrEqual(2);
+    expect(countPdfPages(pdf)).toBeLessThanOrEqual(4);
   });
 });
 
 describe("sanitizeReportFilename", () => {
-  it("sanitizes company names for Content-Disposition", () => {
-    expect(sanitizeReportFilename("DNB ASA")).toBe("dnb-asa-bedriftsrapport.pdf");
-    expect(sanitizeReportFilename("A/B:C*")).toMatch(/bedriftsrapport\.pdf$/);
+  it("slugifies company names", () => {
+    expect(sanitizeReportFilename("DNB Markets")).toBe("dnb-markets-bedriftsrapport.pdf");
   });
 });

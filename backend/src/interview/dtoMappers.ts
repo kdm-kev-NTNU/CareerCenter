@@ -1,8 +1,8 @@
 import {
   emptyCompanyProfile,
-  emptyCompanyReport,
   findRepeatedStories,
   resolveEssentialsSheet,
+  type CandidateBackgroundDto,
   type CompanyProfile,
   type CompanyReport,
   type InterviewBankQuestionDto,
@@ -14,6 +14,7 @@ import {
   type InterviewSimulatorSettingsDto
 } from "@careercenter/shared";
 import type {
+  CandidateBackgroundRecord,
   InterviewBankQuestionRecord,
   InterviewImportJobRecord,
   InterviewKnowledgeDoc,
@@ -55,6 +56,33 @@ export function toBankQuestionDto(row: InterviewBankQuestionRecord): InterviewBa
   };
 }
 
+export function toCandidateBackgroundDto(
+  row: CandidateBackgroundRecord | null
+): CandidateBackgroundDto {
+  if (!row) {
+    return {
+      cvText: "",
+      cvFileName: "",
+      cvUpdatedAt: null,
+      transcriptText: "",
+      transcriptFileName: "",
+      transcriptUpdatedAt: null,
+      notes: "",
+      updatedAt: null
+    };
+  }
+  return {
+    cvText: row.cvText,
+    cvFileName: row.cvFileName,
+    cvUpdatedAt: row.cvUpdatedAt,
+    transcriptText: row.transcriptText,
+    transcriptFileName: row.transcriptFileName,
+    transcriptUpdatedAt: row.transcriptUpdatedAt,
+    notes: row.notes,
+    updatedAt: row.updatedAt
+  };
+}
+
 export function toPrepPlanDto(plan: InterviewPrepPlanRecord): InterviewPrepPlanDto {
   return {
     id: plan.id,
@@ -86,8 +114,6 @@ export function toPrepPlanDto(plan: InterviewPrepPlanRecord): InterviewPrepPlanD
       included: q.included,
       notes: q.notes
     })),
-    tasks: plan.tasks,
-    recommendedCases: plan.recommendedCases,
     repeatedStoryIds: findRepeatedStories(plan.questions),
     createdAt: plan.createdAt,
     updatedAt: plan.updatedAt
@@ -150,12 +176,16 @@ function parseCompanyProfile(json: string): CompanyProfile {
   }
 }
 
+/**
+ * Legacy report JSON fails the strict schema → null (UI asks to re-run research).
+ * Empty/missing JSON is also null.
+ */
 function parseCompanyReport(json: string): CompanyReport | undefined {
   const raw = json?.trim();
   if (!raw || raw === "{}" || raw === '""') return undefined;
   try {
     return companyReportSchema.parse(JSON.parse(raw));
   } catch {
-    return emptyCompanyReport();
+    return undefined;
   }
 }

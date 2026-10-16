@@ -46,18 +46,9 @@ export function renderCompanyReportPdf(
     doc.text(subtitle, { width: pageWidth });
     doc.moveDown(0.3);
 
-    writeKeyFacts(doc, report, pageWidth);
-
-    writeSection(doc, "Om selskapet", report.aboutCompany, pageWidth);
-    writeBullets(doc, "Forretningsområder", report.businessAreas, pageWidth);
-    writeBullets(doc, "Strategi og nyheter", report.strategyAndNews, pageWidth);
-    writeBullets(doc, "Kultur og verdier", report.cultureAndValues, pageWidth);
-    writeSection(doc, "Rollen i kontekst", report.roleInContext, pageWidth);
-    writeRequirements(doc, report.jobAdRequirements, pageWidth);
-    writeBullets(doc, "Nisje-info til bedriftsspesifikke svar", report.nicheInsights, pageWidth);
-    writeCompanyQuestionPrep(doc, report.companyQuestionPrep, pageWidth);
-    writeBullets(doc, "Intervju-vinkler", report.interviewAngles, pageWidth);
-    writeBullets(doc, "Spørsmål du kan stille", report.questionsToAsk, pageWidth);
+    writeBullets(doc, "Må vite", report.mustKnow, pageWidth);
+    writeQuestionPrep(doc, report.questionPrep, pageWidth);
+    writeQuestionsToAsk(doc, report.questionsToAsk, pageWidth);
     writeBullets(doc, "Kilder", report.sources, pageWidth);
 
     doc.end();
@@ -81,46 +72,6 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString("nb-NO", { year: "numeric", month: "short", day: "numeric" });
 }
 
-function writeKeyFacts(
-  doc: PDFKit.PDFDocument,
-  report: CompanyReport,
-  pageWidth: number
-): void {
-  const facts = [
-    report.keyFacts.industry ? `Bransje: ${report.keyFacts.industry}` : null,
-    report.keyFacts.headquarters ? `Hovedkontor: ${report.keyFacts.headquarters}` : null,
-    report.keyFacts.size ? `Størrelse: ${report.keyFacts.size}` : null,
-    report.keyFacts.ownership ? `Eierskap: ${report.keyFacts.ownership}` : null
-  ].filter((v): v is string => Boolean(v));
-
-  if (facts.length === 0) return;
-
-  ensureSpace(doc, 40);
-  doc.font("Helvetica-Bold").fontSize(9).fillColor("#111111");
-  doc.text("Nøkkelfakta", { width: pageWidth });
-  doc.moveDown(0.08);
-  doc.font("Helvetica").fontSize(8).fillColor("#222222");
-  doc.text(facts.map((f) => `• ${f}`).join("  "), { width: pageWidth, lineGap: 0 });
-  doc.moveDown(0.25);
-}
-
-function writeSection(
-  doc: PDFKit.PDFDocument,
-  title: string,
-  body: string,
-  pageWidth: number
-): void {
-  const text = body.trim();
-  if (!text) return;
-  ensureSpace(doc, 32);
-  doc.font("Helvetica-Bold").fontSize(9).fillColor("#111111");
-  doc.text(title, { width: pageWidth });
-  doc.moveDown(0.06);
-  doc.font("Helvetica").fontSize(8).fillColor("#222222");
-  doc.text(text, { width: pageWidth, align: "left", lineGap: 0 });
-  doc.moveDown(0.25);
-}
-
 function writeBullets(
   doc: PDFKit.PDFDocument,
   title: string,
@@ -141,43 +92,47 @@ function writeBullets(
   doc.moveDown(0.25);
 }
 
-function writeRequirements(
+function writeQuestionPrep(
   doc: PDFKit.PDFDocument,
-  requirements: CompanyReport["jobAdRequirements"],
-  pageWidth: number
-): void {
-  if (!requirements.length) return;
-  ensureSpace(doc, 28);
-  doc.font("Helvetica-Bold").fontSize(9).fillColor("#111111");
-  doc.text("Krav fra annonsen – hvordan vise fit", { width: pageWidth });
-  doc.moveDown(0.06);
-  doc.font("Helvetica").fontSize(8).fillColor("#222222");
-  for (const item of requirements) {
-    ensureSpace(doc, 24);
-    doc.font("Helvetica-Bold").text(`• ${item.requirement}`, { width: pageWidth, lineGap: 0 });
-    doc.font("Helvetica").text(`  → ${item.howToShowFit}`, { width: pageWidth, lineGap: 0 });
-  }
-  doc.moveDown(0.25);
-}
-
-function writeCompanyQuestionPrep(
-  doc: PDFKit.PDFDocument,
-  items: CompanyReport["companyQuestionPrep"],
+  items: CompanyReport["questionPrep"],
   pageWidth: number
 ): void {
   if (!items.length) return;
   ensureSpace(doc, 28);
   doc.font("Helvetica-Bold").fontSize(9).fillColor("#111111");
-  doc.text("Svarforslag – bedriftsspesifikke spørsmål", { width: pageWidth });
+  doc.text("Spørsmål du bør kunne svare på", { width: pageWidth });
+  doc.moveDown(0.06);
+  for (const item of items) {
+    ensureSpace(doc, 40);
+    doc.font("Helvetica-Bold").fontSize(8).fillColor("#222222");
+    doc.text(`• ${item.question}`, { width: pageWidth, lineGap: 0 });
+    doc.font("Helvetica").text(`  Hvorfor de spør: ${item.whyTheyAsk}`, { width: pageWidth, lineGap: 0 });
+    doc.text(`  Svarforslag: ${item.suggestedAnswer}`, { width: pageWidth, lineGap: 0 });
+    if (item.backgroundUsed.length) {
+      doc.text(`  Fra bakgrunnen: ${item.backgroundUsed.join("; ")}`, { width: pageWidth, lineGap: 0 });
+    }
+    if (item.companyHooks.length) {
+      doc.text(`  Bedriftshooks: ${item.companyHooks.join("; ")}`, { width: pageWidth, lineGap: 0 });
+    }
+  }
+  doc.moveDown(0.25);
+}
+
+function writeQuestionsToAsk(
+  doc: PDFKit.PDFDocument,
+  items: CompanyReport["questionsToAsk"],
+  pageWidth: number
+): void {
+  if (!items.length) return;
+  ensureSpace(doc, 28);
+  doc.font("Helvetica-Bold").fontSize(9).fillColor("#111111");
+  doc.text("Lure spørsmål du kan stille", { width: pageWidth });
   doc.moveDown(0.06);
   doc.font("Helvetica").fontSize(8).fillColor("#222222");
   for (const item of items) {
-    ensureSpace(doc, 28);
+    ensureSpace(doc, 24);
     doc.font("Helvetica-Bold").text(`• ${item.question}`, { width: pageWidth, lineGap: 0 });
-    doc.font("Helvetica").text(`  Svarvinkel: ${item.answerAngle}`, { width: pageWidth, lineGap: 0 });
-    if (item.nicheHooks.length) {
-      doc.text(`  Hooks: ${item.nicheHooks.join("; ")}`, { width: pageWidth, lineGap: 0 });
-    }
+    doc.font("Helvetica").text(`  Hvorfor: ${item.why}`, { width: pageWidth, lineGap: 0 });
   }
   doc.moveDown(0.25);
 }
