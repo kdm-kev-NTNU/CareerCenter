@@ -267,7 +267,7 @@ describe("InterviewSimulatorView plan picker", () => {
     expect(card.text()).toContain("v2 · sum 14 (+5)");
     expect(wrapper.get("[data-test='plan-sections']").text()).toContain("1 av 1 seksjoner øvd");
     expect(wrapper.get("[data-test='section-card-full']").classes()).not.toContain("section-card--done");
-    expect(wrapper.get("[data-test='section-retry-behavioral']").exists()).toBe(true);
+    expect(wrapper.find("[data-test='section-retry-behavioral']").exists()).toBe(true);
 
     await wrapper.get("[data-test='section-card-behavioral']").trigger("click");
     expect(wrapper.get("[data-test='section-attempt-history']").text()).toContain("Versjon 1");

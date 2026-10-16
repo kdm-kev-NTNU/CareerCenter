@@ -391,7 +391,7 @@ export function clickAircraft(session: MtaSession, now: number): MtaActionResult
   if (session.finished) return { ok: false, reason: "finished" };
   if (isMtaExpired(session, now)) return { ok: false, reason: "expired" };
 
-  let next = resolveMissedAircraft(session, now);
+  const next = resolveMissedAircraft(session, now);
   const ac = currentAircraft(next, now);
   if (!ac) return { ok: false, reason: "no_target" };
 

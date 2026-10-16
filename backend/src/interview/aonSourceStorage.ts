@@ -38,30 +38,42 @@ async function fileReadable(absolutePath: string): Promise<boolean> {
  * Resolve an on-disk path for a catalog id only.
  * Paths are built exclusively from the fixed catalog filename — never from user input.
  */
-export async function resolveExistingAonSourcePath(id: string): Promise<{
+/**
+ * Roots are searched in order. The default is the repo root (cwd or its parent).
+ * Callers pass an explicit list when availability must not depend on the workspace copy.
+ */
+export async function resolveExistingAonSourcePath(
+  id: string,
+  roots: readonly string[] = workspaceRootCandidates()
+): Promise<{
   meta: AonSourcePdfMeta;
   absolutePath: string;
   available: boolean;
 } | null> {
   const meta = getAonSourcePdf(id);
   if (!meta || !isSafeCatalogFilename(meta.filename)) return null;
+  if (roots.length === 0) return null;
 
-  for (const root of workspaceRootCandidates()) {
+  let fallbackPath = "";
+  for (const root of roots) {
     const absolutePath = path.join(root, "stoff", "aon", meta.filename);
     if (path.basename(absolutePath) !== meta.filename) continue;
+    fallbackPath = absolutePath;
     if (await fileReadable(absolutePath)) {
       return { meta, absolutePath, available: true };
     }
   }
 
-  const absolutePath = path.join(workspaceRootCandidates()[0]!, "stoff", "aon", meta.filename);
-  return { meta, absolutePath, available: false };
+  if (!fallbackPath) return null;
+  return { meta, absolutePath: fallbackPath, available: false };
 }
 
-export async function listAonSourcePdfs(): Promise<AonSourcePdfListItem[]> {
+export async function listAonSourcePdfs(
+  roots: readonly string[] = workspaceRootCandidates()
+): Promise<AonSourcePdfListItem[]> {
   const items: AonSourcePdfListItem[] = [];
   for (const meta of aonSourcePdfs) {
-    const resolved = await resolveExistingAonSourcePath(meta.id);
+    const resolved = await resolveExistingAonSourcePath(meta.id, roots);
     items.push({
       ...meta,
       available: resolved?.available === true

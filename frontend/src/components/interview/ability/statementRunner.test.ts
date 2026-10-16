@@ -8,12 +8,18 @@ import StatementTestRunner from "./StatementTestRunner.vue";
 import { getAbilityProvider, isKnownAbilityProvider } from "./abilityProviders.js";
 
 describe("abilityProviders catalog", () => {
-  it("exposes AON with four playable tests", () => {
+  it("exposes AON with the playable practice tests", () => {
     expect(isKnownAbilityProvider("aon")).toBe(true);
     expect(isKnownAbilityProvider("unknown")).toBe(false);
     const aon = getAbilityProvider("aon");
-    expect(aon?.tests).toHaveLength(4);
-    expect(aon?.tests.every((t) => t.playable)).toBe(true);
+    expect(aon?.tests.map((test) => test.kind)).toEqual([
+      "switch_challenge",
+      "scales_clx",
+      "scales_numerical",
+      "scales_verbal",
+      "scales_mta"
+    ]);
+    expect(aon?.tests.every((test) => test.playable)).toBe(true);
     expect(aon?.officialUrl).toContain("prepare-for-your-online-assessment");
   });
 });

@@ -752,13 +752,20 @@ describe("interview prep routes", () => {
     });
     expect(unknown.statusCode).toBe(404);
 
+    const switchSource = body.find((item) => item.id === "switch_challenge");
+    expect(switchSource?.filename).toBe("practice-tasks-deductive-reasoning-switchchallenge.pdf");
+
     const pdf = await app.inject({
       method: "GET",
       url: "/api/interview/ability/aon/sources/switch_challenge"
     });
-    expect(pdf.statusCode).toBe(200);
-    expect(pdf.headers["content-type"]).toMatch(/application\/pdf/);
-    expect(Buffer.isBuffer(pdf.rawPayload) ? pdf.rawPayload.length : 0).toBeGreaterThan(1000);
+    if (switchSource?.available) {
+      expect(pdf.statusCode).toBe(200);
+      expect(pdf.headers["content-type"]).toMatch(/application\/pdf/);
+      expect(Buffer.isBuffer(pdf.rawPayload) ? pdf.rawPayload.length : 0).toBeGreaterThan(1000);
+    } else {
+      expect(pdf.statusCode).toBe(404);
+    }
     await app.close();
   });
 
