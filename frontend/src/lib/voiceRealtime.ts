@@ -1,6 +1,7 @@
 /**
  * Minimal WebRTC connect to OpenAI Realtime using an ephemeral client secret.
  * Never receives or stores the API key.
+ * Contract: only audio tracks are sent — video on the stream stays local.
  */
 
 export async function connectRealtimeVoice(input: {
@@ -9,9 +10,11 @@ export async function connectRealtimeVoice(input: {
   stream: MediaStream;
   onTranscript?: (role: "user" | "assistant", text: string) => void;
   onToolCall?: (name: string) => void;
+  onSpeaking?: (who: "assistant" | "user", speaking: boolean) => void;
 }): Promise<{ pc: RTCPeerConnection; stop: () => void }> {
   const pc = new RTCPeerConnection();
-  input.stream.getTracks().forEach((track) => pc.addTrack(track, input.stream));
+  // Voice is audio-only; never forward camera tracks to Realtime.
+  input.stream.getAudioTracks().forEach((track) => pc.addTrack(track, input.stream));
 
   const remoteAudio = new Audio();
   remoteAudio.autoplay = true;
@@ -46,6 +49,18 @@ export async function connectRealtimeVoice(input: {
       }
       if (payload.type === "response.function_call_arguments.done" && payload.name) {
         input.onToolCall?.(payload.name);
+      }
+      if (payload.type === "output_audio_buffer.started") {
+        input.onSpeaking?.("assistant", true);
+      }
+      if (payload.type === "output_audio_buffer.stopped") {
+        input.onSpeaking?.("assistant", false);
+      }
+      if (payload.type === "input_audio_buffer.speech_started") {
+        input.onSpeaking?.("user", true);
+      }
+      if (payload.type === "input_audio_buffer.speech_stopped") {
+        input.onSpeaking?.("user", false);
       }
     } catch {
       // ignore malformed events
