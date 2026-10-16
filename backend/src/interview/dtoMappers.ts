@@ -125,6 +125,7 @@ export function toSessionDto(session: InterviewSessionRecord): InterviewSessionD
     mode: session.mode,
     title: session.title,
     prepPlanId: session.prepPlanId,
+    planSection: session.planSection,
     finishedAt: session.finishedAt,
     feedback: session.feedback,
     createdAt: session.createdAt,

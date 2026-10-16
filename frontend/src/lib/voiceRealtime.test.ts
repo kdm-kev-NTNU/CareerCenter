@@ -1,6 +1,60 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { connectRealtimeVoice } from "./voiceRealtime.js";
 
+function stubPeer() {
+  const closeDc = vi.fn();
+  const closePc = vi.fn();
+  const addTrack = vi.fn();
+  const handlers: {
+    onmessage: ((event: MessageEvent) => void) | null;
+    ontrack: ((event: RTCTrackEvent) => void) | null;
+    onopen: (() => void) | null;
+  } = {
+    onmessage: null,
+    ontrack: null,
+    onopen: null
+  };
+
+  const sent: string[] = [];
+  class FakeRTCPeerConnection {
+    addTrack = addTrack;
+    createOffer = vi.fn(async () => ({ type: "offer", sdp: "v=0" }));
+    setLocalDescription = vi.fn(async () => undefined);
+    setRemoteDescription = vi.fn(async () => undefined);
+    close = closePc;
+    createDataChannel = vi.fn(() => ({
+      get onmessage() {
+        return handlers.onmessage;
+      },
+      set onmessage(fn: ((event: MessageEvent) => void) | null) {
+        handlers.onmessage = fn;
+      },
+      set onopen(fn: (() => void) | null) {
+        handlers.onopen = fn;
+      },
+      send: (data: string) => sent.push(data),
+      close: closeDc
+    }));
+    set ontrack(fn: ((event: RTCTrackEvent) => void) | null) {
+      handlers.ontrack = fn;
+    }
+    get ontrack() {
+      return handlers.ontrack;
+    }
+  }
+
+  vi.stubGlobal("RTCPeerConnection", FakeRTCPeerConnection);
+  vi.stubGlobal(
+    "Audio",
+    class {
+      autoplay = false;
+      srcObject: MediaStream | null = null;
+    }
+  );
+
+  return { closeDc, closePc, addTrack, handlers, sent };
+}
+
 describe("connectRealtimeVoice", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -8,54 +62,7 @@ describe("connectRealtimeVoice", () => {
   });
 
   it("connects over WebRTC and handles transcript/tool events", async () => {
-    const closeDc = vi.fn();
-    const closePc = vi.fn();
-    const handlers: {
-      onmessage: ((event: MessageEvent) => void) | null;
-      ontrack: ((event: RTCTrackEvent) => void) | null;
-      onopen: (() => void) | null;
-    } = {
-      onmessage: null,
-      ontrack: null,
-      onopen: null
-    };
-
-    const sent: string[] = [];
-    class FakeRTCPeerConnection {
-      addTrack = vi.fn();
-      createOffer = vi.fn(async () => ({ type: "offer", sdp: "v=0" }));
-      setLocalDescription = vi.fn(async () => undefined);
-      setRemoteDescription = vi.fn(async () => undefined);
-      close = closePc;
-      createDataChannel = vi.fn(() => ({
-        get onmessage() {
-          return handlers.onmessage;
-        },
-        set onmessage(fn: ((event: MessageEvent) => void) | null) {
-          handlers.onmessage = fn;
-        },
-        set onopen(fn: (() => void) | null) {
-          handlers.onopen = fn;
-        },
-        send: (data: string) => sent.push(data),
-        close: closeDc
-      }));
-      set ontrack(fn: ((event: RTCTrackEvent) => void) | null) {
-        handlers.ontrack = fn;
-      }
-      get ontrack() {
-        return handlers.ontrack;
-      }
-    }
-
-    vi.stubGlobal("RTCPeerConnection", FakeRTCPeerConnection);
-    vi.stubGlobal(
-      "Audio",
-      class {
-        autoplay = false;
-        srcObject: MediaStream | null = null;
-      }
-    );
+    const { closeDc, closePc, handlers, sent } = stubPeer();
 
     const fetchMock = vi.fn(async () => ({
       ok: true,
@@ -66,7 +73,8 @@ describe("connectRealtimeVoice", () => {
     const transcripts: Array<{ role: string; text: string }> = [];
     const tools: string[] = [];
     const stream = {
-      getTracks: () => [{ kind: "audio" }]
+      getTracks: () => [{ kind: "audio" }],
+      getAudioTracks: () => [{ kind: "audio" }]
     } as unknown as MediaStream;
 
     const session = await connectRealtimeVoice({
@@ -114,6 +122,75 @@ describe("connectRealtimeVoice", () => {
     expect(closePc).toHaveBeenCalled();
   });
 
+  it("maps speaking buffer events to onSpeaking", async () => {
+    const { handlers } = stubPeer();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        text: async () => "v=0 answer"
+      }))
+    );
+
+    const speaking: Array<{ who: string; speaking: boolean }> = [];
+    await connectRealtimeVoice({
+      clientSecret: "ephemeral",
+      model: "gpt-realtime-2.1",
+      stream: {
+        getTracks: () => [{ kind: "audio" }],
+        getAudioTracks: () => [{ kind: "audio" }]
+      } as unknown as MediaStream,
+      onSpeaking: (who, isSpeaking) => speaking.push({ who, speaking: isSpeaking })
+    });
+
+    handlers.onmessage?.({
+      data: JSON.stringify({ type: "output_audio_buffer.started" })
+    } as MessageEvent);
+    handlers.onmessage?.({
+      data: JSON.stringify({ type: "output_audio_buffer.stopped" })
+    } as MessageEvent);
+    handlers.onmessage?.({
+      data: JSON.stringify({ type: "input_audio_buffer.speech_started" })
+    } as MessageEvent);
+    handlers.onmessage?.({
+      data: JSON.stringify({ type: "input_audio_buffer.speech_stopped" })
+    } as MessageEvent);
+
+    expect(speaking).toEqual([
+      { who: "assistant", speaking: true },
+      { who: "assistant", speaking: false },
+      { who: "user", speaking: true },
+      { who: "user", speaking: false }
+    ]);
+  });
+
+  it("adds only audio tracks when the stream also has video", async () => {
+    const { addTrack } = stubPeer();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        text: async () => "v=0 answer"
+      }))
+    );
+
+    const audio = { kind: "audio", id: "a1" };
+    const video = { kind: "video", id: "v1" };
+    const stream = {
+      getTracks: () => [audio, video],
+      getAudioTracks: () => [audio]
+    } as unknown as MediaStream;
+
+    await connectRealtimeVoice({
+      clientSecret: "ephemeral",
+      model: "gpt-realtime-2.1",
+      stream
+    });
+
+    expect(addTrack).toHaveBeenCalledTimes(1);
+    expect(addTrack).toHaveBeenCalledWith(audio, stream);
+  });
+
   it("closes the peer connection when Realtime HTTP fails", async () => {
     const closePc = vi.fn();
     class FakeRTCPeerConnection {
@@ -148,7 +225,10 @@ describe("connectRealtimeVoice", () => {
       connectRealtimeVoice({
         clientSecret: "bad",
         model: "gpt-realtime-2.1",
-        stream: { getTracks: () => [] } as unknown as MediaStream
+        stream: {
+          getTracks: () => [],
+          getAudioTracks: () => []
+        } as unknown as MediaStream
       })
     ).rejects.toThrow(/Realtime-tilkobling feilet \(401\): nope/);
     expect(closePc).toHaveBeenCalled();

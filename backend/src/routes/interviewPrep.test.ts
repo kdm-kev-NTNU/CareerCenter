@@ -497,7 +497,8 @@ describe("interview prep routes", () => {
         {
           prompt: "Fortell om en gang du leverte under press.",
           withRubric: "true",
-          durationMs: "45000"
+          durationMs: "45000",
+          model: "gpt-6-luna"
         },
         { filename: "answer.webm", contentType: "audio/webm", body: "fake-audio-bytes" }
       )
@@ -508,9 +509,30 @@ describe("interview prep routes", () => {
     expect(response.json().rating).toBe("ok");
     expect(llmClient.transcribeCalls).toHaveLength(1);
     expect(llmClient.transcribeCalls[0]!.buffer.toString()).toContain("fake-audio-bytes");
-    const rubricUser = llmClient.structuredCalls.at(-1)?.options.messages.find((m) => m.role === "user")?.content;
+    const rubricCall = llmClient.structuredCalls.at(-1);
+    expect(rubricCall?.options.model).toBe("gpt-6-luna");
+    const rubricUser = rubricCall?.options.messages.find((m) => m.role === "user")?.content;
     expect(rubricUser).toContain("Spørsmål: Fortell om en gang du leverte under press.");
     expect(rubricUser).toContain("Svar: Jeg leverte funksjonen før deadline.");
+    await app.close();
+  });
+
+  it("rejects an invalid rating model on video transcribe", async () => {
+    const { app } = await buildInterviewApp({
+      transcribeResult: "Et kort svar."
+    });
+    const boundary = "----VideoInvalidModelBoundary";
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/interview/video/transcribe",
+      headers: { "content-type": `multipart/form-data; boundary=${boundary}` },
+      payload: multipartPayload(
+        boundary,
+        { withRubric: "true", model: "not-a-real-model" },
+        { filename: "answer.webm", contentType: "audio/webm", body: "audio" }
+      )
+    });
+    expect(response.statusCode).toBeGreaterThanOrEqual(400);
     await app.close();
   });
 
@@ -579,7 +601,7 @@ describe("interview prep routes", () => {
   });
 
   it("re-rates an existing transcript via /video/rate", async () => {
-    const { app } = await buildInterviewApp({
+    const { app, llmClient } = await buildInterviewApp({
       structuredResult: {
         scores: Object.fromEntries(starRubricCriteria.map((key) => [key, 4])),
         improvement: "Bra."
@@ -591,12 +613,29 @@ describe("interview prep routes", () => {
       payload: {
         prompt: "Fortell om en utfordring",
         transcript: "Jeg løste problemet.",
-        durationMs: 30_000
+        durationMs: 30_000,
+        model: "gpt-5.5"
       }
     });
     expect(response.statusCode).toBe(200);
     expect(response.json().rating).toBe("ok");
     expect(response.json().feedback.sum).toBe(32);
+    expect(llmClient.structuredCalls.at(-1)?.options.model).toBe("gpt-5.5");
+    await app.close();
+  });
+
+  it("rejects an invalid rating model on video rate", async () => {
+    const { app } = await buildInterviewApp();
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/interview/video/rate",
+      payload: {
+        prompt: "Fortell om en utfordring",
+        transcript: "Jeg løste problemet.",
+        model: "gpt-not-real"
+      }
+    });
+    expect(response.statusCode).toBeGreaterThanOrEqual(400);
     await app.close();
   });
 
@@ -915,6 +954,86 @@ describe("interview prep routes", () => {
     });
     expect(voice.statusCode).toBe(200);
     expect(voice.json()).toMatchObject({ mock: true });
+    await app.close();
+  });
+
+  it("starts a session for one plan section and lists the plan's sessions", async () => {
+    const main = new MemoryRepository();
+    const interviewRepo = new InterviewPrepMemoryRepository();
+    const app = await buildServer({
+      repository: main,
+      authDisabled: true,
+      llmClient: new FakeLlmClient({ configured: true }),
+      interviewPrepRepository: interviewRepo
+    });
+    await app.ready();
+    await app.inject({ method: "GET", url: "/api/interview/status" });
+    const user = await main.findUserByName("__test__");
+
+    const plan = await interviewRepo.createPrepPlan(user!.id, {
+      companyName: "DNB",
+      roleTitle: "Analyst",
+      format: "interview",
+      researchModel: "gpt-6-astra"
+    });
+    await interviewRepo.setPrepPlanCurated(user!.id, plan.id, {
+      questions: [
+        { text: "Why DNB?", category: "motivation", target: "interview", source: "custom" },
+        { text: "Tell me about a conflict.", category: "behavioral", target: "interview", source: "custom" },
+        {
+          text: "Hva overrasket deg mest?",
+          category: "personal",
+          audience: "ask_interviewer_personal",
+          target: "interview",
+          source: "custom"
+        }
+      ],
+      tasks: []
+    });
+    await interviewRepo.updatePrepPlanStatus(user!.id, plan.id, "ready");
+
+    async function systemPromptFor(planSection: string) {
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/interview/sessions",
+        payload: { mode: "behavioral_mock", prepPlanId: plan.id, planSection }
+      });
+      expect(created.statusCode).toBe(201);
+      const session = created.json() as { id: string; planSection?: string };
+      expect(session.planSection).toBe(planSection);
+      const messages = await app.inject({ method: "GET", url: `/api/interview/sessions/${session.id}/messages` });
+      return (messages.json() as Array<{ role: string; content: string }>).find((m) => m.role === "system")!.content;
+    }
+
+    const motivation = await systemPromptFor("motivation");
+    expect(motivation).toContain("seksjonen «Motivasjon»");
+    expect(motivation).toContain("Why DNB?");
+    expect(motivation).not.toContain("Tell me about a conflict.");
+    expect(motivation).not.toContain("Avslutning: spørsmålsrunde");
+
+    const closing = await systemPromptFor("ask_interviewer");
+    expect(closing).toContain("bare på spørsmålsrunden");
+    expect(closing).toContain("Hva overrasket deg mest?");
+    expect(closing).not.toContain("Why DNB?");
+
+    const empty = await app.inject({
+      method: "POST",
+      url: "/api/interview/sessions",
+      payload: { mode: "behavioral_mock", prepPlanId: plan.id, planSection: "technical" }
+    });
+    expect(empty.statusCode).toBe(400);
+
+    const noPlan = await app.inject({
+      method: "POST",
+      url: "/api/interview/sessions",
+      payload: { mode: "behavioral_mock", planSection: "motivation" }
+    });
+    expect(noPlan.statusCode).toBe(400);
+
+    await app.inject({ method: "POST", url: "/api/interview/sessions", payload: { mode: "behavioral_mock" } });
+    const listed = await app.inject({ method: "GET", url: `/api/interview/sessions?prepPlanId=${plan.id}` });
+    const sessions = listed.json() as Array<{ planSection?: string }>;
+    expect(sessions.map((s) => s.planSection).sort()).toEqual(["ask_interviewer", "motivation"]);
     await app.close();
   });
 

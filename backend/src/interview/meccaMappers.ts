@@ -25,7 +25,8 @@ export function toVideoSettingsDto(row: InterviewVideoSettingsRecord): Interview
   const settings = videoSimulatorSettingsSchema.parse({
     thinkSeconds: row.thinkSeconds,
     answerSeconds: row.answerSeconds,
-    prompts: JSON.parse(row.promptsJson) as string[]
+    prompts: JSON.parse(row.promptsJson) as string[],
+    ratingModel: row.ratingModel
   });
   return { ...settings, updatedAt: row.updatedAt };
 }

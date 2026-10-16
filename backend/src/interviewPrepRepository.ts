@@ -1,5 +1,6 @@
 import type {
   AbilityTestKind,
+  PlanSectionKey,
   BankQuestionOrigin,
   BankQuestionStatus,
   CaseApprovalStatus,
@@ -165,6 +166,7 @@ export interface InterviewSessionRecord {
   mode: InterviewMode;
   title: string;
   prepPlanId?: string;
+  planSection?: PlanSectionKey;
   caseEntryId?: string;
   feedback?: InterviewFeedbackRubric;
   finishedAt?: string;
@@ -202,6 +204,7 @@ export interface InterviewVideoSettingsRecord {
   thinkSeconds: number;
   answerSeconds: number;
   promptsJson: string;
+  ratingModel: string;
   updatedAt: string;
 }
 
@@ -494,6 +497,7 @@ export interface InterviewPrepRepository {
       mode: InterviewMode;
       title: string;
       prepPlanId?: string;
+      planSection?: PlanSectionKey;
       caseEntryId?: string;
       systemPrompt: string;
     }

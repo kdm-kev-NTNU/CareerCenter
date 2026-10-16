@@ -48,4 +48,20 @@ describe("rateStarAnswer", () => {
     expect(result.ok).toBe(false);
     expect(llm.structuredCalls).toHaveLength(1);
   });
+
+  it("forwards an explicit model override", async () => {
+    const llm = new FakeLlmClient({
+      structuredResult: { scores: okScores, improvement: "Ok." }
+    });
+    await rateStarAnswer(llm, "Svar", { model: "gpt-6-luna" });
+    expect(llm.structuredCalls[0]?.options.model).toBe("gpt-6-luna");
+  });
+
+  it("omits model when no override is provided", async () => {
+    const llm = new FakeLlmClient({
+      structuredResult: { scores: okScores, improvement: "Ok." }
+    });
+    await rateStarAnswer(llm, "Svar");
+    expect(llm.structuredCalls[0]?.options.model).toBeUndefined();
+  });
 });

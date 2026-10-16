@@ -123,12 +123,14 @@ describe("interviewPrepApi", () => {
       file: new Blob(["audio"], { type: "audio/webm" }),
       prompt: "Fortell om en utfordring",
       withRubric: true,
-      durationMs: 12_000
+      durationMs: 12_000,
+      model: "gpt-6-luna"
     });
     await interviewPrepApi.rateVideo({
       prompt: "Fortell om en utfordring",
       transcript: "Jeg løste det.",
-      durationMs: 12_000
+      durationMs: 12_000,
+      model: "gpt-6-luna"
     });
 
     expect(mockedRequest).toHaveBeenCalledWith(
@@ -161,6 +163,7 @@ describe("interviewPrepApi", () => {
       | undefined;
     expect(formData?.get("withRubric")).toBe("true");
     expect(formData?.get("prompt")).toBe("Fortell om en utfordring");
+    expect(formData?.get("model")).toBe("gpt-6-luna");
     expect(formData?.get("file")).toBeInstanceOf(Blob);
     expect(mockedRequest).toHaveBeenCalledWith(
       "/api/interview/video/rate",
@@ -169,7 +172,8 @@ describe("interviewPrepApi", () => {
         body: JSON.stringify({
           prompt: "Fortell om en utfordring",
           transcript: "Jeg løste det.",
-          durationMs: 12_000
+          durationMs: 12_000,
+          model: "gpt-6-luna"
         })
       })
     );

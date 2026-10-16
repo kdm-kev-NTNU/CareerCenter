@@ -9,6 +9,7 @@ import {
   type PrepPlanStatus
 } from "@careercenter/shared";
 import { interviewPrepApi } from "../../api/interviewPrep.js";
+import { connectRealtimeVoice } from "../../lib/voiceRealtime.js";
 import InterviewSimulatorView from "./InterviewSimulatorView.vue";
 
 vi.mock("../../api/interviewPrep.js", () => ({
@@ -20,14 +21,25 @@ vi.mock("../../api/interviewPrep.js", () => ({
     plan: vi.fn(),
     getStatus: vi.fn(),
     createSession: vi.fn(),
+    sessions: vi.fn(),
     sessionMessages: vi.fn(),
-    createVoiceSession: vi.fn()
+    createVoiceSession: vi.fn(),
+    finishSession: vi.fn(),
+    appendTranscript: vi.fn()
   }
 }));
 
+vi.mock("../../lib/voiceRealtime.js", () => ({
+  connectRealtimeVoice: vi.fn()
+}));
+
 vi.mock("../../composables/useMediaStream.js", () => {
+  const audio = { kind: "audio", enabled: true, readyState: "live", stop: vi.fn() };
+  const video = { kind: "video", enabled: true, readyState: "live", stop: vi.fn() };
   const stream = shallowRef({
-    getTracks: () => [{ kind: "audio", stop: vi.fn() }]
+    getTracks: () => [audio, video],
+    getAudioTracks: () => [audio],
+    getVideoTracks: () => [video]
   });
   return {
     useMediaStream: () => ({
@@ -38,6 +50,8 @@ vi.mock("../../composables/useMediaStream.js", () => {
     })
   };
 });
+
+const connectVoice = vi.mocked(connectRealtimeVoice);
 
 const api = vi.mocked(interviewPrepApi);
 const Stub = defineComponent({ template: "<div />" });
@@ -101,6 +115,7 @@ describe("InterviewSimulatorView plan picker", () => {
   beforeEach(() => {
     localStorage.clear();
     vi.clearAllMocks();
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
     api.simulatorSettings.mockImplementation(async (mode) => defaultSimulatorSettings(mode));
     api.saveSimulatorSettings.mockImplementation(async (input) => ({
       ...defaultSimulatorSettings(input.mode),
@@ -113,12 +128,17 @@ describe("InterviewSimulatorView plan picker", () => {
     api.plan.mockImplementation(async (id) => ({ plan: plans.find((p) => p.id === id)!, rankedCases: [] }));
     api.getStatus.mockResolvedValue({ aiConfigured: true });
     api.sessionMessages.mockResolvedValue([]);
+    api.sessions.mockResolvedValue([]);
     api.createVoiceSession.mockResolvedValue({
       mock: true,
       model: "gpt-realtime",
       clientSecret: "secret",
       expiresAt: "2026-10-15T12:00:00.000Z",
       tools: []
+    });
+    connectVoice.mockResolvedValue({
+      pc: {} as RTCPeerConnection,
+      stop: vi.fn()
     });
   });
 
@@ -189,5 +209,119 @@ describe("InterviewSimulatorView plan picker", () => {
     );
     expect(api.createSession.mock.calls[0]?.[0]).not.toHaveProperty("practice");
     expect(api.createVoiceSession).toHaveBeenCalledWith("s1");
+  });
+
+  it("shows a card per plan section and starts the session for the chosen one", async () => {
+    api.createSession.mockResolvedValue({ id: "s1" } as Awaited<ReturnType<typeof api.createSession>>);
+    const { wrapper } = await mountView("/interview/simulator?planId=a");
+
+    expect(api.sessions).toHaveBeenCalledWith({ prepPlanId: "a" });
+    const cards = wrapper.findAll("[data-test='plan-sections'] .section-card");
+    expect(cards.map((card) => card.find(".section-card__label").text())).toEqual(["Hele intervjuet", "Atferd (STAR)"]);
+    expect(wrapper.get("[data-test='section-card-full']").attributes("aria-pressed")).toBe("true");
+
+    await wrapper.get("[data-test='section-card-behavioral']").trigger("click");
+    expect(wrapper.get("[data-test='start-recording']").text()).toBe("Start: Atferd (STAR)");
+
+    await wrapper.get("[data-test='start-recording']").trigger("click");
+    await flushPromises();
+
+    expect(api.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prepPlanId: "a",
+        planSection: "behavioral",
+        title: "Øving: Bedrift a – Atferd (STAR)"
+      })
+    );
+  });
+
+  it("marks sections that have a finished session with the latest score", async () => {
+    api.sessions.mockResolvedValue([
+      {
+        id: "old",
+        mode: "behavioral_mock",
+        title: "",
+        prepPlanId: "a",
+        planSection: "behavioral",
+        finishedAt: "2026-10-03T10:00:00.000Z",
+        feedback: { scores: {} as never, sum: 9, improvement: "" },
+        createdAt: "2026-10-03T09:00:00.000Z",
+        updatedAt: "2026-10-03T10:00:00.000Z"
+      },
+      {
+        id: "new",
+        mode: "behavioral_mock",
+        title: "",
+        prepPlanId: "a",
+        planSection: "behavioral",
+        finishedAt: "2026-10-04T10:00:00.000Z",
+        feedback: { scores: {} as never, sum: 14, improvement: "" },
+        createdAt: "2026-10-04T09:00:00.000Z",
+        updatedAt: "2026-10-04T10:00:00.000Z"
+      }
+    ]);
+    const { wrapper } = await mountView("/interview/simulator?planId=a");
+
+    const card = wrapper.get("[data-test='section-card-behavioral']");
+    expect(card.classes()).toContain("section-card--done");
+    expect(card.text()).toContain("1 spørsmål · sum 14");
+    expect(wrapper.get("[data-test='plan-sections']").text()).toContain("1 av 1 seksjoner øvd");
+    expect(wrapper.get("[data-test='section-card-full']").classes()).not.toContain("section-card--done");
+  });
+
+  it("opens the call stage for a live voice session and closes it after leave", async () => {
+    const stop = vi.fn();
+    api.createSession.mockResolvedValue({ id: "s1" } as Awaited<ReturnType<typeof api.createSession>>);
+    api.createVoiceSession.mockResolvedValue({
+      mock: false,
+      model: "gpt-realtime",
+      clientSecret: "secret",
+      expiresAt: "2026-10-15T12:00:00.000Z",
+      tools: []
+    });
+    connectVoice.mockResolvedValue({ pc: {} as RTCPeerConnection, stop });
+    api.finishSession.mockResolvedValue({
+      id: "s1",
+      mode: "behavioral_mock",
+      title: "Øving: Bedrift a",
+      prepPlanId: "a",
+      finishedAt: "2026-10-15T12:05:00.000Z",
+      feedback: {
+        scores: {
+          openingAndStructure: 3,
+          situationAndTask: 3,
+          action: 3,
+          result: 3,
+          learning: 3,
+          ownership: 3,
+          tempoAndLength: 3,
+          relevance: 3
+        },
+        sum: 24,
+        improvement: "Avslutt med resultat."
+      },
+      createdAt: "2026-10-15T12:00:00.000Z",
+      updatedAt: "2026-10-15T12:05:00.000Z"
+    });
+
+    const { wrapper } = await mountView("/interview/simulator?planId=a");
+    await wrapper.get("[data-test='start-recording']").trigger("click");
+    await flushPromises();
+
+    expect(document.body.querySelector("[data-test='call-stage']")).not.toBeNull();
+    expect(document.body.querySelector("[data-test='call-stage']")?.getAttribute("data-call-state")).toBe(
+      "live"
+    );
+    expect(connectVoice).toHaveBeenCalled();
+
+    const leave = document.body.querySelector("[data-test='leave-call']");
+    expect(leave).not.toBeNull();
+    (leave as HTMLButtonElement).click();
+    await flushPromises();
+
+    expect(stop).toHaveBeenCalled();
+    expect(api.finishSession).toHaveBeenCalledWith("s1");
+    expect(document.body.querySelector("[data-test='call-stage']")).toBeNull();
+    expect(wrapper.get("[data-test='feedback-panel']").text()).toContain("Feedback (sum 24)");
   });
 });

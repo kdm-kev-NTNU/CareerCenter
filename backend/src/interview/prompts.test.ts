@@ -86,6 +86,31 @@ describe("closing round", () => {
   });
 });
 
+describe("plan section sessions", () => {
+  it("a question section starts on the first question and skips the closing round", () => {
+    const prompt = buildSimulatorSystemPrompt({
+      ...baseInput,
+      mode: "behavioral_mock",
+      planSection: { key: "behavioral", title: "Atferd (STAR)" }
+    });
+    expect(prompt).toContain("bare på seksjonen «Atferd (STAR)»");
+    expect(prompt).not.toContain("be så kandidaten presentere seg");
+    expect(prompt).not.toContain("Avslutning: spørsmålsrunde");
+  });
+
+  it("the closing-round section keeps the closing round rules", () => {
+    const prompt = buildSimulatorSystemPrompt({
+      ...baseInput,
+      mode: "behavioral_mock",
+      planSection: { key: "ask_interviewer", title: "Spørsmålsrunde (jeg spør)" },
+      questionsToAsk: [{ text: "Hva overrasket deg mest?", audience: "ask_interviewer_personal" }]
+    });
+    expect(prompt).toContain("bare på spørsmålsrunden");
+    expect(prompt).toContain("Avslutning: spørsmålsrunde");
+    expect(prompt).toContain("Hva overrasket deg mest?");
+  });
+});
+
 describe("essentials in the simulator prompt", () => {
   it("includes a custom sheet and leaves out an empty one", () => {
     const custom = buildSimulatorSystemPrompt({ ...baseInput, mode: "behavioral_mock", essentialsSheet: "Mine stikkord" });
@@ -130,6 +155,19 @@ describe("buildPlanPracticeScript", () => {
         questions: [{ text: "Hva er neste steg?", category: "company", audience: "ask_interviewer_company" }]
       })
     ).toBe("");
+  });
+
+  it("keeps only the chosen section", () => {
+    const script = buildPlanPracticeScript({
+      companyName: "DNB",
+      section: "behavioral",
+      questions: [
+        { text: "Why DNB?", category: "motivation", included: true, sortOrder: 0 },
+        { text: "A conflict?", category: "behavioral", included: true, sortOrder: 1 }
+      ]
+    });
+    expect(script).toContain("1. [behavioral] A conflict?");
+    expect(script).not.toContain("Why DNB?");
   });
 
   it("is embedded in simulator prompt when planScript is set", () => {

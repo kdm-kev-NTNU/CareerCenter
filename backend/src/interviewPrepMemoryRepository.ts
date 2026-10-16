@@ -31,6 +31,7 @@ import { canDeleteImportJob, canDeletePrepPlan, categoryForAudience } from "@car
 import type {
   ImportJobKind,
   InterviewMode,
+  PlanSectionKey,
   PrepPlanStatus,
   PrepQuestionSource,
   QuestionAudience,
@@ -742,6 +743,7 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       mode: InterviewMode;
       title: string;
       prepPlanId?: string;
+      planSection?: PlanSectionKey;
       caseEntryId?: string;
       systemPrompt: string;
     }
@@ -753,6 +755,7 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       mode: input.mode,
       title: input.title,
       prepPlanId: input.prepPlanId,
+      planSection: input.planSection,
       caseEntryId: input.caseEntryId,
       createdAt: timestamp,
       updatedAt: timestamp
@@ -836,6 +839,7 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       thinkSeconds: settings.thinkSeconds,
       answerSeconds: settings.answerSeconds,
       promptsJson: JSON.stringify(settings.prompts),
+      ratingModel: settings.ratingModel,
       updatedAt: nowIso()
     };
     this.videoSettings.set(userId, row);

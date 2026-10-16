@@ -7,6 +7,12 @@ describe("videoSimulatorSettingsSchema", () => {
     expect(parsed.thinkSeconds).toBe(30);
     expect(parsed.answerSeconds).toBe(90);
     expect(parsed.prompts.length).toBeGreaterThan(0);
+    expect(parsed.ratingModel).toBe("gpt-6-astra");
+  });
+
+  it("keeps an explicit rating model", () => {
+    const parsed = videoSimulatorSettingsSchema.parse({ ratingModel: "gpt-6-luna" });
+    expect(parsed.ratingModel).toBe("gpt-6-luna");
   });
 
   it("matches bundled defaults", () => {

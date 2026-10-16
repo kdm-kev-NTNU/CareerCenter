@@ -1,4 +1,6 @@
 import {
+  ASK_INTERVIEWER_SECTION,
+  planSectionLabels,
   answerStats,
   canDeleteImportJob,
   canDeletePrepPlan,
@@ -782,12 +784,16 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
   app.get("/api/interview/sessions", async (request) => {
     const mode = (request.query as { mode?: string }).mode;
     const parsedMode = mode ? createSessionSchema.shape.mode.parse(mode) : undefined;
+    const prepPlanId = (request.query as { prepPlanId?: string }).prepPlanId;
     const sessions = await deps.interviewPrepRepository.listSessions(request.user.id, parsedMode);
-    return sessions.map(toSessionDto);
+    return sessions.filter((session) => !prepPlanId || session.prepPlanId === prepPlanId).map(toSessionDto);
   });
 
   app.post("/api/interview/sessions", async (request, reply) => {
     const body = createSessionSchema.parse(request.body);
+    if (body.planSection && !body.prepPlanId) {
+      return reply.code(400).send({ message: "En seksjon krever en plan." });
+    }
     const settings =
       (await deps.interviewPrepRepository.getSimulatorSettings(request.user.id, body.mode)) ?? {
         userId: request.user.id,
@@ -803,6 +809,7 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
     let planScript: string | undefined;
     let questionsToAsk: Array<{ text: string; audience: QuestionAudience }> = [];
     let planCompanyName = settings.companyName;
+    const askOnly = body.planSection === ASK_INTERVIEWER_SECTION;
     if (body.prepPlanId) {
       const plan = await deps.interviewPrepRepository.getPrepPlan(request.user.id, body.prepPlanId);
       if (!plan) return reply.code(404).send({ message: "Plan ikke funnet." });
@@ -817,19 +824,27 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
       } catch {
         profileSummary = "";
       }
-      planScript = buildPlanPracticeScript({
-        companyName: plan.companyName,
-        roleTitle: plan.roleTitle,
-        companyProfileSummary: profileSummary,
-        questions: plan.questions
-      });
-      if (!planScript.trim()) {
-        return reply.code(400).send({ message: "Planen har ingen spørsmål merket for øving." });
-      }
+      // The closing-round section has no interviewer script, only the candidate's prepared questions.
+      planScript = askOnly
+        ? undefined
+        : buildPlanPracticeScript({
+            companyName: plan.companyName,
+            roleTitle: plan.roleTitle,
+            companyProfileSummary: profileSummary,
+            questions: plan.questions,
+            section: body.planSection
+          });
       questionsToAsk = plan.questions
         .filter((q) => q.included && q.audience !== "candidate")
         .sort((a, b) => a.sortOrder - b.sortOrder)
         .map((q) => ({ text: q.text, audience: q.audience }));
+      if (askOnly ? questionsToAsk.length === 0 : !planScript?.trim()) {
+        return reply.code(400).send({
+          message: body.planSection
+            ? "Seksjonen har ingen spørsmål merket for øving."
+            : "Planen har ingen spørsmål merket for øving."
+        });
+      }
     }
 
     let casePrompt: string | undefined;
@@ -857,12 +872,16 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
       interviewerInfo,
       solution,
       planScript,
-      questionsToAsk
+      questionsToAsk,
+      planSection: body.planSection
+        ? { key: body.planSection, title: planSectionLabels[body.planSection] }
+        : undefined
     });
     const session = await deps.interviewPrepRepository.createSession(request.user.id, {
       mode: body.mode,
       title: body.title || `${body.mode} simulering`,
       prepPlanId: body.prepPlanId,
+      planSection: body.planSection,
       caseEntryId: body.caseEntryId,
       systemPrompt
     });
@@ -1056,7 +1075,8 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
     }
 
     const rated = await rateStarAnswer(deps.llmClient, buildRubricUserContent(prompt, transcript), {
-      log: request.log
+      log: request.log,
+      model: parsed.model
     });
     if (!rated.ok) {
       return {
@@ -1085,7 +1105,7 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
     const rated = await rateStarAnswer(
       deps.llmClient,
       buildRubricUserContent(body.prompt, body.transcript),
-      { log: request.log }
+      { log: request.log, model: body.model }
     );
     if (!rated.ok) {
       return {

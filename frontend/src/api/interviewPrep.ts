@@ -16,6 +16,7 @@ import type {
   InterviewVideoRunDto,
   InterviewVideoSettingsDto,
   InterviewMode,
+  PlanSectionKey,
   PrepFormat,
   QuestionAudience,
   QuestionCategory,
@@ -238,12 +239,18 @@ export const interviewPrepApi = {
   essentialsDraft: (mode: InterviewMode) =>
     request<EssentialsDraftDto>(`/api/interview/simulator/settings/${mode}/essentials-draft`, { method: "POST" }),
 
-  sessions: (mode?: InterviewMode) =>
-    request<InterviewSessionDto[]>(mode ? `/api/interview/sessions?mode=${mode}` : "/api/interview/sessions"),
+  sessions: (filter: { mode?: InterviewMode; prepPlanId?: string } = {}) => {
+    const params = new URLSearchParams();
+    if (filter.mode) params.set("mode", filter.mode);
+    if (filter.prepPlanId) params.set("prepPlanId", filter.prepPlanId);
+    const query = params.toString();
+    return request<InterviewSessionDto[]>(`/api/interview/sessions${query ? `?${query}` : ""}`);
+  },
   createSession: (payload: {
     mode: InterviewMode;
     title?: string;
     prepPlanId?: string;
+    planSection?: PlanSectionKey;
     caseEntryId?: string;
   }) =>
     request<InterviewSessionDto>("/api/interview/sessions", { method: "POST", body: JSON.stringify(payload) }),
@@ -294,6 +301,7 @@ export const interviewPrepApi = {
     durationMs?: number;
     prompt?: string;
     withRubric?: boolean;
+    model?: string;
   }) => {
     const formData = new FormData();
     if (payload.file) {
@@ -307,10 +315,11 @@ export const interviewPrepApi = {
     if (payload.mimeType) formData.append("mimeType", payload.mimeType);
     if (payload.durationMs !== undefined) formData.append("durationMs", String(payload.durationMs));
     if (payload.prompt) formData.append("prompt", payload.prompt);
+    if (payload.model) formData.append("model", payload.model);
     formData.append("withRubric", payload.withRubric ? "true" : "false");
     return uploadRequest<VideoTranscribeResultDto>("/api/interview/video/transcribe", formData);
   },
-  rateVideo: (payload: { prompt: string; transcript: string; durationMs?: number }) =>
+  rateVideo: (payload: { prompt: string; transcript: string; durationMs?: number; model?: string }) =>
     request<VideoRateResultDto>("/api/interview/video/rate", {
       method: "POST",
       body: JSON.stringify(payload)

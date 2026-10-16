@@ -1,5 +1,6 @@
 import type { CompanyProfile } from "./companyProfile.js";
 import type { CompanyReport } from "./companyReport.js";
+import type { PlanSectionKey } from "./planSections.js";
 import type { PrepPlanPipelineStep } from "./prepPlanState.js";
 import type {
   BankQuestionOrigin,
@@ -179,6 +180,8 @@ export interface InterviewSessionDto {
   mode: InterviewMode;
   title: string;
   prepPlanId?: string;
+  /** Set when the session practised one section of the plan instead of the whole interview. */
+  planSection?: PlanSectionKey;
   finishedAt?: string;
   feedback?: InterviewSessionFeedbackDto;
   createdAt: string;

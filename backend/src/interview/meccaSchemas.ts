@@ -1,10 +1,13 @@
 import {
   abilityTestKinds,
+  researchModels,
   videoSimStates,
   videoSimulatorSettingsSchema
 } from "@careercenter/shared";
 import { z } from "zod";
 import { interviewFeedbackRubricSchema } from "./feedbackRubric.js";
+
+const optionalRatingModelSchema = z.enum(researchModels).optional();
 
 export const abilityAttemptInputSchema = z.object({
   kind: z.enum(abilityTestKinds),
@@ -35,14 +38,16 @@ export const videoTranscribeFieldsSchema = z.object({
   mimeType: z.string().optional(),
   durationMs: z.coerce.number().int().min(0).optional(),
   prompt: z.string().default(""),
-  withRubric: z.string().optional().default("false")
+  withRubric: z.string().optional().default("false"),
+  model: optionalRatingModelSchema
 });
 
 /** Body for POST /api/interview/video/rate (re-rate without re-uploading audio). */
 export const videoRateBodySchema = z.object({
   prompt: z.string().default(""),
   transcript: z.string().min(1),
-  durationMs: z.number().int().min(0).optional()
+  durationMs: z.number().int().min(0).optional(),
+  model: optionalRatingModelSchema
 });
 
 export function parseMultipartBool(value: string | undefined): boolean {

@@ -187,8 +187,10 @@ describe("InterviewVideoView", () => {
     expect(payload.file).toBeInstanceOf(Blob);
     expect(payload.withRubric).toBe(true);
     expect(payload.prompt).toBeTruthy();
+    expect(payload.model).toBe(defaultVideoSimulatorSettings.ratingModel);
     expect(wrapper.text()).toContain("Transkripsjon");
     expect(wrapper.text()).toContain("STAR-vurdering");
+    expect(wrapper.text()).toContain("Vurdert med");
 
     await wrapper.findAll("button").find((b) => b.text() === "Neste kort")!.trigger("click");
     await flushPromises();
@@ -219,7 +221,22 @@ describe("InterviewVideoView", () => {
     await wrapper.findAll("button").find((b) => b.text() === "Prøv vurdering på nytt")!.trigger("click");
     await flushPromises();
     expect(api.rateVideo).toHaveBeenCalledTimes(1);
+    expect(api.rateVideo.mock.calls[0]![0].model).toBe(defaultVideoSimulatorSettings.ratingModel);
     expect(wrapper.text()).toContain("STAR-vurdering");
+  });
+
+  it("persists selected rating model with settings", async () => {
+    const wrapper = mount(InterviewVideoView, {
+      global: { stubs: { MediaDeviceCheck: MediaDeviceCheckStub } }
+    });
+    await flushPromises();
+    const select = wrapper.get("select");
+    await select.setValue("gpt-6-luna");
+    await wrapper.findAll("button").find((b) => b.text().includes("Start ekte runde"))!.trigger("click");
+    await flushPromises();
+    expect(api.saveVideoSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ ratingModel: "gpt-6-luna" })
+    );
   });
 
   it("shows transcription retry when transcription fails", async () => {

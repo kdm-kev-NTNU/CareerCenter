@@ -5,6 +5,8 @@ import {
   modeUsesAi,
   phaseNeedsCamera,
   phaseRevealsPrompt,
+  researchModelLabels,
+  researchModels,
   starRubricCriterionLabels,
   transitionVideoSim,
   type AnswerStats,
@@ -97,6 +99,9 @@ const scoreEntries = computed(() => {
     score: feedback.value!.scores[key]
   }));
 });
+const ratingModelLabel = computed(
+  () => researchModelLabels[settings.value.ratingModel] ?? settings.value.ratingModel
+);
 
 watch(mediaError, (value) => {
   if (value) error.value = value;
@@ -320,7 +325,8 @@ async function runTranscription(audioBlob: Blob) {
       mimeType: audioBlob.type || "audio/webm",
       durationMs: recordedDurationMs.value || settings.value.answerSeconds * 1000,
       prompt: activePrompt.value,
-      withRubric: true
+      withRubric: true,
+      model: settings.value.ratingModel
     });
     transcript.value = result.transcript;
     feedback.value = result.feedback ?? null;
@@ -347,7 +353,8 @@ async function retryRating() {
     const result = await interviewPrepApi.rateVideo({
       prompt: activePrompt.value,
       transcript: transcript.value,
-      durationMs: recordedDurationMs.value || settings.value.answerSeconds * 1000
+      durationMs: recordedDurationMs.value || settings.value.answerSeconds * 1000,
+      model: settings.value.ratingModel
     });
     feedback.value = result.feedback ?? null;
     ratingStatus.value = result.rating;
@@ -442,6 +449,17 @@ function restartFromDone() {
       <h3>Innstillinger</h3>
       <label>Tenk (sek) <input v-model.number="settingsDraft.thinkSeconds" type="number" min="5" max="180" /></label>
       <label>Svar (sek) <input v-model.number="settingsDraft.answerSeconds" type="number" min="15" max="600" /></label>
+      <label>
+        Vurderingsmodell
+        <select v-model="settingsDraft.ratingModel">
+          <option v-for="model in researchModels" :key="model" :value="model">
+            {{ researchModelLabels[model] }}
+          </option>
+        </select>
+      </label>
+      <p class="muted">
+        Modellen brukes bare når ekte runde vurderer svaret. Transkribering og øverunde påvirkes ikke.
+      </p>
       <p class="muted">Antall spørsmål: <strong>{{ promptCount }}</strong></p>
       <details>
         <summary>Administrer spørsmål</summary>
@@ -518,6 +536,7 @@ function restartFromDone() {
           </p>
           <div v-if="ratingStatus === 'ok' && feedback" class="stack-tight">
             <h4>STAR-vurdering (sum {{ feedback.sum }})</h4>
+            <p class="field-hint">Vurdert med {{ ratingModelLabel }}</p>
             <ul class="plain-list score-list">
               <li v-for="entry in scoreEntries" :key="entry.key">
                 {{ entry.label }}: {{ entry.score }}/4
