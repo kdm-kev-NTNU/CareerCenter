@@ -872,6 +872,14 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
     return row ? this.mapSession(row) : null;
   }
 
+  async deleteFinishedSession(userId: string, sessionId: string): Promise<boolean> {
+    // Messages go with the session through onDelete: Cascade.
+    const result = await this.prisma.interviewSession.deleteMany({
+      where: { id: sessionId, userId, finishedAt: { not: null } }
+    });
+    return result.count > 0;
+  }
+
   async listAbilityAttempts(userId: string, limit = 50): Promise<InterviewAbilityTestAttemptRecord[]> {
     const rows = await this.prisma.interviewAbilityTestAttempt.findMany({
       where: { userId },

@@ -1012,6 +1012,59 @@ describe("interview prep routes", () => {
     await app.close();
   });
 
+  it("deletes only the user's finished sessions together with their messages", async () => {
+    const main = new MemoryRepository();
+    const interviewRepo = new InterviewPrepMemoryRepository();
+    const app = await buildServer({
+      repository: main,
+      authDisabled: true,
+      llmClient: new FakeLlmClient({ configured: true }),
+      interviewPrepRepository: interviewRepo
+    });
+    await app.ready();
+    await app.inject({ method: "GET", url: "/api/interview/status" });
+    const user = await main.findUserByName("__test__");
+    const rubric = {
+      scores: Object.fromEntries(starRubricCriteria.map((key) => [key, 3])),
+      sum: 24,
+      improvement: "ok"
+    } as Parameters<typeof interviewRepo.finishSession>[2];
+
+    const running = await interviewRepo.createSession(user!.id, {
+      mode: "behavioral_mock",
+      title: "Pågår",
+      systemPrompt: "system"
+    });
+    const finished = await interviewRepo.createSession(user!.id, {
+      mode: "behavioral_mock",
+      title: "Ferdig",
+      systemPrompt: "system"
+    });
+    await interviewRepo.appendSessionMessage(user!.id, finished.id, "user", "Svar");
+    await interviewRepo.finishSession(user!.id, finished.id, rubric);
+    const foreign = await interviewRepo.createSession("someone-else", {
+      mode: "behavioral_mock",
+      title: "Fremmed",
+      systemPrompt: "system"
+    });
+    await interviewRepo.finishSession("someone-else", foreign.id, rubric);
+    const deleteSession = (id: string) => app.inject({ method: "DELETE", url: `/api/interview/sessions/${id}` });
+
+    expect((await deleteSession(running.id)).statusCode).toBe(409);
+    expect(await interviewRepo.getSession(user!.id, running.id)).not.toBeNull();
+
+    expect((await deleteSession(foreign.id)).statusCode).toBe(404);
+    expect(await interviewRepo.getSession("someone-else", foreign.id)).not.toBeNull();
+
+    expect((await deleteSession("missing")).statusCode).toBe(404);
+
+    expect((await deleteSession(finished.id)).statusCode).toBe(204);
+    expect(await interviewRepo.getSession(user!.id, finished.id)).toBeNull();
+    expect(await interviewRepo.listSessionMessages(user!.id, finished.id)).toEqual([]);
+    expect((await deleteSession(finished.id)).statusCode).toBe(404);
+    await app.close();
+  });
+
   it("starts a session for one plan section and lists the plan's sessions", async () => {
     const main = new MemoryRepository();
     const interviewRepo = new InterviewPrepMemoryRepository();
