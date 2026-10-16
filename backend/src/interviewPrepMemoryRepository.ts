@@ -13,6 +13,9 @@ import type {
   InterviewImportJobRecord,
   InterviewKnowledgeDoc,
   InterviewMessageRecord,
+  CandidateBackgroundDocumentInput,
+  CandidateBackgroundNotesInput,
+  CandidateBackgroundRecord,
   InterviewPrepPlanRecord,
   InterviewPrepRepository,
   InterviewSessionRecord,
@@ -55,6 +58,7 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
   private readonly prepPlans = new Map<string, InterviewPrepPlanRecord>();
   private readonly importJobs = new Map<string, InterviewImportJobRecord>();
   private readonly simulatorSettings = new Map<string, InterviewSimulatorSettingsRecord>();
+  private readonly candidateBackgrounds = new Map<string, CandidateBackgroundRecord>();
   private readonly sessions = new Map<string, InterviewSessionRecord>();
   private readonly messages = new Map<string, InterviewMessageRecord>();
   private readonly abilityAttempts = new Map<string, InterviewAbilityTestAttemptRecord>();
@@ -368,8 +372,6 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       curationFilledCount: 0,
       clarifications: [],
       questions: [],
-      tasks: [],
-      recommendedCases: [],
       createdAt: timestamp,
       updatedAt: timestamp
     };
@@ -493,23 +495,6 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
     return updated;
   }
 
-  private buildRecommendedCases(caseIds: string[]): InterviewPrepPlanRecord["recommendedCases"] {
-    return caseIds
-      .map((caseEntryId, index) => {
-        const entry = this.caseEntries.get(caseEntryId);
-        if (!entry) return null;
-        return {
-          id: nanoid(),
-          caseEntryId,
-          title: entry.title,
-          prompt: entry.prompt,
-          sourceKind: entry.sourceKind,
-          sortOrder: index
-        };
-      })
-      .filter((item): item is NonNullable<typeof item> => item !== null);
-  }
-
   async setPrepPlanCurated(
     userId: string,
     id: string,
@@ -525,8 +510,6 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
         gapReason?: string;
         notes?: string;
       }>;
-      tasks: Array<{ title: string; description: string }>;
-      recommendedCaseIds?: string[];
       curationFilledCount?: number;
     }
   ): Promise<InterviewPrepPlanRecord | null> {
@@ -549,14 +532,6 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
         included: true,
         notes: item.notes ?? ""
       })),
-      tasks: input.tasks.map((item, index) => ({
-        id: nanoid(),
-        title: item.title,
-        description: item.description,
-        sortOrder: index,
-        done: false
-      })),
-      recommendedCases: this.buildRecommendedCases(input.recommendedCaseIds ?? []),
       updatedAt: nowIso()
     };
     this.prepPlans.set(id, updated);
@@ -710,6 +685,61 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
 
   private settingsKey(userId: string, mode: InterviewMode): string {
     return `${userId}:${mode}`;
+  }
+
+  async getCandidateBackground(userId: string): Promise<CandidateBackgroundRecord | null> {
+    return this.candidateBackgrounds.get(userId) ?? null;
+  }
+
+  async upsertCandidateBackgroundNotes(
+    userId: string,
+    input: CandidateBackgroundNotesInput
+  ): Promise<CandidateBackgroundRecord> {
+    const existing = this.candidateBackgrounds.get(userId);
+    const timestamp = nowIso();
+    const record: CandidateBackgroundRecord = {
+      userId,
+      cvText: existing?.cvText ?? "",
+      cvFileName: existing?.cvFileName ?? "",
+      cvUpdatedAt: existing?.cvUpdatedAt ?? null,
+      transcriptText: existing?.transcriptText ?? "",
+      transcriptFileName: existing?.transcriptFileName ?? "",
+      transcriptUpdatedAt: existing?.transcriptUpdatedAt ?? null,
+      notes: input.notes,
+      updatedAt: timestamp
+    };
+    this.candidateBackgrounds.set(userId, record);
+    return record;
+  }
+
+  async upsertCandidateBackgroundDocument(
+    userId: string,
+    input: CandidateBackgroundDocumentInput
+  ): Promise<CandidateBackgroundRecord> {
+    const existing = this.candidateBackgrounds.get(userId);
+    const timestamp = nowIso();
+    const record: CandidateBackgroundRecord = {
+      userId,
+      cvText: existing?.cvText ?? "",
+      cvFileName: existing?.cvFileName ?? "",
+      cvUpdatedAt: existing?.cvUpdatedAt ?? null,
+      transcriptText: existing?.transcriptText ?? "",
+      transcriptFileName: existing?.transcriptFileName ?? "",
+      transcriptUpdatedAt: existing?.transcriptUpdatedAt ?? null,
+      notes: existing?.notes ?? "",
+      updatedAt: timestamp
+    };
+    if (input.kind === "cv") {
+      record.cvText = input.text;
+      record.cvFileName = input.fileName;
+      record.cvUpdatedAt = timestamp;
+    } else {
+      record.transcriptText = input.text;
+      record.transcriptFileName = input.fileName;
+      record.transcriptUpdatedAt = timestamp;
+    }
+    this.candidateBackgrounds.set(userId, record);
+    return record;
   }
 
   async getSimulatorSettings(userId: string, mode: InterviewMode): Promise<InterviewSimulatorSettingsRecord | null> {

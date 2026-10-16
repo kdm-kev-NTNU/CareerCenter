@@ -412,8 +412,6 @@ export type {
   InterviewBankQuestionSummaryDto,
   InterviewPrepClarificationDto,
   InterviewPrepQuestionDto,
-  InterviewPrepPlanCaseDto,
-  InterviewPrepTaskDto,
   InterviewPrepPlanDto,
   InterviewImportJobDto,
   InterviewSimulatorSettingsDto,
@@ -449,9 +447,12 @@ export type { CompanyProfile } from "./companyProfile.js";
 export { emptyCompanyReport } from "./companyReport.js";
 export type {
   CompanyReport,
-  CompanyReportKeyFacts,
-  CompanyReportRequirement
+  CompanyQuestionPrep,
+  QuestionToAsk
 } from "./companyReport.js";
+
+export { emptyCandidateBackground, hasCandidateCv } from "./candidateBackground.js";
+export type { CandidateBackgroundDto } from "./candidateBackground.js";
 
 export {
   abilityTestKinds,
@@ -667,7 +668,6 @@ export type {
 export { rankCasesForCompany } from "./rankCases.js";
 export type { CaseRankProfile, RankableCase } from "./rankCases.js";
 export {
-  ASK_INTERVIEWER_SECTION,
   buildPlanSections,
   isPlanSectionKey,
   planSectionKeys,

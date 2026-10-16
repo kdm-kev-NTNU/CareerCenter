@@ -47,6 +47,9 @@ import type {
   InterviewCaseEntryRecord,
   InterviewImportJobRecord,
   InterviewKnowledgeDoc,
+  CandidateBackgroundDocumentInput,
+  CandidateBackgroundNotesInput,
+  CandidateBackgroundRecord,
   InterviewMessageRecord,
   InterviewPrepPlanRecord,
   InterviewPrepRepository,
@@ -538,8 +541,6 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
         gapReason?: string;
         notes?: string;
       }>;
-      tasks: Array<{ title: string; description: string }>;
-      recommendedCaseIds?: string[];
       curationFilledCount?: number;
     }
   ): Promise<InterviewPrepPlanRecord | null> {
@@ -547,8 +548,6 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
     if (!existing) return null;
     await this.prisma.$transaction([
       this.prisma.interviewPrepQuestion.deleteMany({ where: { planId: id } }),
-      this.prisma.interviewPrepTask.deleteMany({ where: { planId: id } }),
-      this.prisma.interviewPrepPlanCase.deleteMany({ where: { planId: id } }),
       this.prisma.interviewPrepPlan.update({
         where: { id },
         data: {
@@ -567,19 +566,6 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
               storyId: item.storyId,
               gapReason: item.gapReason,
               notes: item.notes ?? ""
-            }))
-          },
-          tasks: {
-            create: input.tasks.map((item, index) => ({
-              title: item.title,
-              description: item.description,
-              sortOrder: index
-            }))
-          },
-          recommendedCases: {
-            create: (input.recommendedCaseIds ?? []).map((caseEntryId, index) => ({
-              caseEntryId,
-              sortOrder: index
             }))
           }
         }
@@ -1156,26 +1142,69 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
           included: item.included,
           notes: item.notes
         })),
-      recommendedCases: row.recommendedCases
-        .sort((a, b) => a.sortOrder - b.sortOrder)
-        .map((item) => ({
-          id: item.id,
-          caseEntryId: item.caseEntryId,
-          title: item.caseEntry.title,
-          prompt: item.caseEntry.prompt,
-          sourceKind: item.caseEntry.sourceKind as CaseSourceKind,
-          sortOrder: item.sortOrder
-        })),
-      tasks: row.tasks
-        .sort((a, b) => a.sortOrder - b.sortOrder)
-        .map((item) => ({
-          id: item.id,
-          title: item.title,
-          description: item.description,
-          sortOrder: item.sortOrder,
-          done: item.done
-        })),
       createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString()
+    };
+  }
+
+  async getCandidateBackground(userId: string): Promise<CandidateBackgroundRecord | null> {
+    const row = await this.prisma.candidateBackground.findUnique({ where: { userId } });
+    return row ? this.mapCandidateBackground(row) : null;
+  }
+
+  async upsertCandidateBackgroundNotes(
+    userId: string,
+    input: CandidateBackgroundNotesInput
+  ): Promise<CandidateBackgroundRecord> {
+    const row = await this.prisma.candidateBackground.upsert({
+      where: { userId },
+      create: { userId, notes: input.notes },
+      update: { notes: input.notes }
+    });
+    return this.mapCandidateBackground(row);
+  }
+
+  async upsertCandidateBackgroundDocument(
+    userId: string,
+    input: CandidateBackgroundDocumentInput
+  ): Promise<CandidateBackgroundRecord> {
+    const now = new Date();
+    const data =
+      input.kind === "cv"
+        ? { cvText: input.text, cvFileName: input.fileName, cvUpdatedAt: now }
+        : {
+            transcriptText: input.text,
+            transcriptFileName: input.fileName,
+            transcriptUpdatedAt: now
+          };
+    const row = await this.prisma.candidateBackground.upsert({
+      where: { userId },
+      create: { userId, ...data },
+      update: data
+    });
+    return this.mapCandidateBackground(row);
+  }
+
+  private mapCandidateBackground(row: {
+    userId: string;
+    cvText: string;
+    cvFileName: string;
+    cvUpdatedAt: Date | null;
+    transcriptText: string;
+    transcriptFileName: string;
+    transcriptUpdatedAt: Date | null;
+    notes: string;
+    updatedAt: Date;
+  }): CandidateBackgroundRecord {
+    return {
+      userId: row.userId,
+      cvText: row.cvText,
+      cvFileName: row.cvFileName,
+      cvUpdatedAt: row.cvUpdatedAt?.toISOString() ?? null,
+      transcriptText: row.transcriptText,
+      transcriptFileName: row.transcriptFileName,
+      transcriptUpdatedAt: row.transcriptUpdatedAt?.toISOString() ?? null,
+      notes: row.notes,
       updatedAt: row.updatedAt.toISOString()
     };
   }
@@ -1337,13 +1366,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
 
 const planIncludes = {
   clarifications: true,
-  questions: true,
-  tasks: true,
-  recommendedCases: {
-    include: {
-      caseEntry: true
-    }
-  }
+  questions: true
 } as const;
 
 type PlanRow = {
@@ -1380,15 +1403,4 @@ type PlanRow = {
     included: boolean;
     notes: string;
   }>;
-  recommendedCases: Array<{
-    id: string;
-    caseEntryId: string;
-    sortOrder: number;
-    caseEntry: {
-      title: string;
-      prompt: string;
-      sourceKind: string;
-    };
-  }>;
-  tasks: Array<{ id: string; title: string; description: string; sortOrder: number; done: boolean }>;
 };

@@ -95,23 +95,6 @@ export interface InterviewPrepQuestionRecord {
   notes: string;
 }
 
-export interface InterviewPrepPlanCaseRecord {
-  id: string;
-  caseEntryId: string;
-  title: string;
-  prompt: string;
-  sourceKind: CaseSourceKind;
-  sortOrder: number;
-}
-
-export interface InterviewPrepTaskRecord {
-  id: string;
-  title: string;
-  description: string;
-  sortOrder: number;
-  done: boolean;
-}
-
 export interface InterviewPrepPlanRecord {
   id: string;
   userId: string;
@@ -131,10 +114,30 @@ export interface InterviewPrepPlanRecord {
   failureReason?: string;
   clarifications: InterviewPrepClarificationRecord[];
   questions: InterviewPrepQuestionRecord[];
-  tasks: InterviewPrepTaskRecord[];
-  recommendedCases: InterviewPrepPlanCaseRecord[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CandidateBackgroundRecord {
+  userId: string;
+  cvText: string;
+  cvFileName: string;
+  cvUpdatedAt: string | null;
+  transcriptText: string;
+  transcriptFileName: string;
+  transcriptUpdatedAt: string | null;
+  notes: string;
+  updatedAt: string | null;
+}
+
+export interface CandidateBackgroundNotesInput {
+  notes: string;
+}
+
+export interface CandidateBackgroundDocumentInput {
+  kind: "cv" | "transcript";
+  text: string;
+  fileName: string;
 }
 
 export interface InterviewImportJobRecord {
@@ -377,7 +380,7 @@ export interface InterviewPrepRepository {
   getPrepPlan(userId: string, id: string): Promise<InterviewPrepPlanRecord | null>;
   createPrepPlan(userId: string, input: PrepPlanCreateInput): Promise<InterviewPrepPlanRecord>;
   /**
-   * Removes a plan with its questions, clarifications, tasks and case links.
+   * Removes a plan with its questions and clarifications.
    * Sessions practised with the plan are kept but lose the link to it.
    * Returns false when the plan is missing or research/curation is in progress.
    */
@@ -437,11 +440,18 @@ export interface InterviewPrepRepository {
         gapReason?: string;
         notes?: string;
       }>;
-      tasks: Array<{ title: string; description: string }>;
-      recommendedCaseIds?: string[];
       curationFilledCount?: number;
     }
   ): Promise<InterviewPrepPlanRecord | null>;
+  getCandidateBackground(userId: string): Promise<CandidateBackgroundRecord | null>;
+  upsertCandidateBackgroundNotes(
+    userId: string,
+    input: CandidateBackgroundNotesInput
+  ): Promise<CandidateBackgroundRecord>;
+  upsertCandidateBackgroundDocument(
+    userId: string,
+    input: CandidateBackgroundDocumentInput
+  ): Promise<CandidateBackgroundRecord>;
   replacePlanQuestion(
     userId: string,
     planId: string,
