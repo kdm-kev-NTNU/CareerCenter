@@ -5,12 +5,15 @@ import { createSeededRng } from "./switchChallenge.js";
 export const MTA_AIRCRAFT_INTERVAL_MS = 4_000;
 /** How long an aircraft takes to reach the runway bar (ms). */
 export const MTA_FLIGHT_DURATION_MS = 3_500;
-/** Fraction of flight after which the landing window opens. */
-export const MTA_LANDING_WINDOW_START = 0.72;
 /** Normalized X of the runway bar (0–1). */
 export const MTA_RUNWAY_X = 0.92;
 /** Vertical half-height of the gray landing gate (0–1). */
 export const MTA_GATE_HALF_HEIGHT = 0.09;
+/**
+ * Vertical half-height of the aircraft sprite (0–1 of sky height).
+ * Shared by hit detection and rendering so visual size matches the hitbox.
+ */
+export const MTA_AIRCRAFT_HALF_HEIGHT = 0.04;
 /** How far one arrow-key / button nudge moves the gate center. */
 export const MTA_GATE_STEP = 0.05;
 /** Playable band for the gate center (keeps the full gate on screen). */
@@ -231,18 +234,12 @@ export function aircraftX(progress: number): number {
   return progress * MTA_RUNWAY_X;
 }
 
-export function isInLandingWindow(progress: number): boolean {
-  return progress >= MTA_LANDING_WINDOW_START && progress < 1;
-}
-
-export function isLandingHit(
-  session: MtaSession,
-  aircraft: MtaAircraft,
-  offsetMs: number
-): boolean {
-  const progress = aircraftProgress(aircraft, offsetMs);
-  if (progress == null || !isInLandingWindow(progress)) return false;
-  return Math.abs(aircraft.height - session.gateCenter) <= MTA_GATE_HALF_HEIGHT;
+/**
+ * True when the aircraft's vertical extent overlaps the gray gate.
+ * Uses interval overlap of [height ± AIRCRAFT_HALF] and [gate ± GATE_HALF].
+ */
+export function aircraftOverlapsGate(height: number, gateCenter: number): boolean {
+  return Math.abs(height - gateCenter) <= MTA_GATE_HALF_HEIGHT + MTA_AIRCRAFT_HALF_HEIGHT;
 }
 
 export function isMtaExpired(session: MtaSession, now: number): boolean {
@@ -286,6 +283,8 @@ export type MtaActionResult =
 
 /**
  * Move the gray landing gate. Positive delta moves down (toward 1).
+ * Aircraft that have already arrived are judged against the current gate
+ * before the move, so late ticks cannot change the outcome.
  * Rejected after expiry / finish.
  */
 export function moveGate(
@@ -295,11 +294,12 @@ export function moveGate(
 ): MtaActionResult {
   if (session.finished) return { ok: false, reason: "finished" };
   if (isMtaExpired(session, now)) return { ok: false, reason: "expired" };
+  const resolved = resolveArrivedAircraft(session, now);
   return {
     ok: true,
     session: {
-      ...session,
-      gateCenter: clampGateCenter(session.gateCenter + delta)
+      ...resolved,
+      gateCenter: clampGateCenter(resolved.gateCenter + delta)
     }
   };
 }
@@ -312,10 +312,11 @@ export function setGateCenter(
 ): MtaActionResult {
   if (session.finished) return { ok: false, reason: "finished" };
   if (isMtaExpired(session, now)) return { ok: false, reason: "expired" };
+  const resolved = resolveArrivedAircraft(session, now);
   return {
     ok: true,
     session: {
-      ...session,
+      ...resolved,
       gateCenter: clampGateCenter(y)
     }
   };
@@ -353,9 +354,11 @@ export function currentLetterChain(session: MtaSession): MtaLetterChain | null {
 }
 
 /**
- * Mark aircraft that have flown past the runway without a click as misses.
+ * Judge aircraft that have reached the runway: overlap with the gate at
+ * arrival → landed, otherwise miss. Uses the gate center in effect now
+ * (callers that move the gate must resolve first).
  */
-export function resolveMissedAircraft(
+export function resolveArrivedAircraft(
   session: MtaSession,
   now: number
 ): MtaSession {
@@ -368,9 +371,10 @@ export function resolveMissedAircraft(
     if (judged.has(ac.id)) continue;
     const end = ac.startOffsetMs + MTA_FLIGHT_DURATION_MS;
     if (offset >= end) {
+      const landed = aircraftOverlapsGate(ac.height, session.gateCenter);
       extra.push({
         aircraftId: ac.id,
-        outcome: "miss",
+        outcome: landed ? "landed" : "miss",
         atOffsetMs: end,
         durationMs: MTA_FLIGHT_DURATION_MS
       });
@@ -381,35 +385,6 @@ export function resolveMissedAircraft(
   return {
     ...session,
     aircraftJudgments: [...session.aircraftJudgments, ...extra]
-  };
-}
-
-/**
- * Click the current aircraft. Landing window + gate overlap → landed; else miss.
- */
-export function clickAircraft(session: MtaSession, now: number): MtaActionResult {
-  if (session.finished) return { ok: false, reason: "finished" };
-  if (isMtaExpired(session, now)) return { ok: false, reason: "expired" };
-
-  const next = resolveMissedAircraft(session, now);
-  const ac = currentAircraft(next, now);
-  if (!ac) return { ok: false, reason: "no_target" };
-
-  const offset = sessionOffset(next, now);
-  const landed = isLandingHit(next, ac, offset);
-  const judgment: MtaAircraftJudgment = {
-    aircraftId: ac.id,
-    outcome: landed ? "landed" : "miss",
-    atOffsetMs: offset,
-    durationMs: Math.max(0, offset - ac.startOffsetMs)
-  };
-
-  return {
-    ok: true,
-    session: {
-      ...next,
-      aircraftJudgments: [...next.aircraftJudgments, judgment]
-    }
   };
 }
 
@@ -477,8 +452,8 @@ export function answerLetters(
 
 export function finishMtaSession(session: MtaSession, now: number): MtaSession {
   if (session.finished) return session;
-  const withMisses = resolveMissedAircraft(session, now);
-  return { ...withMisses, finished: true };
+  const resolved = resolveArrivedAircraft(session, now);
+  return { ...resolved, finished: true };
 }
 
 export function buildMtaReport(session: MtaSession): MtaSessionReport {
