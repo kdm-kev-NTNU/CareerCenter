@@ -16,7 +16,7 @@ const modules = [
   { to: "/interview/bibel", title: "Intervjubibel", desc: "Importer dokumenter og casebøker." },
   { to: "/interview/simulator", title: "Intervjussimulator", desc: "Stemmeintervju med STAR-scoring." },
   { to: "/interview/video", title: "Videosøknad", desc: "Kort med betenkningstid og opptak." },
-  { to: "/interview/evnetester", title: "Evnetester", desc: "Switch Challenge og Scales CLX." }
+  { to: "/interview/evnetester", title: "Evnetester", desc: "Øving gruppert per testaktør (AON m.fl.)." }
 ];
 
 onMounted(async () => {

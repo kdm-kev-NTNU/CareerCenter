@@ -453,8 +453,28 @@ export type {
   CompanyReportRequirement
 } from "./companyReport.js";
 
-export { abilityTestKinds } from "./abilityTests.js";
-export type { AbilityTestKind } from "./abilityTests.js";
+export {
+  abilityTestKinds,
+  puzzleAbilityTestKinds,
+  statementAbilityTestKinds,
+  mtaAbilityTestKinds,
+  isStatementAbilityKind,
+  isPuzzleAbilityKind,
+  isMtaAbilityKind
+} from "./abilityTests.js";
+export type {
+  AbilityTestKind,
+  PuzzleAbilityTestKind,
+  StatementAbilityTestKind,
+  MtaAbilityTestKind
+} from "./abilityTests.js";
+export {
+  aonSourcePdfIds,
+  aonSourcePdfs,
+  getAonSourcePdf,
+  isAonSourcePdfId
+} from "./aonSourcePdfs.js";
+export type { AonSourcePdfId, AonSourcePdfMeta } from "./aonSourcePdfs.js";
 export {
   createSeededRng,
   generateSwitchChallenge,
@@ -495,6 +515,94 @@ export type {
   AbilitySessionReport,
   RecordAnswerResult
 } from "./abilitySession.js";
+export {
+  startStatementSession,
+  answerStatement,
+  navigateStatement,
+  finishStatementSession,
+  isStatementExpired,
+  statementRemainingMs,
+  buildStatementReport,
+  currentStatement,
+  sheetForStatement,
+  VERDICT_LABELS
+} from "./statementTest.js";
+export type {
+  StatementVerdict,
+  TableSheet,
+  PieSheet,
+  PieSlice,
+  BarSheet,
+  BarSeries,
+  PassageSheet,
+  DataSheet,
+  StatementItem,
+  StatementTest,
+  StatementSession,
+  StatementReportItem,
+  StatementSessionReport,
+  AnswerStatementResult,
+  NavigateStatementResult
+} from "./statementTest.js";
+export {
+  generateNumericalReasoning,
+  verifyStatementAgainstSheet,
+  NUMERICAL_REASONING_STATEMENT_COUNT,
+  NUMERICAL_REASONING_SHEET_COUNT
+} from "./numericalReasoning.js";
+export {
+  generateVerbalReasoning,
+  VERBAL_PASSAGE_BANK,
+  VERBAL_REASONING_STATEMENT_COUNT
+} from "./verbalReasoning.js";
+export {
+  MTA_AIRCRAFT_INTERVAL_MS,
+  MTA_FLIGHT_DURATION_MS,
+  MTA_LANDING_WINDOW_START,
+  MTA_RUNWAY_X,
+  MTA_GATE_HALF_HEIGHT,
+  MTA_GATE_STEP,
+  MTA_GATE_CENTER_MIN,
+  MTA_GATE_CENTER_MAX,
+  MTA_AIRCRAFT_HEIGHT_MIN,
+  MTA_AIRCRAFT_HEIGHT_MAX,
+  generateScalesMta,
+  generateEquation,
+  generateLetterChain,
+  clampGateCenter,
+  aircraftProgress,
+  aircraftX,
+  isInLandingWindow,
+  isLandingHit,
+  isMtaExpired,
+  mtaRemainingMs,
+  startMtaSession,
+  moveGate,
+  setGateCenter,
+  currentAircraft,
+  currentEquation,
+  currentLetterChain,
+  resolveMissedAircraft,
+  clickAircraft,
+  answerEquation,
+  answerLetters,
+  finishMtaSession,
+  buildMtaReport,
+  formatMtaEquation
+} from "./scalesMta.js";
+export type {
+  MtaBinaryAnswer,
+  MtaAircraft,
+  MtaEquation,
+  MtaLetterChain,
+  MtaTimeline,
+  MtaAircraftOutcome,
+  MtaAircraftJudgment,
+  MtaSideJudgment,
+  MtaSession,
+  MtaSessionReport,
+  MtaActionResult
+} from "./scalesMta.js";
 export {
   transitionPrepPlan,
   canStartSimulators,
@@ -567,6 +675,8 @@ export {
   questionInPlanSection
 } from "./planSections.js";
 export type { PlanSection, PlanSectionKey, PlanSectionQuestion } from "./planSections.js";
+export { buildSectionAttemptHistory, latestSectionAttempt } from "./sectionAttempts.js";
+export type { SectionAttempt, SectionKey } from "./sectionAttempts.js";
 import type { InternshipStatusOption } from "./internshipStatus.js";
 
 export interface InternshipLocationOption {

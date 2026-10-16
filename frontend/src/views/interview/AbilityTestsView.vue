@@ -2,37 +2,71 @@
 import type {
   AbilitySession,
   AbilitySessionReport,
+  AbilityTestKind,
   InterviewAbilityTestAttemptDto,
+  MtaSession,
+  MtaSessionReport,
+  PuzzleAbilityTestKind,
   ScalesClxPuzzle,
+  StatementSession,
+  StatementSessionReport,
   SwitchChallengePuzzle
 } from "@careercenter/shared";
 import {
+  VERDICT_LABELS,
   buildSessionReport,
   currentPuzzle,
   finishSession,
   formatSwitchCode,
+  generateNumericalReasoning,
+  generateScalesMta,
+  generateVerbalReasoning,
   isExpired,
+  isMtaAbilityKind,
+  isPuzzleAbilityKind,
+  isStatementAbilityKind,
   recordAnswer,
   remainingMs,
-  startSession
+  startMtaSession,
+  startSession,
+  startStatementSession
 } from "@careercenter/shared";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { interviewPrepApi } from "../../api/interviewPrep.js";
+import { RouterLink, useRoute } from "vue-router";
+import {
+  interviewPrepApi,
+  type AonSourcePdfListItem
+} from "../../api/interviewPrep.js";
+import {
+  getAbilityProvider,
+  type AbilityProvider
+} from "../../components/interview/ability/abilityProviders.js";
+import MtaRunner from "../../components/interview/ability/MtaRunner.vue";
 import ScalesClxBoard from "../../components/interview/ability/ScalesClxBoard.vue";
+import StatementTestRunner from "../../components/interview/ability/StatementTestRunner.vue";
 import SwitchChallengeBoard from "../../components/interview/ability/SwitchChallengeBoard.vue";
 import AppButton from "../../components/ui/AppButton.vue";
 import PageHeader from "../../components/ui/PageHeader.vue";
 
 type Mode = "menu" | "playing" | "report";
 
+const route = useRoute();
+const provider = computed((): AbilityProvider | undefined => {
+  const id = String(route.params.provider ?? "");
+  return getAbilityProvider(id);
+});
+
 const mode = ref<Mode>("menu");
 const session = ref<AbilitySession | null>(null);
+const statementSession = ref<StatementSession | null>(null);
+const mtaSession = ref<MtaSession | null>(null);
 const report = ref<AbilitySessionReport | null>(null);
+const statementReport = ref<StatementSessionReport | null>(null);
+const mtaReport = ref<MtaSessionReport | null>(null);
 const nowMs = ref(Date.now());
 let tickHandle: ReturnType<typeof setInterval> | null = null;
 
-const switchMinutes = ref(6);
-const clxMinutes = ref(10);
+const minutesByKind = ref<Record<string, number>>({});
 
 const selectedSwitch = ref<number | null>(null);
 const selectedPair = ref<[number | null, number | null]>([null, null]);
@@ -41,11 +75,64 @@ const selectedClx = ref<number[]>([]);
 const history = ref<InterviewAbilityTestAttemptDto[]>([]);
 const loadingHistory = ref(true);
 
+const sourcePdfs = ref<AonSourcePdfListItem[]>([]);
+const loadingSources = ref(false);
+const openingSourceId = ref<string | null>(null);
+const sourceError = ref<string | null>(null);
+
+const showSourcePdfs = computed(() => provider.value?.id === "aon");
+
+watch(
+  provider,
+  (p) => {
+    if (!p) return;
+    const next: Record<string, number> = { ...minutesByKind.value };
+    for (const t of p.tests) {
+      if (next[t.kind] == null) next[t.kind] = t.defaultMinutes;
+    }
+    minutesByKind.value = next;
+  },
+  { immediate: true }
+);
+
+async function loadSourcePdfs() {
+  if (!showSourcePdfs.value) return;
+  loadingSources.value = true;
+  sourceError.value = null;
+  try {
+    sourcePdfs.value = await interviewPrepApi.aonSourcePdfs();
+  } catch (error) {
+    sourceError.value = error instanceof Error ? error.message : "Kunne ikke laste PDF-samling.";
+  } finally {
+    loadingSources.value = false;
+  }
+}
+
+async function openSourcePdf(item: AonSourcePdfListItem) {
+  if (!item.available || openingSourceId.value) return;
+  openingSourceId.value = item.id;
+  sourceError.value = null;
+  try {
+    await interviewPrepApi.openAonSourcePdf(item.id, item.filename);
+  } catch (error) {
+    sourceError.value = error instanceof Error ? error.message : "Kunne ikke åpne PDF.";
+  } finally {
+    openingSourceId.value = null;
+  }
+}
+
 onMounted(async () => {
   try {
     history.value = await interviewPrepApi.abilityAttempts();
   } finally {
     loadingHistory.value = false;
+  }
+  await loadSourcePdfs();
+});
+
+watch(showSourcePdfs, (show) => {
+  if (show && sourcePdfs.value.length === 0 && !loadingSources.value) {
+    void loadSourcePdfs();
   }
 });
 
@@ -72,12 +159,12 @@ function stopTicker() {
 }
 
 watch(mode, (m) => {
-  if (m === "playing") startTicker();
-  else stopTicker();
+  if (m === "playing" && session.value) startTicker();
+  else if (!statementSession.value && !mtaSession.value) stopTicker();
 });
 
 async function persistAttempt(
-  kind: "switch_challenge" | "scales_clx",
+  kind: AbilityTestKind,
   seed: number,
   correct: boolean,
   durationMs: number
@@ -97,15 +184,45 @@ function resetSelection() {
   selectedClx.value = [];
 }
 
-function beginSession(kind: "switch_challenge" | "scales_clx") {
-  const minutes = kind === "switch_challenge" ? switchMinutes.value : clxMinutes.value;
-  const clamped = Math.min(60, Math.max(1, Math.round(Number(minutes) || 1)));
-  if (kind === "switch_challenge") switchMinutes.value = clamped;
-  else clxMinutes.value = clamped;
+function beginSession(kind: AbilityTestKind) {
+  const minutes = Math.min(
+    60,
+    Math.max(1, Math.round(Number(minutesByKind.value[kind]) || 1))
+  );
+  minutesByKind.value = { ...minutesByKind.value, [kind]: minutes };
 
-  session.value = startSession(kind, clamped, Date.now());
   report.value = null;
+  statementReport.value = null;
+  mtaReport.value = null;
   resetSelection();
+
+  if (isStatementAbilityKind(kind)) {
+    const seed = Date.now() % 1_000_000_000;
+    const test =
+      kind === "scales_numerical"
+        ? generateNumericalReasoning(seed)
+        : generateVerbalReasoning(seed);
+    statementSession.value = startStatementSession(test, minutes, Date.now());
+    session.value = null;
+    mtaSession.value = null;
+    mode.value = "playing";
+    return;
+  }
+
+  if (isMtaAbilityKind(kind)) {
+    const seed = Date.now() % 1_000_000_000;
+    const timeline = generateScalesMta(seed, minutes * 60_000);
+    mtaSession.value = startMtaSession(timeline, minutes, Date.now());
+    session.value = null;
+    statementSession.value = null;
+    mode.value = "playing";
+    return;
+  }
+
+  if (!isPuzzleAbilityKind(kind)) return;
+  statementSession.value = null;
+  mtaSession.value = null;
+  session.value = startSession(kind, minutes, Date.now());
   mode.value = "playing";
 }
 
@@ -116,9 +233,54 @@ function endSession() {
   mode.value = "report";
 }
 
+function onStatementUpdate(next: StatementSession) {
+  statementSession.value = next;
+}
+
+async function onStatementFinish(
+  built: StatementSessionReport,
+  finished: StatementSession
+) {
+  statementSession.value = finished;
+  statementReport.value = built;
+  mode.value = "report";
+  for (const item of built.items) {
+    if (item.correct == null) continue;
+    await persistAttempt(
+      built.kind,
+      built.seed,
+      item.correct,
+      item.durationMs
+    );
+  }
+}
+
+function onMtaUpdate(next: MtaSession) {
+  mtaSession.value = next;
+}
+
+async function onMtaFinish(built: MtaSessionReport, finished: MtaSession) {
+  mtaSession.value = finished;
+  mtaReport.value = built;
+  mode.value = "report";
+  for (const j of built.aircraftJudgments) {
+    await persistAttempt(built.kind, built.seed, j.outcome === "landed", j.durationMs);
+  }
+  for (const j of built.equationJudgments) {
+    await persistAttempt(built.kind, built.seed, j.correct, j.durationMs);
+  }
+  for (const j of built.letterJudgments) {
+    await persistAttempt(built.kind, built.seed, j.correct, j.durationMs);
+  }
+}
+
 function goMenu() {
   session.value = null;
+  statementSession.value = null;
+  mtaSession.value = null;
   report.value = null;
+  statementReport.value = null;
+  mtaReport.value = null;
   resetSelection();
   mode.value = "menu";
 }
@@ -175,7 +337,7 @@ function toggleClx(i: number) {
 
 function submitCurrent() {
   if (!session.value || session.value.currentIndex == null) return;
-  const kind = session.value.kind;
+  const kind = session.value.kind as PuzzleAbilityTestKind;
   const current = session.value.items[session.value.currentIndex];
   if (!current) return;
 
@@ -213,15 +375,12 @@ function submitCurrent() {
   }
 }
 
-function accuracyFor(kind: "switch_challenge" | "scales_clx") {
+function accuracyFor(kind: AbilityTestKind) {
   const rows = history.value.filter((h) => h.kind === kind);
   if (!rows.length) return null;
   const ok = rows.filter((h) => h.correct).length;
   return { pct: Math.round((ok / rows.length) * 100), n: rows.length };
 }
-
-const switchAccuracy = computed(() => accuracyFor("switch_challenge"));
-const clxAccuracy = computed(() => accuracyFor("scales_clx"));
 
 function reportSwitchSelection(item: AbilitySessionReport["items"][number]): {
   selectedIndex: number | null;
@@ -267,51 +426,145 @@ function correctSwitchLabel(item: AbilitySessionReport["items"][number]): string
   const lower = puzzle.rows[1].options[puzzle.correctPair[1]]!;
   return `${formatSwitchCode(upper)} deretter ${formatSwitchCode(lower)}`;
 }
+
+function kindTitle(kind: AbilityTestKind): string {
+  return provider.value?.tests.find((t) => t.kind === kind)?.title ?? kind;
+}
+
+const catalogGroups = computed(() => {
+  const p = provider.value;
+  if (!p) return [];
+  const groups: Array<{ key: string; label: string; items: typeof p.catalog }> = [
+    { key: "ferdighet", label: "Ferdighetstester", items: [] },
+    { key: "logikk", label: "Logikktester", items: [] },
+    { key: "personlighet", label: "Personlighetstester", items: [] }
+  ];
+  for (const item of p.catalog) {
+    const g = groups.find((x) => x.key === item.group);
+    g?.items.push(item);
+  }
+  return groups.filter((g) => g.items.length > 0);
+});
 </script>
 
 <template>
-  <section class="stack">
-    <PageHeader
-      title="Evnetester"
-      lead="Switch Challenge og Scales CLX, satt opp som i Aon-øvingsoppgavene."
-    >
+  <section v-if="provider" class="stack">
+    <PageHeader :title="provider.name" :lead="provider.shortDescription">
       <template #meta>
+        <RouterLink to="/interview/evnetester" class="field-hint">← Alle aktører</RouterLink>
         <p v-if="loadingHistory" class="field-hint">Laster historikk …</p>
         <template v-else>
-          <p class="field-hint">
-            Switch Challenge:
-            <template v-if="switchAccuracy">{{ switchAccuracy.pct }}% ({{ switchAccuracy.n }} forsøk)</template>
-            <template v-else>ingen forsøk</template>
-          </p>
-          <p class="field-hint">
-            Scales CLX:
-            <template v-if="clxAccuracy">{{ clxAccuracy.pct }}% ({{ clxAccuracy.n }} forsøk)</template>
+          <p
+            v-for="t in provider.tests"
+            :key="t.kind"
+            class="field-hint"
+          >
+            {{ t.title }}:
+            <template v-if="accuracyFor(t.kind)">
+              {{ accuracyFor(t.kind)!.pct }}% ({{ accuracyFor(t.kind)!.n }} forsøk)
+            </template>
             <template v-else>ingen forsøk</template>
           </p>
         </template>
       </template>
     </PageHeader>
 
-    <div v-if="mode === 'menu'" class="module-grid">
-      <article class="module-card">
-        <strong>Switch Challenge</strong>
-        <span>Deduktiv: finn koden som gjør input om til output. Vanskelighetsgraden øker for hvert riktige svar.</span>
-        <label class="ability-minutes">
-          Minutter
-          <input v-model.number="switchMinutes" type="number" min="1" max="60" />
-        </label>
-        <AppButton @click="beginSession('switch_challenge')">Start</AppButton>
+    <template v-if="mode === 'menu'">
+      <article class="panel stack aon-guide">
+        <h3>Forberedelse</h3>
+        <p>
+          Offisiell guide:
+          <a :href="provider.officialUrl" target="_blank" rel="noopener noreferrer">
+            {{ provider.officialUrlLabel }}
+          </a>
+        </p>
+        <h4>Slik er testen bygget</h4>
+        <ul>
+          <li v-for="(line, i) in provider.howItWorks" :key="i">{{ line }}</li>
+        </ul>
+        <h4>Øvingstips</h4>
+        <ul>
+          <li v-for="(line, i) in provider.tips" :key="i">{{ line }}</li>
+        </ul>
+        <h4>Testtyper hos {{ provider.name }}</h4>
+        <div v-for="group in catalogGroups" :key="group.key" class="catalog-group">
+          <strong>{{ group.label }}</strong>
+          <ul>
+            <li v-for="item in group.items" :key="item.name">
+              {{ item.name }}
+              <span class="field-hint">
+                — {{ item.duration }}. {{ item.measures }}
+                <template v-if="item.playableKind"> (kan øves her)</template>
+              </span>
+            </li>
+          </ul>
+        </div>
       </article>
-      <article class="module-card">
-        <strong>Scales CLX</strong>
-        <span>Induktiv: finn regelen og velg de to rutenettene som følger den.</span>
-        <label class="ability-minutes">
-          Minutter
-          <input v-model.number="clxMinutes" type="number" min="1" max="60" />
-        </label>
-        <AppButton variant="secondary" @click="beginSession('scales_clx')">Start</AppButton>
+
+      <article v-if="showSourcePdfs" class="panel stack aon-pdf-folder">
+        <h3>PDF-samling</h3>
+        <p class="field-hint">
+          Øvings-PDF-ene testene ble laget etter. Verbal resonnering har ingen kilde-PDF.
+        </p>
+        <p v-if="loadingSources" class="field-hint">Laster PDF-er …</p>
+        <p v-else-if="sourceError" class="error-text">{{ sourceError }}</p>
+        <ul v-else class="aon-pdf-list">
+          <li v-for="item in sourcePdfs" :key="item.id" class="aon-pdf-row">
+            <div class="aon-pdf-meta">
+              <strong>{{ item.title }}</strong>
+              <span class="field-hint">{{ item.filename }}</span>
+              <span v-if="!item.available" class="field-hint">Mangler på disk</span>
+            </div>
+            <AppButton
+              variant="secondary"
+              :disabled="!item.available || openingSourceId === item.id"
+              :loading="openingSourceId === item.id"
+              @click="openSourcePdf(item)"
+            >
+              Åpne
+            </AppButton>
+          </li>
+        </ul>
       </article>
-    </div>
+
+      <div class="module-grid">
+        <article v-for="t in provider.tests" :key="t.kind" class="module-card">
+          <strong>{{ t.title }}</strong>
+          <span>{{ t.description }}</span>
+          <label class="ability-minutes">
+            Minutter
+            <input
+              v-model.number="minutesByKind[t.kind]"
+              type="number"
+              min="1"
+              max="60"
+            />
+          </label>
+          <AppButton
+            :variant="t.kind === 'switch_challenge' ? undefined : 'secondary'"
+            @click="beginSession(t.kind)"
+          >
+            Start
+          </AppButton>
+        </article>
+      </div>
+    </template>
+
+    <StatementTestRunner
+      v-else-if="mode === 'playing' && statementSession"
+      :session="statementSession"
+      :title="kindTitle(statementSession.test.kind)"
+      @update="onStatementUpdate"
+      @finish="onStatementFinish"
+    />
+
+    <MtaRunner
+      v-else-if="mode === 'playing' && mtaSession"
+      :session="mtaSession"
+      :title="kindTitle(mtaSession.timeline.kind)"
+      @update="onMtaUpdate"
+      @finish="onMtaFinish"
+    />
 
     <article v-else-if="mode === 'playing' && session && switchPuzzle" class="panel stack">
       <div class="panel-heading-row">
@@ -360,6 +613,86 @@ function correctSwitchLabel(item: AbilitySessionReport["items"][number]): string
       />
       <div class="page-header-actions">
         <AppButton :disabled="!canSubmitClx" @click="submitCurrent">Neste</AppButton>
+      </div>
+    </article>
+
+    <article v-else-if="mode === 'report' && statementReport" class="panel stack">
+      <div class="panel-heading-row">
+        <h3>Rapport — {{ kindTitle(statementReport.kind) }}</h3>
+        <AppButton variant="ghost" @click="goMenu">Tilbake</AppButton>
+      </div>
+      <p>
+        {{ statementReport.correctCount }} riktige, {{ statementReport.wrongCount }} feil,
+        {{ statementReport.unansweredCount }} ubesvarte
+        ({{ statementReport.answeredCount }} besvart). Poeng:
+        {{ statementReport.score }} (+1 riktig, −1 feil).
+      </p>
+
+      <div
+        v-for="(item, idx) in statementReport.items"
+        :key="item.statement.id"
+        class="ability-report-item stack"
+      >
+        <div class="panel-heading-row">
+          <strong>Påstand {{ idx + 1 }}</strong>
+          <span
+            v-if="item.correct != null"
+            :class="item.correct ? 'success-text' : 'error-text'"
+          >
+            {{ item.correct ? "Riktig" : "Feil" }}
+          </span>
+          <span v-else class="field-hint">Ubesvart</span>
+        </div>
+        <p>{{ item.statement.text }}</p>
+        <p class="field-hint">
+          Ditt svar:
+          {{ item.answer ? VERDICT_LABELS[item.answer] : "—" }}
+          · Fasit: {{ VERDICT_LABELS[item.statement.verdict] }}
+        </p>
+        <p class="field-hint">{{ item.statement.rationale }}</p>
+      </div>
+
+      <div class="page-header-actions">
+        <AppButton @click="goMenu">Til meny</AppButton>
+      </div>
+    </article>
+
+    <article v-else-if="mode === 'report' && mtaReport" class="panel stack">
+      <div class="panel-heading-row">
+        <h3>Rapport — {{ kindTitle(mtaReport.kind) }}</h3>
+        <AppButton variant="ghost" @click="goMenu">Tilbake</AppButton>
+      </div>
+      <p>
+        Poeng: {{ mtaReport.score }}. Fly: {{ mtaReport.landedCount }} landet,
+        {{ mtaReport.missCount }} bom. Regnestykker:
+        {{ mtaReport.equationCorrect }} riktige,
+        {{ mtaReport.equationWrong }} feil. Bokstaver:
+        {{ mtaReport.letterCorrect }} riktige,
+        {{ mtaReport.letterWrong }} feil.
+      </p>
+      <div class="ability-report-item stack">
+        <strong>Fly</strong>
+        <p class="field-hint">
+          Landet teller +1. Bom teller 0. Du flytter det grå feltet selv
+          (↑/↓) og klikker flyet når det treffer feltet.
+        </p>
+      </div>
+      <div class="ability-report-item stack">
+        <strong>Regnestykker</strong>
+        <p class="field-hint">
+          {{ mtaReport.equationCorrect }} riktige · {{ mtaReport.equationWrong }} feil
+          (+1 / −1).
+        </p>
+      </div>
+      <div class="ability-report-item stack">
+        <strong>Bokstaver</strong>
+        <p class="field-hint">
+          {{ mtaReport.letterCorrect }} riktige · {{ mtaReport.letterWrong }} feil
+          (+1 / −1). Correct når en bokstav forekommer to ganger.
+        </p>
+      </div>
+      <div class="page-header-actions">
+        <AppButton @click="goMenu">Til meny</AppButton>
       </div>
     </article>
 
@@ -422,6 +755,37 @@ function correctSwitchLabel(item: AbilitySessionReport["items"][number]): string
 </template>
 
 <style scoped>
+.aon-guide ul {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+.aon-guide h4 {
+  margin: 0.5rem 0 0;
+}
+.catalog-group {
+  margin-top: 8px;
+}
+.aon-pdf-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.aon-pdf-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.aon-pdf-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
 .ability-minutes {
   display: flex;
   flex-direction: column;

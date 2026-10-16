@@ -123,6 +123,12 @@ describe("question taxonomy", () => {
 
 describe("ability test constants", () => {
   it("defines ability test kinds", () => {
-    expect(abilityTestKinds).toEqual(["switch_challenge", "scales_clx"]);
+    expect(abilityTestKinds).toEqual([
+      "switch_challenge",
+      "scales_clx",
+      "scales_numerical",
+      "scales_verbal",
+      "scales_mta"
+    ]);
   });
 });

@@ -1,4 +1,5 @@
 import type {
+  AonSourcePdfMeta,
   EssentialsDraftDto,
   InterviewAbilityTestAttemptDto,
   InterviewBankQuestionDto,
@@ -29,6 +30,8 @@ import type {
   InterviewSessionFeedbackDto
 } from "@careercenter/shared";
 import { LLM_REQUEST_TIMEOUT_MS, request, requestBlob, uploadRequest } from "./client.js";
+
+export type AonSourcePdfListItem = AonSourcePdfMeta & { available: boolean };
 
 export interface InterviewAiStatus {
   aiConfigured: boolean;
@@ -335,5 +338,23 @@ export const interviewPrepApi = {
     request<InterviewAbilityTestAttemptDto>("/api/interview/ability/attempts", {
       method: "POST",
       body: JSON.stringify(payload)
-    })
+    }),
+
+  aonSourcePdfs: () =>
+    request<AonSourcePdfListItem[]>("/api/interview/ability/aon/sources"),
+  openAonSourcePdf: async (id: string, filename: string) => {
+    const blob = await requestBlob(`/api/interview/ability/aon/sources/${id}`);
+    const url = URL.createObjectURL(blob);
+    const opened = window.open(url, "_blank", "noopener,noreferrer");
+    if (!opened) {
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = filename;
+      anchor.target = "_blank";
+      anchor.rel = "noopener noreferrer";
+      anchor.click();
+    }
+    // Revoke after the browser has had time to load the blob URL.
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }
 };

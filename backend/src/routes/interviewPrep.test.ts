@@ -711,6 +711,61 @@ describe("interview prep routes", () => {
       payload: { kind: "switch_challenge", seed: 42, correct: true, durationMs: 12000 }
     });
     expect(attempt.statusCode).toBe(201);
+
+    const numerical = await app.inject({
+      method: "POST",
+      url: "/api/interview/ability/attempts",
+      payload: { kind: "scales_numerical", seed: 7, correct: false, durationMs: 3000 }
+    });
+    expect(numerical.statusCode).toBe(201);
+
+    const verbal = await app.inject({
+      method: "POST",
+      url: "/api/interview/ability/attempts",
+      payload: { kind: "scales_verbal", seed: 9, correct: true, durationMs: 4000 }
+    });
+    expect(verbal.statusCode).toBe(201);
+
+    const mta = await app.inject({
+      method: "POST",
+      url: "/api/interview/ability/attempts",
+      payload: { kind: "scales_mta", seed: 11, correct: true, durationMs: 2500 }
+    });
+    expect(mta.statusCode).toBe(201);
+    await app.close();
+  });
+
+  it("lists and streams AON source PDFs from the fixed catalog", async () => {
+    const { app } = await buildInterviewApp();
+    const list = await app.inject({ method: "GET", url: "/api/interview/ability/aon/sources" });
+    expect(list.statusCode).toBe(200);
+    const body = list.json() as Array<{ id: string; available: boolean; filename: string }>;
+    expect(body.map((item) => item.id)).toEqual([
+      "switch_challenge",
+      "scales_clx",
+      "scales_numerical"
+    ]);
+
+    const unknown = await app.inject({
+      method: "GET",
+      url: "/api/interview/ability/aon/sources/not-real"
+    });
+    expect(unknown.statusCode).toBe(404);
+
+    const switchSource = body.find((item) => item.id === "switch_challenge");
+    expect(switchSource?.filename).toBe("practice-tasks-deductive-reasoning-switchchallenge.pdf");
+
+    const pdf = await app.inject({
+      method: "GET",
+      url: "/api/interview/ability/aon/sources/switch_challenge"
+    });
+    if (switchSource?.available) {
+      expect(pdf.statusCode).toBe(200);
+      expect(pdf.headers["content-type"]).toMatch(/application\/pdf/);
+      expect(Buffer.isBuffer(pdf.rawPayload) ? pdf.rawPayload.length : 0).toBeGreaterThan(1000);
+    } else {
+      expect(pdf.statusCode).toBe(404);
+    }
     await app.close();
   });
 
@@ -1034,6 +1089,105 @@ describe("interview prep routes", () => {
     const listed = await app.inject({ method: "GET", url: `/api/interview/sessions?prepPlanId=${plan.id}` });
     const sessions = listed.json() as Array<{ planSection?: string }>;
     expect(sessions.map((s) => s.planSection).sort()).toEqual(["ask_interviewer", "motivation"]);
+    await app.close();
+  });
+
+  it("keeps feedback for every finished attempt of the same plan section", async () => {
+    const main = new MemoryRepository();
+    const interviewRepo = new InterviewPrepMemoryRepository();
+    const llmClient = new FakeLlmClient({
+      configured: true,
+      structuredResults: [
+        {
+          scores: Object.fromEntries(starRubricCriteria.map((key) => [key, 2])),
+          improvement: "Versjon 1"
+        },
+        {
+          scores: Object.fromEntries(starRubricCriteria.map((key) => [key, 4])),
+          improvement: "Versjon 2"
+        }
+      ]
+    });
+    const app = await buildServer({
+      repository: main,
+      authDisabled: true,
+      llmClient,
+      interviewPrepRepository: interviewRepo
+    });
+    await app.ready();
+    await app.inject({ method: "GET", url: "/api/interview/status" });
+    const user = await main.findUserByName("__test__");
+
+    const plan = await interviewRepo.createPrepPlan(user!.id, {
+      companyName: "BearingPoint",
+      roleTitle: "Data and AI internship",
+      format: "interview",
+      researchModel: "gpt-6-astra"
+    });
+    await interviewRepo.setPrepPlanCurated(user!.id, plan.id, {
+      questions: [
+        { text: "Walk me through a case.", category: "case", target: "interview", source: "custom" }
+      ],
+      tasks: []
+    });
+    await interviewRepo.updatePrepPlanStatus(user!.id, plan.id, "ready");
+
+    async function finishAttempt() {
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/interview/sessions",
+        payload: { mode: "behavioral_mock", prepPlanId: plan.id, planSection: "case" }
+      });
+      expect(created.statusCode).toBe(201);
+      const sessionId = created.json().id as string;
+      await app.inject({
+        method: "POST",
+        url: `/api/interview/sessions/${sessionId}/transcript`,
+        payload: { role: "user", content: "Jeg strukturerte casen rundt dataflyt." }
+      });
+      const finished = await app.inject({
+        method: "POST",
+        url: `/api/interview/sessions/${sessionId}/finish`
+      });
+      expect(finished.statusCode).toBe(200);
+      return finished.json() as {
+        id: string;
+        planSection?: string;
+        finishedAt?: string;
+        feedback?: { sum: number; improvement: string };
+      };
+    }
+
+    const first = await finishAttempt();
+    const second = await finishAttempt();
+    expect(first.feedback?.sum).toBe(16);
+    expect(second.feedback?.sum).toBe(32);
+    expect(first.planSection).toBe("case");
+    expect(second.planSection).toBe("case");
+
+    const listed = await app.inject({
+      method: "GET",
+      url: `/api/interview/sessions?prepPlanId=${plan.id}`
+    });
+    const sessions = listed.json() as Array<{
+      id: string;
+      planSection?: string;
+      finishedAt?: string;
+      feedback?: { sum: number; improvement: string };
+    }>;
+    const caseSessions = sessions.filter((s) => s.planSection === "case");
+    expect(caseSessions).toHaveLength(2);
+    expect(caseSessions.every((s) => s.finishedAt && s.feedback)).toBe(true);
+    expect(caseSessions.map((s) => s.feedback!.sum).sort((a, b) => a - b)).toEqual([16, 32]);
+
+    const messages = await app.inject({
+      method: "GET",
+      url: `/api/interview/sessions/${first.id}/messages`
+    });
+    const transcript = (messages.json() as Array<{ role: string; content: string }>).filter(
+      (m) => m.role !== "system"
+    );
+    expect(transcript.some((m) => m.content.includes("dataflyt"))).toBe(true);
     await app.close();
   });
 

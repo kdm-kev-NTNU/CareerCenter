@@ -18,6 +18,7 @@ import {
   videoSimulatorSettingsSchema
 } from "@careercenter/shared";
 import type { QuestionAudience } from "@careercenter/shared";
+import { createReadStream } from "node:fs";
 import type { FastifyInstance } from "fastify";
 import { nanoid } from "nanoid";
 import type { LlmClient, LlmTranscribeOptions } from "../ai/llmClient.js";
@@ -51,6 +52,10 @@ import {
 } from "../interview/importJobOrchestration.js";
 import { JobCancellationRegistry } from "../interview/jobCancellationRegistry.js";
 import { buildInterviewStoragePath, writeInterviewFile } from "../interview/interviewFileStorage.js";
+import {
+  listAonSourcePdfs,
+  resolveExistingAonSourcePath
+} from "../interview/aonSourceStorage.js";
 import {
   renderCompanyReportPdf,
   sanitizeReportFilename
@@ -1130,5 +1135,28 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
     const body = abilityAttemptInputSchema.parse(request.body);
     const attempt = await deps.interviewPrepRepository.createAbilityAttempt(request.user.id, body);
     return reply.code(201).send(toAbilityAttemptDto(attempt));
+  });
+
+  app.get("/api/interview/ability/aon/sources", async () => {
+    return listAonSourcePdfs();
+  });
+
+  app.get("/api/interview/ability/aon/sources/:id", async (request, reply) => {
+    const id = (request.params as { id: string }).id;
+    const resolved = await resolveExistingAonSourcePath(id);
+    if (!resolved) {
+      return reply.code(404).send({ message: "Kilde-PDF ikke funnet." });
+    }
+    if (!resolved.available) {
+      return reply.code(404).send({ message: "Kilde-PDF mangler på disk." });
+    }
+    const stream = createReadStream(resolved.absolutePath);
+    return reply
+      .header("content-type", "application/pdf")
+      .header(
+        "content-disposition",
+        `inline; filename="${resolved.meta.filename.replace(/"/g, "")}"`
+      )
+      .send(stream);
   });
 }

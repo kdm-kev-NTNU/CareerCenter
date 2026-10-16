@@ -235,7 +235,7 @@ describe("InterviewSimulatorView plan picker", () => {
     );
   });
 
-  it("marks sections that have a finished session with the latest score", async () => {
+  it("marks sections that have a finished session with the latest score and delta", async () => {
     api.sessions.mockResolvedValue([
       {
         id: "old",
@@ -264,9 +264,163 @@ describe("InterviewSimulatorView plan picker", () => {
 
     const card = wrapper.get("[data-test='section-card-behavioral']");
     expect(card.classes()).toContain("section-card--done");
-    expect(card.text()).toContain("1 spørsmål · sum 14");
+    expect(card.text()).toContain("v2 · sum 14 (+5)");
     expect(wrapper.get("[data-test='plan-sections']").text()).toContain("1 av 1 seksjoner øvd");
     expect(wrapper.get("[data-test='section-card-full']").classes()).not.toContain("section-card--done");
+    expect(wrapper.find("[data-test='section-retry-behavioral']").exists()).toBe(true);
+
+    await wrapper.get("[data-test='section-card-behavioral']").trigger("click");
+    expect(wrapper.get("[data-test='section-attempt-history']").text()).toContain("Versjon 1");
+    expect(wrapper.get("[data-test='section-attempt-history']").text()).toContain("Versjon 2");
+  });
+
+  it("øv på nytt starts a new session for that section", async () => {
+    api.sessions.mockResolvedValue([
+      {
+        id: "old",
+        mode: "behavioral_mock",
+        title: "",
+        prepPlanId: "a",
+        planSection: "behavioral",
+        finishedAt: "2026-10-03T10:00:00.000Z",
+        feedback: { scores: {} as never, sum: 9, improvement: "" },
+        createdAt: "2026-10-03T09:00:00.000Z",
+        updatedAt: "2026-10-03T10:00:00.000Z"
+      }
+    ]);
+    api.createSession.mockResolvedValue({ id: "s2" } as Awaited<ReturnType<typeof api.createSession>>);
+    const { wrapper } = await mountView("/interview/simulator?planId=a");
+
+    await wrapper.get("[data-test='section-retry-behavioral']").trigger("click");
+    await flushPromises();
+
+    expect(api.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prepPlanId: "a",
+        planSection: "behavioral",
+        title: "Øving: Bedrift a – Atferd (STAR)"
+      })
+    );
+  });
+
+  it("loads the transcript when an attempt row is opened", async () => {
+    api.sessions.mockResolvedValue([
+      {
+        id: "sess-v1",
+        mode: "behavioral_mock",
+        title: "",
+        prepPlanId: "a",
+        planSection: "behavioral",
+        finishedAt: "2026-10-03T10:00:00.000Z",
+        feedback: {
+          scores: {
+            openingAndStructure: 2,
+            situationAndTask: 2,
+            action: 2,
+            result: 2,
+            learning: 2,
+            ownership: 2,
+            tempoAndLength: 2,
+            relevance: 2
+          },
+          sum: 16,
+          improvement: "Mer konkrete tall."
+        },
+        createdAt: "2026-10-03T09:00:00.000Z",
+        updatedAt: "2026-10-03T10:00:00.000Z"
+      }
+    ]);
+    api.sessionMessages.mockResolvedValue([
+      { id: "sys", role: "system", content: "system prompt", createdAt: "2026-10-03T09:00:00.000Z" },
+      { id: "m1", role: "assistant", content: "Fortell om en konflikt.", createdAt: "2026-10-03T09:01:00.000Z" },
+      { id: "m2", role: "user", content: "Jeg løste en konflikt i teamet.", createdAt: "2026-10-03T09:02:00.000Z" }
+    ]);
+    const { wrapper } = await mountView("/interview/simulator?planId=a");
+
+    await wrapper.get("[data-test='section-card-behavioral']").trigger("click");
+    await wrapper.get("[data-test='attempt-row-1']").trigger("click");
+    await flushPromises();
+
+    expect(api.sessionMessages).toHaveBeenCalledWith("sess-v1");
+    const transcript = wrapper.get("[data-test='attempt-transcript']");
+    expect(transcript.text()).toContain("Fortell om en konflikt.");
+    expect(transcript.text()).toContain("Jeg løste en konflikt i teamet.");
+    expect(transcript.text()).not.toContain("system prompt");
+    expect(wrapper.get("[data-test='attempt-detail-1']").text()).toContain("Mer konkrete tall.");
+  });
+
+  it("Start ny samtale keeps the selected section and starts the next version", async () => {
+    const stop = vi.fn();
+    api.createSession
+      .mockResolvedValueOnce({
+        id: "s1",
+        mode: "behavioral_mock",
+        title: "Øving: Bedrift a – Atferd (STAR)",
+        prepPlanId: "a",
+        planSection: "behavioral",
+        createdAt: "2026-10-15T12:00:00.000Z",
+        updatedAt: "2026-10-15T12:00:00.000Z"
+      } as Awaited<ReturnType<typeof api.createSession>>)
+      .mockResolvedValueOnce({
+        id: "s2",
+        mode: "behavioral_mock",
+        title: "Øving: Bedrift a – Atferd (STAR)",
+        prepPlanId: "a",
+        planSection: "behavioral",
+        createdAt: "2026-10-15T12:10:00.000Z",
+        updatedAt: "2026-10-15T12:10:00.000Z"
+      } as Awaited<ReturnType<typeof api.createSession>>);
+    api.createVoiceSession.mockResolvedValue({
+      mock: false,
+      model: "gpt-realtime",
+      clientSecret: "secret",
+      expiresAt: "2026-10-15T12:00:00.000Z",
+      tools: []
+    });
+    connectVoice.mockResolvedValue({ pc: {} as RTCPeerConnection, stop });
+    api.finishSession.mockResolvedValue({
+      id: "s1",
+      mode: "behavioral_mock",
+      title: "Øving: Bedrift a – Atferd (STAR)",
+      prepPlanId: "a",
+      planSection: "behavioral",
+      finishedAt: "2026-10-15T12:05:00.000Z",
+      feedback: {
+        scores: {
+          openingAndStructure: 3,
+          situationAndTask: 3,
+          action: 3,
+          result: 3,
+          learning: 3,
+          ownership: 3,
+          tempoAndLength: 3,
+          relevance: 3
+        },
+        sum: 24,
+        improvement: "Bra."
+      },
+      createdAt: "2026-10-15T12:00:00.000Z",
+      updatedAt: "2026-10-15T12:05:00.000Z"
+    });
+
+    const { wrapper } = await mountView("/interview/simulator?planId=a");
+    await wrapper.get("[data-test='section-card-behavioral']").trigger("click");
+    await wrapper.get("[data-test='start-recording']").trigger("click");
+    await flushPromises();
+
+    const leave = document.body.querySelector("[data-test='leave-call']") as HTMLButtonElement;
+    leave.click();
+    await flushPromises();
+
+    await wrapper.get("[data-test='restart-session']").trigger("click");
+    await flushPromises();
+
+    expect(api.createSession).toHaveBeenCalledTimes(2);
+    expect(api.createSession.mock.calls[1]?.[0]).toEqual(
+      expect.objectContaining({ prepPlanId: "a", planSection: "behavioral" })
+    );
+    // Tear down the live call stage so it does not leak into the next test via Teleport.
+    wrapper.unmount();
   });
 
   it("opens the call stage for a live voice session and closes it after leave", async () => {
