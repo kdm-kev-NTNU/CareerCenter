@@ -257,6 +257,7 @@ export const interviewPrepApi = {
     caseEntryId?: string;
   }) =>
     request<InterviewSessionDto>("/api/interview/sessions", { method: "POST", body: JSON.stringify(payload) }),
+  deleteSession: (sessionId: string) => request<void>(`/api/interview/sessions/${sessionId}`, { method: "DELETE" }),
   sessionMessages: (sessionId: string) =>
     request<InterviewMessageDto[]>(`/api/interview/sessions/${sessionId}/messages`),
   finishSession: (sessionId: string) =>

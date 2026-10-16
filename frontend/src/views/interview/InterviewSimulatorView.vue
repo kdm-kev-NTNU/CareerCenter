@@ -7,6 +7,7 @@ import type {
   InterviewSessionDto,
   InterviewSimulatorSettingsDto,
   PlanSectionKey,
+  SectionAttempt,
   SectionKey,
   SimulatorCallState,
   VoiceSessionDto
@@ -16,7 +17,6 @@ import {
   buildSectionAttemptHistory,
   canStartSimulators,
   interviewModes,
-  latestSectionAttempt,
   phaseShowsCallStage,
   planSectionLabels,
   transitionSimulatorCall
@@ -26,6 +26,7 @@ import { RouterLink, useRoute, useRouter } from "vue-router";
 import { interviewPrepApi } from "../../api/interviewPrep.js";
 import InterviewCallStage from "../../components/interview/call/InterviewCallStage.vue";
 import SectionAttemptHistory from "../../components/interview/SectionAttemptHistory.vue";
+import { sectionCardView, type SectionCardView } from "../../components/interview/sectionCardView.js";
 import { toneForPrepPlanStatus } from "../../components/interview/statusTone.js";
 import EssentialsSheetEditor from "../../components/interview/EssentialsSheetEditor.vue";
 import { useMediaStream } from "../../composables/useMediaStream.js";
@@ -50,6 +51,10 @@ const savedPlans = ref<InterviewPrepPlanDto[]>([]);
 /** null practises the whole interview; a key practises one section of the plan. */
 const selectedSection = ref<PlanSectionKey | null>(null);
 const planSessions = ref<InterviewSessionDto[]>([]);
+/** Section the user chose to practise again; its card looks unpractised until the new attempt finishes. */
+const freshStartKey = ref<SectionKey | null>(null);
+const historyOpen = ref(false);
+const historyDeletingId = ref<string | null>(null);
 const historyExpandedId = ref<string | null>(null);
 const historyMessages = ref<InterviewMessageDto[] | null>(null);
 const historyMessagesLoading = ref(false);
@@ -145,16 +150,17 @@ const planLabel = computed(() => {
 const planSections = computed(() => (prepPlan.value ? buildPlanSections(prepPlan.value.questions) : []));
 /** Finished attempts per section, versioned by finishedAt. */
 const attemptHistory = computed(() => buildSectionAttemptHistory(planSessions.value));
-const practisedSectionCount = computed(
-  () => planSections.value.filter((item) => attemptHistory.value.has(item.key)).length
+const fullCard = computed(() => cardView("full", "Alle seksjoner"));
+const sectionTiles = computed(() =>
+  planSections.value.map((item) => ({ ...item, view: cardView(item.key, `${item.questionCount} spørsmål`) }))
 );
+const practisedSectionCount = computed(() => sectionTiles.value.filter((tile) => tile.view.done).length);
 const selectedSectionKey = computed<SectionKey>(() => selectedSection.value ?? "full");
 const selectedAttempts = computed(() => attemptHistory.value.get(selectedSectionKey.value) ?? []);
 const historyTitle = computed(() => {
-  if (!prepPlan.value) return "Historikk";
   const sectionTitle =
     selectedSection.value === null ? "Hele intervjuet" : planSectionLabels[selectedSection.value];
-  return `${prepPlan.value.companyName} – ${sectionTitle}: historikk`;
+  return `Historikk – ${sectionTitle}`;
 });
 const startLabel = computed(() => {
   if (inCall.value) return "Opptak pågår";
@@ -169,27 +175,21 @@ const modeLabel = computed(() => {
 
 const companyName = computed(() => settings.value?.companyName || prepPlan.value?.companyName || "Intervju");
 
-function formatDelta(delta: number | undefined): string {
-  if (delta === undefined) return "";
-  const sign = delta > 0 ? "+" : "";
-  return ` (${sign}${delta})`;
-}
-
-function sectionMeta(key: SectionKey, fallback: string): string {
-  const latest = latestSectionAttempt(attemptHistory.value, key);
-  if (!latest) return fallback;
-  if (latest.sum === undefined) return `v${latest.version}`;
-  return `v${latest.version} · sum ${latest.sum}${formatDelta(latest.deltaFromPrevious)}`;
-}
-
-function sectionDone(key: SectionKey): boolean {
-  return attemptHistory.value.has(key);
+function cardView(key: SectionKey, unpractisedMeta: string): SectionCardView {
+  return sectionCardView(attemptHistory.value, key, unpractisedMeta, freshStartKey.value);
 }
 
 function selectSection(key: PlanSectionKey | null) {
   if (inCall.value || loading.value) return;
+  if ((key ?? "full") !== freshStartKey.value) freshStartKey.value = null;
   selectedSection.value = key;
+  historyOpen.value = false;
   closeHistoryAttempt();
+}
+
+function toggleHistoryOpen() {
+  historyOpen.value = !historyOpen.value;
+  if (!historyOpen.value) closeHistoryAttempt();
 }
 
 function closeHistoryAttempt() {
@@ -213,12 +213,33 @@ async function openHistoryAttempt(sessionId: string) {
   }
 }
 
-/** Select the section (if needed) and start a fresh attempt — creates a new version. */
-async function retrySection(key: PlanSectionKey | null) {
+/** Show the section as never practised; the user starts the new attempt from the setup screen. */
+function retrySection(key: PlanSectionKey | null) {
   if (inCall.value || loading.value) return;
+  backToSetup();
   selectedSection.value = key;
+  freshStartKey.value = key ?? "full";
+  historyOpen.value = false;
   closeHistoryAttempt();
-  await startSession();
+}
+
+async function deleteHistoryAttempt(attempt: SectionAttempt) {
+  if (historyDeletingId.value) return;
+  if (!confirm(`Slette versjon ${attempt.version}? Samtalen og feedbacken slettes for godt. Dette kan ikke angres.`)) {
+    return;
+  }
+  const sessionId = attempt.session.id;
+  historyDeletingId.value = sessionId;
+  try {
+    await interviewPrepApi.deleteSession(sessionId);
+    planSessions.value = planSessions.value.filter((item) => item.id !== sessionId);
+    if (historyExpandedId.value === sessionId) closeHistoryAttempt();
+    if (session.value?.id === sessionId) backToSetup();
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : "Kunne ikke slette forsøket.";
+  } finally {
+    historyDeletingId.value = null;
+  }
 }
 
 async function loadPlanSessions(planId: string) {
@@ -259,6 +280,8 @@ async function loadSavedPlans() {
 async function loadPlan() {
   selectedSection.value = null;
   planSessions.value = [];
+  freshStartKey.value = null;
+  historyOpen.value = false;
   closeHistoryAttempt();
   if (!routePlanId.value) {
     prepPlan.value = null;
@@ -431,6 +454,7 @@ async function finishSession(reason: "leave" | "end_tool" = "leave") {
     if (finished.prepPlanId && finished.prepPlanId === routePlanId.value) {
       planSessions.value = [finished, ...planSessions.value.filter((item) => item.id !== finished.id)];
     }
+    freshStartKey.value = null;
     applyCallEvent({ type: "feedback_ready" });
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Kunne ikke avslutte.";
@@ -535,19 +559,19 @@ function printEssentials() {
               class="section-card section-card--full"
               :class="{
                 'section-card--selected': selectedSection === null,
-                'section-card--done': sectionDone('full')
+                'section-card--done': fullCard.done
               }"
               :aria-pressed="selectedSection === null"
               :disabled="inCall || loading"
               data-test="section-card-full"
               @click="selectSection(null)"
             >
-              <span v-if="sectionDone('full')" class="section-card__mark" aria-hidden="true">✓</span>
+              <span v-if="fullCard.done" class="section-card__mark" aria-hidden="true">✓</span>
               <span class="section-card__label">Hele intervjuet</span>
-              <span class="section-card__meta">{{ sectionMeta("full", "Alle seksjoner") }}</span>
+              <span class="section-card__meta">{{ fullCard.meta }}</span>
             </button>
             <button
-              v-if="sectionDone('full')"
+              v-if="fullCard.done"
               type="button"
               class="section-retry"
               :disabled="inCall || loading"
@@ -557,25 +581,25 @@ function printEssentials() {
               Øv på nytt
             </button>
           </li>
-          <li v-for="item in planSections" :key="item.key" class="section-tile">
+          <li v-for="item in sectionTiles" :key="item.key" class="section-tile">
             <button
               type="button"
               class="section-card"
               :class="{
                 'section-card--selected': selectedSection === item.key,
-                'section-card--done': sectionDone(item.key)
+                'section-card--done': item.view.done
               }"
               :aria-pressed="selectedSection === item.key"
               :disabled="inCall || loading"
               :data-test="`section-card-${item.key}`"
               @click="selectSection(item.key)"
             >
-              <span v-if="sectionDone(item.key)" class="section-card__mark" aria-hidden="true">✓</span>
+              <span v-if="item.view.done" class="section-card__mark" aria-hidden="true">✓</span>
               <span class="section-card__label">{{ item.title }}</span>
-              <span class="section-card__meta">{{ sectionMeta(item.key, `${item.questionCount} spørsmål`) }}</span>
+              <span class="section-card__meta">{{ item.view.meta }}</span>
             </button>
             <button
-              v-if="sectionDone(item.key)"
+              v-if="item.view.done"
               type="button"
               class="section-retry"
               :disabled="inCall || loading"
@@ -590,11 +614,15 @@ function printEssentials() {
           v-if="selectedAttempts.length"
           :title="historyTitle"
           :attempts="selectedAttempts"
+          :open="historyOpen"
           :expanded-session-id="historyExpandedId"
           :messages="historyMessages"
           :loading-messages="historyMessagesLoading"
+          :deleting-session-id="historyDeletingId"
+          @toggle-open="toggleHistoryOpen"
           @open="openHistoryAttempt"
           @close="closeHistoryAttempt"
+          @delete="deleteHistoryAttempt"
         />
       </div>
       <label>
