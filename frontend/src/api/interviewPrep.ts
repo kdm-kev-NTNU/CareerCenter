@@ -24,6 +24,8 @@ import type {
   QuestionDiscardReason,
   ResearchModel,
   VideoSimulatorSettings,
+  VideoQuestionRequest,
+  VideoQuestionsDto,
   VideoRateResultDto,
   VideoTranscribeResultDto,
   VoiceSessionDto,
@@ -282,6 +284,11 @@ export const interviewPrepApi = {
       method: "PUT",
       body: JSON.stringify(payload)
     }),
+  generateVideoQuestions: (payload: VideoQuestionRequest) =>
+    request<VideoQuestionsDto>("/api/interview/video/questions", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
   videoRuns: () => request<InterviewVideoRunDto[]>("/api/interview/video/runs"),
   createVideoRun: (payload: {
     state: string;
@@ -289,6 +296,8 @@ export const interviewPrepApi = {
     blobKey?: string;
     transcript?: string;
     prompt?: string;
+    companyName?: string;
+    roleDescription?: string;
     feedback?: InterviewSessionFeedbackDto;
     settings: VideoSimulatorSettings;
   }) =>
