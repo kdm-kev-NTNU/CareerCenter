@@ -497,7 +497,8 @@ describe("interview prep routes", () => {
         {
           prompt: "Fortell om en gang du leverte under press.",
           withRubric: "true",
-          durationMs: "45000"
+          durationMs: "45000",
+          model: "gpt-6-luna"
         },
         { filename: "answer.webm", contentType: "audio/webm", body: "fake-audio-bytes" }
       )
@@ -508,9 +509,30 @@ describe("interview prep routes", () => {
     expect(response.json().rating).toBe("ok");
     expect(llmClient.transcribeCalls).toHaveLength(1);
     expect(llmClient.transcribeCalls[0]!.buffer.toString()).toContain("fake-audio-bytes");
-    const rubricUser = llmClient.structuredCalls.at(-1)?.options.messages.find((m) => m.role === "user")?.content;
+    const rubricCall = llmClient.structuredCalls.at(-1);
+    expect(rubricCall?.options.model).toBe("gpt-6-luna");
+    const rubricUser = rubricCall?.options.messages.find((m) => m.role === "user")?.content;
     expect(rubricUser).toContain("Spørsmål: Fortell om en gang du leverte under press.");
     expect(rubricUser).toContain("Svar: Jeg leverte funksjonen før deadline.");
+    await app.close();
+  });
+
+  it("rejects an invalid rating model on video transcribe", async () => {
+    const { app } = await buildInterviewApp({
+      transcribeResult: "Et kort svar."
+    });
+    const boundary = "----VideoInvalidModelBoundary";
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/interview/video/transcribe",
+      headers: { "content-type": `multipart/form-data; boundary=${boundary}` },
+      payload: multipartPayload(
+        boundary,
+        { withRubric: "true", model: "not-a-real-model" },
+        { filename: "answer.webm", contentType: "audio/webm", body: "audio" }
+      )
+    });
+    expect(response.statusCode).toBeGreaterThanOrEqual(400);
     await app.close();
   });
 
@@ -579,7 +601,7 @@ describe("interview prep routes", () => {
   });
 
   it("re-rates an existing transcript via /video/rate", async () => {
-    const { app } = await buildInterviewApp({
+    const { app, llmClient } = await buildInterviewApp({
       structuredResult: {
         scores: Object.fromEntries(starRubricCriteria.map((key) => [key, 4])),
         improvement: "Bra."
@@ -591,12 +613,29 @@ describe("interview prep routes", () => {
       payload: {
         prompt: "Fortell om en utfordring",
         transcript: "Jeg løste problemet.",
-        durationMs: 30_000
+        durationMs: 30_000,
+        model: "gpt-5.5"
       }
     });
     expect(response.statusCode).toBe(200);
     expect(response.json().rating).toBe("ok");
     expect(response.json().feedback.sum).toBe(32);
+    expect(llmClient.structuredCalls.at(-1)?.options.model).toBe("gpt-5.5");
+    await app.close();
+  });
+
+  it("rejects an invalid rating model on video rate", async () => {
+    const { app } = await buildInterviewApp();
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/interview/video/rate",
+      payload: {
+        prompt: "Fortell om en utfordring",
+        transcript: "Jeg løste problemet.",
+        model: "gpt-not-real"
+      }
+    });
+    expect(response.statusCode).toBeGreaterThanOrEqual(400);
     await app.close();
   });
 

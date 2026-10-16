@@ -204,6 +204,7 @@ export interface InterviewVideoSettingsRecord {
   thinkSeconds: number;
   answerSeconds: number;
   promptsJson: string;
+  ratingModel: string;
   updatedAt: string;
 }
 

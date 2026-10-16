@@ -565,6 +565,7 @@ model InterviewVideoSettings {
   thinkSeconds  Int      @default(30)
   answerSeconds Int      @default(90)
   promptsJson   String   @default("[]")
+  ratingModel   String   @default("gpt-6-astra")
   updatedAt     DateTime @updatedAt
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

@@ -839,6 +839,7 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       thinkSeconds: settings.thinkSeconds,
       answerSeconds: settings.answerSeconds,
       promptsJson: JSON.stringify(settings.prompts),
+      ratingModel: settings.ratingModel,
       updatedAt: nowIso()
     };
     this.videoSettings.set(userId, row);

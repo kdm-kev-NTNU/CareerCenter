@@ -19,6 +19,8 @@ export interface RateStarAnswerOptions {
   log?: RateStarAnswerLog;
   /** Extra retries after the first attempt (default 1). */
   maxRetries?: number;
+  /** Optional per-call model override (falls back to env default). */
+  model?: string;
 }
 
 function isAbortError(error: unknown): boolean {
@@ -52,7 +54,8 @@ export async function rateStarAnswer(
             { role: "system", content: buildFinishRubricPrompt() },
             { role: "user", content }
           ],
-          signal: options.signal
+          signal: options.signal,
+          model: options.model
         },
         llmRubricOutputSchema
       );

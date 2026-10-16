@@ -900,12 +900,14 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
         userId,
         thinkSeconds: settings.thinkSeconds,
         answerSeconds: settings.answerSeconds,
-        promptsJson: JSON.stringify(settings.prompts)
+        promptsJson: JSON.stringify(settings.prompts),
+        ratingModel: settings.ratingModel
       },
       update: {
         thinkSeconds: settings.thinkSeconds,
         answerSeconds: settings.answerSeconds,
-        promptsJson: JSON.stringify(settings.prompts)
+        promptsJson: JSON.stringify(settings.prompts),
+        ratingModel: settings.ratingModel
       }
     });
     return this.mapVideoSettings(row);
@@ -1291,6 +1293,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
     thinkSeconds: number;
     answerSeconds: number;
     promptsJson: string;
+    ratingModel: string;
     updatedAt: Date;
   }): InterviewVideoSettingsRecord {
     return {
@@ -1298,6 +1301,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       thinkSeconds: row.thinkSeconds,
       answerSeconds: row.answerSeconds,
       promptsJson: row.promptsJson || JSON.stringify(defaultVideoSimulatorSettings.prompts),
+      ratingModel: row.ratingModel || defaultVideoSimulatorSettings.ratingModel,
       updatedAt: row.updatedAt.toISOString()
     };
   }

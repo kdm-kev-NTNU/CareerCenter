@@ -1075,7 +1075,8 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
     }
 
     const rated = await rateStarAnswer(deps.llmClient, buildRubricUserContent(prompt, transcript), {
-      log: request.log
+      log: request.log,
+      model: parsed.model
     });
     if (!rated.ok) {
       return {
@@ -1104,7 +1105,7 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
     const rated = await rateStarAnswer(
       deps.llmClient,
       buildRubricUserContent(body.prompt, body.transcript),
-      { log: request.log }
+      { log: request.log, model: body.model }
     );
     if (!rated.ok) {
       return {
