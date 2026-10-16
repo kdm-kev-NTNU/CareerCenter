@@ -20,6 +20,7 @@ vi.mock("../../api/interviewPrep.js", () => ({
     plan: vi.fn(),
     getStatus: vi.fn(),
     createSession: vi.fn(),
+    sessions: vi.fn(),
     sessionMessages: vi.fn(),
     createVoiceSession: vi.fn()
   }
@@ -113,6 +114,7 @@ describe("InterviewSimulatorView plan picker", () => {
     api.plan.mockImplementation(async (id) => ({ plan: plans.find((p) => p.id === id)!, rankedCases: [] }));
     api.getStatus.mockResolvedValue({ aiConfigured: true });
     api.sessionMessages.mockResolvedValue([]);
+    api.sessions.mockResolvedValue([]);
     api.createVoiceSession.mockResolvedValue({
       mock: true,
       model: "gpt-realtime",
@@ -189,5 +191,63 @@ describe("InterviewSimulatorView plan picker", () => {
     );
     expect(api.createSession.mock.calls[0]?.[0]).not.toHaveProperty("practice");
     expect(api.createVoiceSession).toHaveBeenCalledWith("s1");
+  });
+
+  it("shows a card per plan section and starts the session for the chosen one", async () => {
+    api.createSession.mockResolvedValue({ id: "s1" } as Awaited<ReturnType<typeof api.createSession>>);
+    const { wrapper } = await mountView("/interview/simulator?planId=a");
+
+    expect(api.sessions).toHaveBeenCalledWith({ prepPlanId: "a" });
+    const cards = wrapper.findAll("[data-test='plan-sections'] .section-card");
+    expect(cards.map((card) => card.find(".section-card__label").text())).toEqual(["Hele intervjuet", "Atferd (STAR)"]);
+    expect(wrapper.get("[data-test='section-card-full']").attributes("aria-pressed")).toBe("true");
+
+    await wrapper.get("[data-test='section-card-behavioral']").trigger("click");
+    expect(wrapper.get("[data-test='start-recording']").text()).toBe("Start: Atferd (STAR)");
+
+    await wrapper.get("[data-test='start-recording']").trigger("click");
+    await flushPromises();
+
+    expect(api.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prepPlanId: "a",
+        planSection: "behavioral",
+        title: "Øving: Bedrift a – Atferd (STAR)"
+      })
+    );
+  });
+
+  it("marks sections that have a finished session with the latest score", async () => {
+    api.sessions.mockResolvedValue([
+      {
+        id: "old",
+        mode: "behavioral_mock",
+        title: "",
+        prepPlanId: "a",
+        planSection: "behavioral",
+        finishedAt: "2026-10-03T10:00:00.000Z",
+        feedback: { scores: {} as never, sum: 9, improvement: "" },
+        createdAt: "2026-10-03T09:00:00.000Z",
+        updatedAt: "2026-10-03T10:00:00.000Z"
+      },
+      {
+        id: "new",
+        mode: "behavioral_mock",
+        title: "",
+        prepPlanId: "a",
+        planSection: "behavioral",
+        finishedAt: "2026-10-04T10:00:00.000Z",
+        feedback: { scores: {} as never, sum: 14, improvement: "" },
+        createdAt: "2026-10-04T09:00:00.000Z",
+        updatedAt: "2026-10-04T10:00:00.000Z"
+      }
+    ]);
+    const { wrapper } = await mountView("/interview/simulator?planId=a");
+
+    const card = wrapper.get("[data-test='section-card-behavioral']");
+    expect(card.classes()).toContain("section-card--done");
+    expect(card.text()).toContain("1 spørsmål · sum 14");
+    expect(wrapper.get("[data-test='plan-sections']").text()).toContain("1 av 1 seksjoner øvd");
+    expect(wrapper.get("[data-test='section-card-full']").classes()).not.toContain("section-card--done");
   });
 });

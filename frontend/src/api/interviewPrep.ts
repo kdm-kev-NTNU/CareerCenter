@@ -16,6 +16,7 @@ import type {
   InterviewVideoRunDto,
   InterviewVideoSettingsDto,
   InterviewMode,
+  PlanSectionKey,
   PrepFormat,
   QuestionAudience,
   QuestionCategory,
@@ -238,12 +239,18 @@ export const interviewPrepApi = {
   essentialsDraft: (mode: InterviewMode) =>
     request<EssentialsDraftDto>(`/api/interview/simulator/settings/${mode}/essentials-draft`, { method: "POST" }),
 
-  sessions: (mode?: InterviewMode) =>
-    request<InterviewSessionDto[]>(mode ? `/api/interview/sessions?mode=${mode}` : "/api/interview/sessions"),
+  sessions: (filter: { mode?: InterviewMode; prepPlanId?: string } = {}) => {
+    const params = new URLSearchParams();
+    if (filter.mode) params.set("mode", filter.mode);
+    if (filter.prepPlanId) params.set("prepPlanId", filter.prepPlanId);
+    const query = params.toString();
+    return request<InterviewSessionDto[]>(`/api/interview/sessions${query ? `?${query}` : ""}`);
+  },
   createSession: (payload: {
     mode: InterviewMode;
     title?: string;
     prepPlanId?: string;
+    planSection?: PlanSectionKey;
     caseEntryId?: string;
   }) =>
     request<InterviewSessionDto>("/api/interview/sessions", { method: "POST", body: JSON.stringify(payload) }),

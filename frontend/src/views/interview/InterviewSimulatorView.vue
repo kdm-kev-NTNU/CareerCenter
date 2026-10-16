@@ -6,9 +6,10 @@ import type {
   InterviewPrepPlanDto,
   InterviewSessionDto,
   InterviewSimulatorSettingsDto,
+  PlanSectionKey,
   VoiceSessionDto
 } from "@careercenter/shared";
-import { canStartSimulators, interviewModes } from "@careercenter/shared";
+import { buildPlanSections, canStartSimulators, interviewModes, planSectionLabels } from "@careercenter/shared";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { interviewPrepApi } from "../../api/interviewPrep.js";
@@ -33,6 +34,9 @@ const cases = ref<InterviewCasePublicDto[]>([]);
 const caseEntryId = ref("");
 const prepPlan = ref<InterviewPrepPlanDto | null>(null);
 const savedPlans = ref<InterviewPrepPlanDto[]>([]);
+/** null practises the whole interview; a key practises one section of the plan. */
+const selectedSection = ref<PlanSectionKey | null>(null);
+const planSessions = ref<InterviewSessionDto[]>([]);
 const {
   stream: voiceStream,
   acquire: acquireVoiceStream,
@@ -94,6 +98,45 @@ const planLabel = computed(() => {
   return `Plan: ${prepPlan.value.companyName} (${count} spørsmål)`;
 });
 
+const planSections = computed(() => (prepPlan.value ? buildPlanSections(prepPlan.value.questions) : []));
+/** Latest finished session per section; "full" is the whole interview. */
+const sectionResults = computed(() => {
+  const latest = new Map<PlanSectionKey | "full", InterviewSessionDto>();
+  for (const item of planSessions.value) {
+    if (!item.finishedAt) continue;
+    const key = item.planSection ?? "full";
+    const current = latest.get(key);
+    if (!current || item.finishedAt > (current.finishedAt ?? "")) latest.set(key, item);
+  }
+  return latest;
+});
+const practisedSectionCount = computed(
+  () => planSections.value.filter((item) => sectionResults.value.has(item.key)).length
+);
+const startLabel = computed(() => {
+  if (voiceLive.value) return "Opptak pågår";
+  return selectedSection.value ? `Start: ${planSectionLabels[selectedSection.value]}` : "Start opptak";
+});
+
+function sectionMeta(key: PlanSectionKey | "full", fallback: string): string {
+  const sum = sectionResults.value.get(key)?.feedback?.sum;
+  return sum === undefined ? fallback : `${fallback} · sum ${sum}`;
+}
+
+function selectSection(key: PlanSectionKey | null) {
+  if (voiceLive.value || loading.value) return;
+  selectedSection.value = key;
+}
+
+async function loadPlanSessions(planId: string) {
+  try {
+    planSessions.value = await interviewPrepApi.sessions({ prepPlanId: planId });
+  } catch {
+    // Section progress is a hint; the simulator still works without it.
+    planSessions.value = [];
+  }
+}
+
 async function loadSettings() {
   settings.value = await interviewPrepApi.simulatorSettings(mode.value);
   if (mode.value === "case_oral") {
@@ -121,10 +164,13 @@ async function loadSavedPlans() {
 }
 
 async function loadPlan() {
+  selectedSection.value = null;
+  planSessions.value = [];
   if (!routePlanId.value) {
     prepPlan.value = null;
     return;
   }
+  void loadPlanSessions(routePlanId.value);
   try {
     const detail = await interviewPrepApi.plan(routePlanId.value);
     prepPlan.value = detail.plan;
@@ -210,10 +256,13 @@ async function startSession() {
   releaseVoiceStream();
   try {
     await saveSettings();
+    const sectionKey = prepPlan.value ? (selectedSection.value ?? undefined) : undefined;
+    const sectionSuffix = sectionKey ? ` – ${planSectionLabels[sectionKey]}` : "";
     session.value = await interviewPrepApi.createSession({
       mode: mode.value,
-      title: prepPlan.value ? `Øving: ${prepPlan.value.companyName}` : `${mode.value} sim`,
+      title: prepPlan.value ? `Øving: ${prepPlan.value.companyName}${sectionSuffix}` : `${mode.value} sim`,
       prepPlanId: routePlanId.value,
+      planSection: sectionKey,
       caseEntryId: mode.value === "case_oral" && caseEntryId.value ? caseEntryId.value : undefined
     });
     messages.value = (await interviewPrepApi.sessionMessages(session.value.id)).filter((m) => m.role !== "system");
@@ -250,7 +299,11 @@ async function finishSession() {
   voiceLive.value = false;
   releaseVoiceStream();
   try {
-    session.value = await interviewPrepApi.finishSession(session.value.id);
+    const finished = await interviewPrepApi.finishSession(session.value.id);
+    session.value = finished;
+    if (finished.prepPlanId && finished.prepPlanId === routePlanId.value) {
+      planSessions.value = [finished, ...planSessions.value.filter((item) => item.id !== finished.id)];
+    }
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Kunne ikke avslutte.";
   } finally {
@@ -298,6 +351,50 @@ function printEssentials() {
         <template v-if="routePlanId"> · </template>
         <RouterLink :to="{ name: 'interview-plans' }">Se alle planer</RouterLink>
       </p>
+      <div v-if="planSections.length" class="stack-tight" data-test="plan-sections">
+        <p class="field-hint">
+          Øv hele intervjuet, eller én seksjon om gangen.
+          {{ practisedSectionCount }} av {{ planSections.length }} seksjoner øvd.
+        </p>
+        <ul class="section-grid plain-list">
+          <li>
+            <button
+              type="button"
+              class="section-card section-card--full"
+              :class="{
+                'section-card--selected': selectedSection === null,
+                'section-card--done': sectionResults.has('full')
+              }"
+              :aria-pressed="selectedSection === null"
+              :disabled="voiceLive || loading"
+              data-test="section-card-full"
+              @click="selectSection(null)"
+            >
+              <span v-if="sectionResults.has('full')" class="section-card__mark" aria-hidden="true">✓</span>
+              <span class="section-card__label">Hele intervjuet</span>
+              <span class="section-card__meta">{{ sectionMeta("full", "Alle seksjoner") }}</span>
+            </button>
+          </li>
+          <li v-for="item in planSections" :key="item.key">
+            <button
+              type="button"
+              class="section-card"
+              :class="{
+                'section-card--selected': selectedSection === item.key,
+                'section-card--done': sectionResults.has(item.key)
+              }"
+              :aria-pressed="selectedSection === item.key"
+              :disabled="voiceLive || loading"
+              :data-test="`section-card-${item.key}`"
+              @click="selectSection(item.key)"
+            >
+              <span v-if="sectionResults.has(item.key)" class="section-card__mark" aria-hidden="true">✓</span>
+              <span class="section-card__label">{{ item.title }}</span>
+              <span class="section-card__meta">{{ sectionMeta(item.key, `${item.questionCount} spørsmål`) }}</span>
+            </button>
+          </li>
+        </ul>
+      </div>
       <label>
         Modus
         <select v-model="mode" @change="loadSettings">
@@ -335,7 +432,7 @@ function printEssentials() {
           :disabled="voiceLive"
           @click="startSession()"
         >
-          {{ voiceLive ? "Opptak pågår" : "Start opptak" }}
+          {{ startLabel }}
         </AppButton>
       </div>
       <p v-if="voiceLive" class="field-hint" data-test="voice-live-hint">Live stemme er tilkoblet — intervjueren starter.</p>
@@ -368,3 +465,66 @@ function printEssentials() {
     <StateView v-if="error" state="error" :message="error" />
   </section>
 </template>
+
+<style scoped>
+.section-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  gap: 0.75rem;
+}
+
+.section-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  width: 100%;
+  min-height: 6.5rem;
+  padding: 0.75rem;
+  border-radius: 8px;
+  border: 2px solid #2a5078;
+  background: linear-gradient(145deg, #1a3a5c, #0f2740);
+  color: #e8f0fa;
+  cursor: pointer;
+  font: inherit;
+  text-align: center;
+}
+
+.section-card--full {
+  background: linear-gradient(145deg, #23476e, #14304d);
+}
+
+.section-card--done {
+  border-color: var(--border);
+  background: var(--surface-strong);
+  color: inherit;
+}
+
+.section-card--selected {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.section-card:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.section-card__mark {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.55rem;
+  font-size: 1.1rem;
+}
+
+.section-card__label {
+  font-weight: 600;
+}
+
+.section-card__meta {
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+</style>

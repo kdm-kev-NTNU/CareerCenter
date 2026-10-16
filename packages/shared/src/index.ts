@@ -529,6 +529,12 @@ export {
 } from "./videoSimState.js";
 export type { VideoSimState, VideoSimEvent, PracticeMode } from "./videoSimState.js";
 export {
+  transitionSimulatorCall,
+  phaseShowsCallStage,
+  simulatorCallStates
+} from "./simulatorCallState.js";
+export type { SimulatorCallState, SimulatorCallEvent } from "./simulatorCallState.js";
+export {
   videoSimulatorSettingsSchema,
   defaultVideoSimulatorSettings
 } from "./videoSimulatorSettings.js";
@@ -552,6 +558,15 @@ export type {
 } from "./interviewMeccaDtos.js";
 export { rankCasesForCompany } from "./rankCases.js";
 export type { CaseRankProfile, RankableCase } from "./rankCases.js";
+export {
+  ASK_INTERVIEWER_SECTION,
+  buildPlanSections,
+  isPlanSectionKey,
+  planSectionKeys,
+  planSectionLabels,
+  questionInPlanSection
+} from "./planSections.js";
+export type { PlanSection, PlanSectionKey, PlanSectionQuestion } from "./planSections.js";
 import type { InternshipStatusOption } from "./internshipStatus.js";
 
 export interface InternshipLocationOption {

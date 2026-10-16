@@ -918,6 +918,86 @@ describe("interview prep routes", () => {
     await app.close();
   });
 
+  it("starts a session for one plan section and lists the plan's sessions", async () => {
+    const main = new MemoryRepository();
+    const interviewRepo = new InterviewPrepMemoryRepository();
+    const app = await buildServer({
+      repository: main,
+      authDisabled: true,
+      llmClient: new FakeLlmClient({ configured: true }),
+      interviewPrepRepository: interviewRepo
+    });
+    await app.ready();
+    await app.inject({ method: "GET", url: "/api/interview/status" });
+    const user = await main.findUserByName("__test__");
+
+    const plan = await interviewRepo.createPrepPlan(user!.id, {
+      companyName: "DNB",
+      roleTitle: "Analyst",
+      format: "interview",
+      researchModel: "gpt-6-astra"
+    });
+    await interviewRepo.setPrepPlanCurated(user!.id, plan.id, {
+      questions: [
+        { text: "Why DNB?", category: "motivation", target: "interview", source: "custom" },
+        { text: "Tell me about a conflict.", category: "behavioral", target: "interview", source: "custom" },
+        {
+          text: "Hva overrasket deg mest?",
+          category: "personal",
+          audience: "ask_interviewer_personal",
+          target: "interview",
+          source: "custom"
+        }
+      ],
+      tasks: []
+    });
+    await interviewRepo.updatePrepPlanStatus(user!.id, plan.id, "ready");
+
+    async function systemPromptFor(planSection: string) {
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/interview/sessions",
+        payload: { mode: "behavioral_mock", prepPlanId: plan.id, planSection }
+      });
+      expect(created.statusCode).toBe(201);
+      const session = created.json() as { id: string; planSection?: string };
+      expect(session.planSection).toBe(planSection);
+      const messages = await app.inject({ method: "GET", url: `/api/interview/sessions/${session.id}/messages` });
+      return (messages.json() as Array<{ role: string; content: string }>).find((m) => m.role === "system")!.content;
+    }
+
+    const motivation = await systemPromptFor("motivation");
+    expect(motivation).toContain("seksjonen «Motivasjon»");
+    expect(motivation).toContain("Why DNB?");
+    expect(motivation).not.toContain("Tell me about a conflict.");
+    expect(motivation).not.toContain("Avslutning: spørsmålsrunde");
+
+    const closing = await systemPromptFor("ask_interviewer");
+    expect(closing).toContain("bare på spørsmålsrunden");
+    expect(closing).toContain("Hva overrasket deg mest?");
+    expect(closing).not.toContain("Why DNB?");
+
+    const empty = await app.inject({
+      method: "POST",
+      url: "/api/interview/sessions",
+      payload: { mode: "behavioral_mock", prepPlanId: plan.id, planSection: "technical" }
+    });
+    expect(empty.statusCode).toBe(400);
+
+    const noPlan = await app.inject({
+      method: "POST",
+      url: "/api/interview/sessions",
+      payload: { mode: "behavioral_mock", planSection: "motivation" }
+    });
+    expect(noPlan.statusCode).toBe(400);
+
+    await app.inject({ method: "POST", url: "/api/interview/sessions", payload: { mode: "behavioral_mock" } });
+    const listed = await app.inject({ method: "GET", url: `/api/interview/sessions?prepPlanId=${plan.id}` });
+    const sessions = listed.json() as Array<{ planSection?: string }>;
+    expect(sessions.map((s) => s.planSection).sort()).toEqual(["ask_interviewer", "motivation"]);
+    await app.close();
+  });
+
   it("edits plan questions and rejects incomplete reorder", async () => {
     const main = new MemoryRepository();
     const repo = new InterviewPrepMemoryRepository();

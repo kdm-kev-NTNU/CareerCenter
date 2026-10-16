@@ -521,6 +521,7 @@ model InterviewSession {
   mode         String
   title        String              @default("")
   prepPlanId   String?
+  planSection  String?
   caseEntryId  String?
   feedbackJson String?
   finishedAt   DateTime?

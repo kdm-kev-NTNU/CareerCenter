@@ -1,4 +1,5 @@
-import type { CaseStyle, InterviewMode, QuestionAudience } from "@careercenter/shared";
+import type { CaseStyle, InterviewMode, PlanSectionKey, QuestionAudience } from "@careercenter/shared";
+import { ASK_INTERVIEWER_SECTION, questionInPlanSection } from "@careercenter/shared";
 import {
   buildClosingRoundRules,
   candidateProfile,
@@ -31,6 +32,8 @@ export interface PlanPracticeInput {
   roleTitle?: string;
   companyProfileSummary?: string;
   questions: PlanPracticeQuestion[];
+  /** Limit the script to one section of the plan. */
+  section?: PlanSectionKey;
 }
 
 /**
@@ -40,6 +43,7 @@ export interface PlanPracticeInput {
 export function buildPlanPracticeScript(plan: PlanPracticeInput): string {
   const included = [...plan.questions]
     .filter((q) => q.included !== false && (q.audience ?? "candidate") === "candidate")
+    .filter((q) => !plan.section || questionInPlanSection(q, plan.section))
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
 
   if (included.length === 0) {
@@ -76,17 +80,22 @@ export function buildSimulatorSystemPrompt(input: {
   planScript?: string;
   /** Questions the candidate has prepared for the closing round. */
   questionsToAsk?: Array<{ text: string; audience: QuestionAudience }>;
+  /** Practise only this section of the plan instead of the whole interview. */
+  planSection?: { key: PlanSectionKey; title: string };
 }): string {
   const essentials = input.essentialsSheet.trim();
   const isTutor = input.mode === "concept_tutor";
-  const closingRound = buildClosingRoundRules(input.mode);
+  const planSection = input.planSection;
+  const askOnly = planSection?.key === ASK_INTERVIEWER_SECTION;
+  // A category section stops before the closing round; the closing round is its own section.
+  const closingRound = planSection && !askOnly ? [] : buildClosingRoundRules(input.mode);
 
   const lines: string[] = [
     "Du er intervjuer og øvingspartner i en muntlig intervjuøkt. Les hele instruksen før du svarer. Ikke oppsummer den.",
     `Modus: ${input.mode}.`,
     input.companyName ? `Selskap: ${input.companyName}.` : "",
     `Tone: ${input.tone}. Språk: ${input.language}.`,
-    sessionStartInstruction,
+    planSection ? buildSectionStartInstruction(planSection.title, askOnly) : sessionStartInstruction,
     section("Kandidatprofil", candidateProfile),
     section("Leveringsregler (noter, coach ikke underveis)", deliveryRules)
   ];
@@ -147,6 +156,22 @@ export function buildSimulatorSystemPrompt(input: {
 
   if (essentials) lines.push(`Kandidatens essentials-ark (bakgrunn, ikke les det opp):\n${essentials}`);
   return lines.filter(Boolean).join("\n\n");
+}
+
+function buildSectionStartInstruction(title: string, askOnly: boolean): string {
+  if (askOnly) {
+    return [
+      "Dette er en del-økt: kandidaten øver bare på spørsmålsrunden på slutten av intervjuet.",
+      "Du er en ekte person i intervjuerrollen. Presentér deg med én setning (fornavn og rolle), si at dere er kommet til slutten av intervjuet, og spør hva kandidaten lurer på.",
+      "Ikke still intervjuspørsmål. Ikke spør om modus, selskap eller lengde — det er allerede valgt i appen."
+    ].join(" ");
+  }
+  return [
+    `Dette er en del-økt: kandidaten øver bare på seksjonen «${title}» fra planen.`,
+    "Du er en ekte person i intervjuerrollen. Presentér deg med én setning (fornavn og rolle) og still det første spørsmålet i listen med en gang. Ikke be om en egen presentasjon og ikke still spørsmål utenfor listen, bortsett fra korte oppfølgingsspørsmål.",
+    "Når alle spørsmålene i listen er stilt og fulgt opp: si kort at seksjonen er ferdig og at Avslutt-knappen gir vurdering. Ikke gå videre til en spørsmålsrunde.",
+    "Ikke spør om modus, selskap eller lengde — det er allerede valgt i appen."
+  ].join(" ");
 }
 
 export function buildFinishRubricPrompt(): string {

@@ -1,4 +1,5 @@
 import {
+  planSectionKeys,
   caseSourceKinds,
   caseStyles,
   DEFAULT_SIMULATOR_LANGUAGE,
@@ -64,6 +65,8 @@ export const createSessionSchema = z.object({
   mode: z.enum(interviewModes),
   title: z.string().default(""),
   prepPlanId: z.string().optional(),
+  /** Practise one section of the plan; requires prepPlanId. */
+  planSection: z.enum(planSectionKeys).optional(),
   caseEntryId: z.string().optional()
 });
 

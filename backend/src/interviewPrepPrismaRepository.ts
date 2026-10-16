@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import type {
   AbilityTestKind,
+  PlanSectionKey,
   BankQuestionOrigin,
   BankQuestionStatus,
   CaseApprovalStatus,
@@ -21,6 +22,7 @@ import type {
   VideoSimulatorSettings
 } from "@careercenter/shared";
 import {
+  isPlanSectionKey,
   canDeleteImportJob,
   canDeletePrepPlan,
   categoryForAudience,
@@ -802,6 +804,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       mode: InterviewMode;
       title: string;
       prepPlanId?: string;
+      planSection?: PlanSectionKey;
       caseEntryId?: string;
       systemPrompt: string;
     }
@@ -812,6 +815,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
         mode: input.mode,
         title: input.title,
         prepPlanId: input.prepPlanId,
+        planSection: input.planSection,
         caseEntryId: input.caseEntryId,
         messages: {
           create: { role: "system", content: input.systemPrompt }
@@ -1198,6 +1202,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
     mode: string;
     title: string;
     prepPlanId: string | null;
+    planSection: string | null;
     caseEntryId: string | null;
     feedbackJson: string | null;
     finishedAt: Date | null;
@@ -1210,6 +1215,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       mode: row.mode as InterviewMode,
       title: row.title,
       prepPlanId: row.prepPlanId ?? undefined,
+      planSection: row.planSection && isPlanSectionKey(row.planSection) ? row.planSection : undefined,
       caseEntryId: row.caseEntryId ?? undefined,
       feedback: row.feedbackJson ? (JSON.parse(row.feedbackJson) as InterviewFeedbackRubric) : undefined,
       finishedAt: row.finishedAt?.toISOString(),
