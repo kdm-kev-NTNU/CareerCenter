@@ -84,8 +84,6 @@ function makePlan(id: string, status: PrepPlanStatus): InterviewPrepPlanDto {
         notes: ""
       }
     ],
-    tasks: [],
-    recommendedCases: [],
     repeatedStoryIds: [],
     createdAt: "2026-10-01T10:00:00.000Z",
     updatedAt: "2026-10-02T10:00:00.000Z"
@@ -125,7 +123,7 @@ describe("InterviewSimulatorView plan picker", () => {
     }));
     api.cases.mockResolvedValue([]);
     api.plans.mockResolvedValue(plans);
-    api.plan.mockImplementation(async (id) => ({ plan: plans.find((p) => p.id === id)!, rankedCases: [] }));
+    api.plan.mockImplementation(async (id) => ({ plan: plans.find((p) => p.id === id)! }));
     api.getStatus.mockResolvedValue({ aiConfigured: true });
     api.sessionMessages.mockResolvedValue([]);
     api.sessions.mockResolvedValue([]);

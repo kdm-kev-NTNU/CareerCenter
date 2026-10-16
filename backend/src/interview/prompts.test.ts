@@ -2,6 +2,7 @@ import { interviewModes, starRubricCriteria, starRubricCriterionLabels } from "@
 import { describe, expect, it } from "vitest";
 import { rubricCriterionDescriptions } from "./interviewerPlaybook.js";
 import {
+  buildCompanyReportSystemPrompt,
   buildFinishRubricPrompt,
   buildPlanPracticeScript,
   buildSimulatorSystemPrompt,
@@ -16,13 +17,19 @@ const baseInput = {
 };
 
 describe("buildSimulatorSystemPrompt", () => {
-  it("includes profile and delivery rules for every mode", () => {
-    for (const mode of interviewModes) {
-      const prompt = buildSimulatorSystemPrompt({ ...baseInput, mode });
-      expect(prompt).toContain("Kevin Dennis Mazali");
-      expect(prompt).toContain("Klarhet slår dybde");
-      expect(prompt).toContain("Avslutt-knappen");
-    }
+  it("uses uploaded background when provided and does not hardcode a CV", () => {
+    const withBg = buildSimulatorSystemPrompt({
+      ...baseInput,
+      mode: "behavioral_mock",
+      candidateBackground: "CV:\nKevin Dennis Mazali\nMaster i datateknologi"
+    });
+    expect(withBg).toContain("Kevin Dennis Mazali");
+    expect(withBg).toContain("Klarhet slår dybde");
+    expect(withBg).toContain("Avslutt-knappen");
+    expect(withBg).toContain("Ikke åpne en egen runde der kandidaten stiller spørsmål tilbake");
+
+    const withoutBg = buildSimulatorSystemPrompt({ ...baseInput, mode: "behavioral_mock" });
+    expect(withoutBg).toContain("Kandidatprofil: ikke lastet opp");
   });
 
   it("includes weakness pressure rules for behavioral_mock", () => {
@@ -57,37 +64,24 @@ describe("buildSimulatorSystemPrompt", () => {
     expect(prompt).toContain("Bygg RAG");
     expect(prompt).toContain("Hold alltid tilbake informasjon");
   });
-});
 
-describe("closing round", () => {
-  it("asks for the candidate's questions in behavioral and case modes, not in tutor mode", () => {
-    for (const mode of ["behavioral_mock", "case_oral"] as const) {
+  it("ends full sessions without a candidate Q&A round", () => {
+    for (const mode of interviewModes) {
       const prompt = buildSimulatorSystemPrompt({ ...baseInput, mode });
-      expect(prompt).toContain("Avslutning: spørsmålsrunde");
-      expect(prompt).toContain("Har du noen spørsmål til oss?");
-      expect(prompt).toContain("end_interview");
+      expect(prompt).not.toContain("Avslutning: spørsmålsrunde");
+      expect(prompt).not.toContain("SKJULT: Spørsmål kandidaten har forberedt");
     }
+    const behavioral = buildSimulatorSystemPrompt({ ...baseInput, mode: "behavioral_mock" });
+    expect(behavioral).toContain("Avslutning");
+    expect(behavioral).toContain("Ikke åpne en egen runde der kandidaten stiller spørsmål tilbake");
+    expect(behavioral).toContain("Avslutt-knappen");
     const tutor = buildSimulatorSystemPrompt({ ...baseInput, mode: "concept_tutor" });
-    expect(tutor).not.toContain("Har du noen spørsmål til oss?");
-  });
-
-  it("lists prepared questions in a hidden section", () => {
-    const prompt = buildSimulatorSystemPrompt({
-      ...baseInput,
-      mode: "behavioral_mock",
-      questionsToAsk: [
-        { text: "Hvordan jobber dere med KI?", audience: "ask_interviewer_company" },
-        { text: "Hva overrasket deg mest?", audience: "ask_interviewer_personal" }
-      ]
-    });
-    expect(prompt).toContain("SKJULT: Spørsmål kandidaten har forberedt");
-    expect(prompt).toContain("Om selskapet:\n- Hvordan jobber dere med KI?");
-    expect(prompt).toContain("Til deg personlig:\n- Hva overrasket deg mest?");
+    expect(tutor).not.toContain("Ikke åpne en egen runde");
   });
 });
 
 describe("plan section sessions", () => {
-  it("a question section starts on the first question and skips the closing round", () => {
+  it("a question section starts on the first question and skips the session end block", () => {
     const prompt = buildSimulatorSystemPrompt({
       ...baseInput,
       mode: "behavioral_mock",
@@ -95,19 +89,7 @@ describe("plan section sessions", () => {
     });
     expect(prompt).toContain("bare på seksjonen «Atferd (STAR)»");
     expect(prompt).not.toContain("be så kandidaten presentere seg");
-    expect(prompt).not.toContain("Avslutning: spørsmålsrunde");
-  });
-
-  it("the closing-round section keeps the closing round rules", () => {
-    const prompt = buildSimulatorSystemPrompt({
-      ...baseInput,
-      mode: "behavioral_mock",
-      planSection: { key: "ask_interviewer", title: "Spørsmålsrunde (jeg spør)" },
-      questionsToAsk: [{ text: "Hva overrasket deg mest?", audience: "ask_interviewer_personal" }]
-    });
-    expect(prompt).toContain("bare på spørsmålsrunden");
-    expect(prompt).toContain("Avslutning: spørsmålsrunde");
-    expect(prompt).toContain("Hva overrasket deg mest?");
+    expect(prompt).not.toContain("\nAvslutning\n");
   });
 });
 
@@ -117,6 +99,17 @@ describe("essentials in the simulator prompt", () => {
     expect(custom).toContain("Kandidatens essentials-ark (bakgrunn, ikke les det opp):\nMine stikkord");
     const empty = buildSimulatorSystemPrompt({ ...baseInput, mode: "behavioral_mock", essentialsSheet: "  " });
     expect(empty).not.toContain("essentials-ark");
+  });
+});
+
+describe("buildCompanyReportSystemPrompt", () => {
+  it("requires answer drafts grounded in candidate background", () => {
+    const prompt = buildCompanyReportSystemPrompt("DNB", "Analyst");
+    expect(prompt).toContain("Fortell om deg selv");
+    expect(prompt).toContain("Hvorfor oss?");
+    expect(prompt).toContain("suggestedAnswer");
+    expect(prompt).toContain("[din personlige grunn for KI]");
+    expect(prompt).toContain("questionsToAsk");
   });
 });
 
@@ -149,12 +142,6 @@ describe("buildPlanPracticeScript", () => {
     });
     expect(script).toContain("1. [motivation] Why DNB?");
     expect(script).not.toContain("Hva er neste steg?");
-    expect(
-      buildPlanPracticeScript({
-        companyName: "DNB",
-        questions: [{ text: "Hva er neste steg?", category: "company", audience: "ask_interviewer_company" }]
-      })
-    ).toBe("");
   });
 
   it("keeps only the chosen section", () => {
@@ -195,7 +182,7 @@ describe("buildFinishRubricPrompt", () => {
     }
     expect(prompt).toContain("Ett forbedringspunkt");
     expect(prompt).toContain("Under 24 av 32");
-    expect(prompt).toContain("Spørsmålsrunden til slutt");
+    expect(prompt).not.toContain("Spørsmålsrunden til slutt");
   });
 });
 
