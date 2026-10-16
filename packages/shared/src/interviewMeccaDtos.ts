@@ -26,6 +26,8 @@ export interface InterviewVideoRunDto {
   blobKey?: string;
   transcript: string;
   prompt: string;
+  companyName: string;
+  roleDescription: string;
   feedback?: InterviewSessionFeedbackDto;
   settings: VideoSimulatorSettings;
   createdAt: string;
