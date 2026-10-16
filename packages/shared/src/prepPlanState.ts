@@ -24,7 +24,6 @@ export const prepPlanPipelineSteps = [
   "clarifications",
   "awaiting_answers",
   "curating_questions",
-  "curating_cases",
   "ready"
 ] as const;
 export type PrepPlanPipelineStep = (typeof prepPlanPipelineSteps)[number];
@@ -54,7 +53,7 @@ export function prepPlanResumePoint(
   step: PrepPlanPipelineStep,
   clarificationRound: number
 ): PrepPlanResumePoint {
-  if (step === "curating_questions" || step === "curating_cases" || step === "ready") {
+  if (step === "curating_questions" || step === "ready") {
     return { kind: "curation" };
   }
   if (step === "awaiting_answers") {
@@ -109,8 +108,7 @@ export function isPrepPlanPipelineActive(step: PrepPlanPipelineStep, status: Pre
     step === "company_profile" ||
     step === "company_report" ||
     step === "clarifications" ||
-    step === "curating_questions" ||
-    step === "curating_cases"
+    step === "curating_questions"
   );
 }
 

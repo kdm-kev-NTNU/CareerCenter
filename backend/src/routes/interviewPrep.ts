@@ -1,5 +1,4 @@
 import {
-  ASK_INTERVIEWER_SECTION,
   planSectionLabels,
   answerStats,
   canDeleteImportJob,
@@ -18,17 +17,22 @@ import {
   videoQuestionRequestSchema,
   videoSimulatorSettingsSchema
 } from "@careercenter/shared";
-import type { QuestionAudience } from "@careercenter/shared";
 import { createReadStream } from "node:fs";
 import type { FastifyInstance } from "fastify";
 import { nanoid } from "nanoid";
+import { z } from "zod";
 import type { LlmClient, LlmTranscribeOptions } from "../ai/llmClient.js";
 import { env } from "../config/env.js";
 import { toFullCaseDto, toPublicCaseDto } from "../interview/caseDto.js";
+import {
+  formatCandidateBackgroundForPrompt,
+  sanitizeBackgroundDocumentText
+} from "../interview/candidateBackgroundText.js";
 import { parseCaseSections } from "../interview/caseSections.js";
 import { sha256Content } from "../interview/contentHash.js";
 import {
   toBankQuestionDto,
+  toCandidateBackgroundDto,
   toImportJobDto,
   toKnowledgeDocDto,
   toMessageDto,
@@ -519,7 +523,60 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
       (request.params as { id: string }).id
     );
     if (!plan) return reply.code(404).send({ message: "Plan ikke funnet." });
-    return { plan: toPrepPlanDto(plan), rankedCases: plan.recommendedCases };
+    return { plan: toPrepPlanDto(plan) };
+  });
+
+  const backgroundNotesSchema = z.object({
+    notes: z.string().max(8_000).default("")
+  });
+
+  app.get("/api/interview/background", async (request) => {
+    const row = await deps.interviewPrepRepository.getCandidateBackground(request.user.id);
+    return toCandidateBackgroundDto(row);
+  });
+
+  app.put("/api/interview/background", async (request) => {
+    const body = backgroundNotesSchema.parse(request.body);
+    const row = await deps.interviewPrepRepository.upsertCandidateBackgroundNotes(request.user.id, {
+      notes: body.notes
+    });
+    return toCandidateBackgroundDto(row);
+  });
+
+  app.post("/api/interview/background/cv", async (request, reply) => {
+    const file = await request.file();
+    if (!file) return reply.code(400).send({ message: "Mangler PDF-fil." });
+    const filename = file.filename || "cv.pdf";
+    if (!filename.toLowerCase().endsWith(".pdf")) {
+      return reply.code(400).send({ message: "Kun PDF støttes." });
+    }
+    const imported = await importDocumentText(filename, await file.toBuffer());
+    const text = sanitizeBackgroundDocumentText(imported.text, { kind: "cv" });
+    if (!text) return reply.code(400).send({ message: "Kunne ikke lese tekst fra PDF-en." });
+    const row = await deps.interviewPrepRepository.upsertCandidateBackgroundDocument(request.user.id, {
+      kind: "cv",
+      text,
+      fileName: filename
+    });
+    return toCandidateBackgroundDto(row);
+  });
+
+  app.post("/api/interview/background/transcript", async (request, reply) => {
+    const file = await request.file();
+    if (!file) return reply.code(400).send({ message: "Mangler PDF-fil." });
+    const filename = file.filename || "karakterutskrift.pdf";
+    if (!filename.toLowerCase().endsWith(".pdf")) {
+      return reply.code(400).send({ message: "Kun PDF støttes." });
+    }
+    const imported = await importDocumentText(filename, await file.toBuffer());
+    const text = sanitizeBackgroundDocumentText(imported.text, { kind: "transcript" });
+    if (!text) return reply.code(400).send({ message: "Kunne ikke lese tekst fra PDF-en." });
+    const row = await deps.interviewPrepRepository.upsertCandidateBackgroundDocument(request.user.id, {
+      kind: "transcript",
+      text,
+      fileName: filename
+    });
+    return toCandidateBackgroundDto(row);
   });
 
   app.delete("/api/interview/plans/:id", async (request, reply) => {
@@ -601,6 +658,11 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
       if (bankQuestion.status === "discarded") {
         return reply.code(400).send({ message: "Bankspørsmålet er forkastet." });
       }
+      if (bankQuestion.audience !== "candidate") {
+        return reply.code(400).send({
+          message: "Planen kan bare inneholde spørsmål intervjueren stiller kandidaten."
+        });
+      }
       const updated = await deps.interviewPrepRepository.replacePlanQuestion(
         request.user.id,
         planId,
@@ -662,8 +724,16 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
 
   app.post("/api/interview/plans/:id/questions", async (request, reply) => {
     const body = addPlanQuestionSchema.parse(request.body);
+    if (body.audience !== undefined && body.audience !== "candidate") {
+      return reply.code(400).send({
+        message: "Planen kan bare inneholde spørsmål intervjueren stiller kandidaten."
+      });
+    }
     const planId = (request.params as { id: string }).id;
-    const updated = await deps.interviewPrepRepository.addPlanQuestion(request.user.id, planId, body);
+    const updated = await deps.interviewPrepRepository.addPlanQuestion(request.user.id, planId, {
+      ...body,
+      audience: "candidate"
+    });
     if (!updated) return reply.code(404).send({ message: "Plan ikke funnet." });
     return reply.code(201).send(toPrepPlanDto(updated));
   });
@@ -812,11 +882,15 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
       };
     // Only a sheet the user wrote goes into the prompt; the default is a cheat sheet with placeholders.
     const essentials = resolveEssentialsSheet(body.mode, settings.essentialsSheet);
+    const backgroundRow = await deps.interviewPrepRepository.getCandidateBackground(request.user.id);
+    const candidateBackground = formatCandidateBackgroundForPrompt({
+      cvText: backgroundRow?.cvText ?? "",
+      transcriptText: backgroundRow?.transcriptText ?? "",
+      notes: backgroundRow?.notes ?? ""
+    });
 
     let planScript: string | undefined;
-    let questionsToAsk: Array<{ text: string; audience: QuestionAudience }> = [];
     let planCompanyName = settings.companyName;
-    const askOnly = body.planSection === ASK_INTERVIEWER_SECTION;
     if (body.prepPlanId) {
       const plan = await deps.interviewPrepRepository.getPrepPlan(request.user.id, body.prepPlanId);
       if (!plan) return reply.code(404).send({ message: "Plan ikke funnet." });
@@ -831,21 +905,14 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
       } catch {
         profileSummary = "";
       }
-      // The closing-round section has no interviewer script, only the candidate's prepared questions.
-      planScript = askOnly
-        ? undefined
-        : buildPlanPracticeScript({
-            companyName: plan.companyName,
-            roleTitle: plan.roleTitle,
-            companyProfileSummary: profileSummary,
-            questions: plan.questions,
-            section: body.planSection
-          });
-      questionsToAsk = plan.questions
-        .filter((q) => q.included && q.audience !== "candidate")
-        .sort((a, b) => a.sortOrder - b.sortOrder)
-        .map((q) => ({ text: q.text, audience: q.audience }));
-      if (askOnly ? questionsToAsk.length === 0 : !planScript?.trim()) {
+      planScript = buildPlanPracticeScript({
+        companyName: plan.companyName,
+        roleTitle: plan.roleTitle,
+        companyProfileSummary: profileSummary,
+        questions: plan.questions,
+        section: body.planSection
+      });
+      if (!planScript?.trim()) {
         return reply.code(400).send({
           message: body.planSection
             ? "Seksjonen har ingen spørsmål merket for øving."
@@ -874,12 +941,12 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
       tone: settings.tone,
       language: settings.language,
       essentialsSheet: essentials.isDefault ? "" : essentials.text,
+      candidateBackground,
       caseStyle,
       casePrompt,
       interviewerInfo,
       solution,
       planScript,
-      questionsToAsk,
       planSection: body.planSection
         ? { key: body.planSection, title: planSectionLabels[body.planSection] }
         : undefined
@@ -893,6 +960,18 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
       systemPrompt
     });
     return reply.code(201).send(toSessionDto(session));
+  });
+
+  app.delete("/api/interview/sessions/:id", async (request, reply) => {
+    const sessionId = (request.params as { id: string }).id;
+    const session = await deps.interviewPrepRepository.getSession(request.user.id, sessionId);
+    if (!session) return reply.code(404).send({ message: "Sesjon ikke funnet." });
+    if (!session.finishedAt) {
+      return reply.code(409).send({ message: "En pågående økt kan ikke slettes. Avslutt den først." });
+    }
+    const deleted = await deps.interviewPrepRepository.deleteFinishedSession(request.user.id, sessionId);
+    if (!deleted) return reply.code(404).send({ message: "Sesjon ikke funnet." });
+    return reply.code(204).send();
   });
 
   app.get("/api/interview/sessions/:id/messages", async (request, reply) => {

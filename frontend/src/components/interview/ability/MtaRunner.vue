@@ -5,6 +5,7 @@ import type {
   MtaSessionReport
 } from "@careercenter/shared";
 import {
+  MTA_AIRCRAFT_HALF_HEIGHT,
   MTA_GATE_HALF_HEIGHT,
   MTA_GATE_STEP,
   MTA_RUNWAY_X,
@@ -13,7 +14,6 @@ import {
   answerEquation,
   answerLetters,
   buildMtaReport,
-  clickAircraft,
   currentAircraft,
   currentEquation,
   currentLetterChain,
@@ -22,11 +22,13 @@ import {
   isMtaExpired,
   moveGate,
   mtaRemainingMs,
-  resolveMissedAircraft,
+  resolveArrivedAircraft,
   setGateCenter
 } from "@careercenter/shared";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import AppButton from "../../ui/AppButton.vue";
+
+const GATE_FLASH_MS = 600;
 
 const props = defineProps<{
   session: MtaSession;
@@ -49,6 +51,8 @@ const activeAircraft = computed(() => currentAircraft(props.session, nowMs.value
 
 const offsetMs = computed(() => Math.max(0, nowMs.value - props.session.startedAt));
 
+const aircraftHeightPct = MTA_AIRCRAFT_HALF_HEIGHT * 2 * 100;
+
 const aircraftStyle = computed(() => {
   const ac = activeAircraft.value;
   if (!ac) return null;
@@ -56,8 +60,17 @@ const aircraftStyle = computed(() => {
   if (progress == null) return null;
   return {
     left: `${aircraftX(progress) * 100}%`,
-    top: `${ac.height * 100}%`
+    top: `${ac.height * 100}%`,
+    height: `${aircraftHeightPct}%`
   };
+});
+
+const gateFlash = computed<"landed" | "miss" | null>(() => {
+  const judgments = props.session.aircraftJudgments;
+  if (judgments.length === 0) return null;
+  const last = judgments[judgments.length - 1]!;
+  if (offsetMs.value - last.atOffsetMs > GATE_FLASH_MS) return null;
+  return last.outcome;
 });
 
 const gateStyle = computed(() => ({
@@ -85,9 +98,9 @@ function startTicker() {
     nowMs.value = Date.now();
     if (props.session.finished || finishing) return;
 
-    const withMisses = resolveMissedAircraft(props.session, nowMs.value);
-    if (withMisses.aircraftJudgments.length !== props.session.aircraftJudgments.length) {
-      emit("update", withMisses);
+    const resolved = resolveArrivedAircraft(props.session, nowMs.value);
+    if (resolved.aircraftJudgments.length !== props.session.aircraftJudgments.length) {
+      emit("update", resolved);
     }
 
     if (isMtaExpired(props.session, nowMs.value)) {
@@ -166,15 +179,6 @@ function onRunwayClick(event: MouseEvent) {
   emit("update", result.session);
 }
 
-function onAircraftClick() {
-  const result = clickAircraft(props.session, Date.now());
-  if (!result.ok) {
-    if (result.reason === "expired") endSession();
-    return;
-  }
-  emit("update", result.session);
-}
-
 function onEquation(answer: MtaBinaryAnswer) {
   const result = answerEquation(props.session, answer, Date.now());
   if (!result.ok) {
@@ -203,8 +207,8 @@ function onLetters(answer: MtaBinaryAnswer) {
       </div>
     </div>
     <p class="field-hint">
-      Flytt det grå feltet med ↑ / ↓ eller knapper (eller klikk på stolpen). Klikk flyet når det
-      treffer feltet.
+      Flytt det grå feltet med ↑ / ↓ eller knapper (eller klikk på stolpen) slik at flyet treffer
+      feltet når det når stolpen.
     </p>
 
     <div class="mta-layout">
@@ -220,23 +224,28 @@ function onLetters(answer: MtaBinaryAnswer) {
           tabindex="0"
           @click="onRunwayClick"
         >
-          <div class="mta-gate" :style="gateStyle" />
+          <div
+            class="mta-gate"
+            :class="{
+              'mta-gate--landed': gateFlash === 'landed',
+              'mta-gate--miss': gateFlash === 'miss'
+            }"
+            :style="gateStyle"
+          />
         </div>
-        <button
+        <div
           v-if="aircraftStyle"
-          type="button"
           class="mta-aircraft"
           :style="aircraftStyle"
-          aria-label="Land aircraft"
-          @click.stop="onAircraftClick"
+          aria-hidden="true"
         >
-          <svg viewBox="0 0 64 24" width="56" height="22" aria-hidden="true">
+          <svg viewBox="0 0 64 24" aria-hidden="true">
             <path
               fill="currentColor"
               d="M2 14 L22 14 L28 4 L34 4 L30 14 L46 14 L52 8 L58 8 L54 14 L62 14 L62 16 L54 16 L58 20 L52 20 L46 16 L30 16 L34 22 L28 22 L22 16 L2 16 Z"
             />
           </svg>
-        </button>
+        </div>
         <div class="mta-gate-controls">
           <button type="button" class="mta-gate-btn" aria-label="Flytt feltet opp" @click="nudgeGate(-MTA_GATE_STEP)">
             ↑
@@ -343,6 +352,13 @@ function onLetters(answer: MtaBinaryAnswer) {
   border-bottom: 2px dashed #fff;
   box-sizing: border-box;
   pointer-events: none;
+  transition: background 0.15s ease;
+}
+.mta-gate--landed {
+  background: #86efac;
+}
+.mta-gate--miss {
+  background: #fca5a5;
 }
 .mta-gate-controls {
   position: absolute;
@@ -368,16 +384,18 @@ function onLetters(answer: MtaBinaryAnswer) {
 .mta-aircraft {
   position: absolute;
   transform: translate(-50%, -50%);
-  border: none;
   background: transparent;
   color: #111;
-  cursor: pointer;
-  padding: 4px;
+  padding: 0;
   line-height: 0;
   z-index: 1;
+  aspect-ratio: 64 / 24;
+  pointer-events: none;
 }
-.mta-aircraft:hover {
-  color: #ea580c;
+.mta-aircraft svg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 .mta-side {
   gap: 12px;

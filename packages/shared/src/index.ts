@@ -412,8 +412,6 @@ export type {
   InterviewBankQuestionSummaryDto,
   InterviewPrepClarificationDto,
   InterviewPrepQuestionDto,
-  InterviewPrepPlanCaseDto,
-  InterviewPrepTaskDto,
   InterviewPrepPlanDto,
   InterviewImportJobDto,
   InterviewSimulatorSettingsDto,
@@ -449,9 +447,12 @@ export type { CompanyProfile } from "./companyProfile.js";
 export { emptyCompanyReport } from "./companyReport.js";
 export type {
   CompanyReport,
-  CompanyReportKeyFacts,
-  CompanyReportRequirement
+  CompanyQuestionPrep,
+  QuestionToAsk
 } from "./companyReport.js";
+
+export { emptyCandidateBackground, hasCandidateCv } from "./candidateBackground.js";
+export type { CandidateBackgroundDto } from "./candidateBackground.js";
 
 export {
   abilityTestKinds,
@@ -558,9 +559,9 @@ export {
 export {
   MTA_AIRCRAFT_INTERVAL_MS,
   MTA_FLIGHT_DURATION_MS,
-  MTA_LANDING_WINDOW_START,
   MTA_RUNWAY_X,
   MTA_GATE_HALF_HEIGHT,
+  MTA_AIRCRAFT_HALF_HEIGHT,
   MTA_GATE_STEP,
   MTA_GATE_CENTER_MIN,
   MTA_GATE_CENTER_MAX,
@@ -572,8 +573,7 @@ export {
   clampGateCenter,
   aircraftProgress,
   aircraftX,
-  isInLandingWindow,
-  isLandingHit,
+  aircraftOverlapsGate,
   isMtaExpired,
   mtaRemainingMs,
   startMtaSession,
@@ -582,8 +582,7 @@ export {
   currentAircraft,
   currentEquation,
   currentLetterChain,
-  resolveMissedAircraft,
-  clickAircraft,
+  resolveArrivedAircraft,
   answerEquation,
   answerLetters,
   finishMtaSession,
@@ -675,7 +674,6 @@ export type {
 export { rankCasesForCompany } from "./rankCases.js";
 export type { CaseRankProfile, RankableCase } from "./rankCases.js";
 export {
-  ASK_INTERVIEWER_SECTION,
   buildPlanSections,
   isPlanSectionKey,
   planSectionKeys,

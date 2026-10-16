@@ -1,8 +1,7 @@
 import type { CaseStyle, InterviewMode, PlanSectionKey, QuestionAudience } from "@careercenter/shared";
-import { ASK_INTERVIEWER_SECTION, questionInPlanSection } from "@careercenter/shared";
+import { questionInPlanSection } from "@careercenter/shared";
 import {
-  buildClosingRoundRules,
-  candidateProfile,
+  buildSessionEndRules,
   deliveryRules,
   formatRubricCriteriaForPrompt,
   hardRules,
@@ -73,30 +72,31 @@ export function buildSimulatorSystemPrompt(input: {
   tone: string;
   language: string;
   essentialsSheet: string;
+  /** Formatted CV / transcript / notes for follow-up hooks. */
+  candidateBackground?: string;
   caseStyle?: CaseStyle;
   casePrompt?: string;
   interviewerInfo?: string;
   solution?: string;
   planScript?: string;
-  /** Questions the candidate has prepared for the closing round. */
-  questionsToAsk?: Array<{ text: string; audience: QuestionAudience }>;
   /** Practise only this section of the plan instead of the whole interview. */
   planSection?: { key: PlanSectionKey; title: string };
 }): string {
   const essentials = input.essentialsSheet.trim();
   const isTutor = input.mode === "concept_tutor";
   const planSection = input.planSection;
-  const askOnly = planSection?.key === ASK_INTERVIEWER_SECTION;
-  // A category section stops before the closing round; the closing round is its own section.
-  const closingRound = planSection && !askOnly ? [] : buildClosingRoundRules(input.mode);
+  const sessionEnd = planSection ? [] : buildSessionEndRules(input.mode);
+  const background = input.candidateBackground?.trim() ?? "";
 
   const lines: string[] = [
     "Du er intervjuer og øvingspartner i en muntlig intervjuøkt. Les hele instruksen før du svarer. Ikke oppsummer den.",
     `Modus: ${input.mode}.`,
     input.companyName ? `Selskap: ${input.companyName}.` : "",
     `Tone: ${input.tone}. Språk: ${input.language}.`,
-    planSection ? buildSectionStartInstruction(planSection.title, askOnly) : sessionStartInstruction,
-    section("Kandidatprofil", candidateProfile),
+    planSection ? buildSectionStartInstruction(planSection.title) : sessionStartInstruction,
+    background
+      ? `Kandidatprofil (kroker for oppfølging; ikke anta detaljer utover dette — spør i stedet):\n${background}`
+      : "Kandidatprofil: ikke lastet opp. Ikke finn på fakta om kandidaten; spør når du trenger konkrete detaljer.",
     section("Leveringsregler (noter, coach ikke underveis)", deliveryRules)
   ];
 
@@ -136,40 +136,19 @@ export function buildSimulatorSystemPrompt(input: {
     }
   }
 
-  if (closingRound.length > 0) {
-    lines.push(section("Avslutning: spørsmålsrunde", closingRound));
-    const prepared = input.questionsToAsk ?? [];
-    if (prepared.length > 0) {
-      const company = prepared.filter((q) => q.audience === "ask_interviewer_company");
-      const personal = prepared.filter((q) => q.audience === "ask_interviewer_personal");
-      lines.push(
-        [
-          "SKJULT: Spørsmål kandidaten har forberedt til spørsmålsrunden. Ikke nevn dem og ikke still dem selv. Kjenn dem igjen når kandidaten spør, og svar i rollen.",
-          company.length > 0 ? `Om selskapet:\n${company.map((q) => `- ${q.text}`).join("\n")}` : "",
-          personal.length > 0 ? `Til deg personlig:\n${personal.map((q) => `- ${q.text}`).join("\n")}` : ""
-        ]
-          .filter(Boolean)
-          .join("\n")
-      );
-    }
+  if (sessionEnd.length > 0) {
+    lines.push(section("Avslutning", sessionEnd));
   }
 
   if (essentials) lines.push(`Kandidatens essentials-ark (bakgrunn, ikke les det opp):\n${essentials}`);
   return lines.filter(Boolean).join("\n\n");
 }
 
-function buildSectionStartInstruction(title: string, askOnly: boolean): string {
-  if (askOnly) {
-    return [
-      "Dette er en del-økt: kandidaten øver bare på spørsmålsrunden på slutten av intervjuet.",
-      "Du er en ekte person i intervjuerrollen. Presentér deg med én setning (fornavn og rolle), si at dere er kommet til slutten av intervjuet, og spør hva kandidaten lurer på.",
-      "Ikke still intervjuspørsmål. Ikke spør om modus, selskap eller lengde — det er allerede valgt i appen."
-    ].join(" ");
-  }
+function buildSectionStartInstruction(title: string): string {
   return [
     `Dette er en del-økt: kandidaten øver bare på seksjonen «${title}» fra planen.`,
     "Du er en ekte person i intervjuerrollen. Presentér deg med én setning (fornavn og rolle) og still det første spørsmålet i listen med en gang. Ikke be om en egen presentasjon og ikke still spørsmål utenfor listen, bortsett fra korte oppfølgingsspørsmål.",
-    "Når alle spørsmålene i listen er stilt og fulgt opp: si kort at seksjonen er ferdig og at Avslutt-knappen gir vurdering. Ikke gå videre til en spørsmålsrunde.",
+    "Når alle spørsmålene i listen er stilt og fulgt opp: si kort at seksjonen er ferdig og at Avslutt-knappen gir vurdering.",
     "Ikke spør om modus, selskap eller lengde — det er allerede valgt i appen."
   ].join(" ");
 }
@@ -182,8 +161,7 @@ export function buildFinishRubricPrompt(): string {
     "Kriterier:",
     formatRubricCriteriaForPrompt(),
     "Slik tolker du scoren:",
-    ...scoreInterpretation.map((line) => `- ${line}`),
-    "Spørsmålsrunden til slutt (kandidatens spørsmål til intervjueren) inngår ikke i STAR-scorene. Nevn den i forbedringspunktet bare hvis kandidaten ikke stilte noen spørsmål, eller ingen personlige, og det er det viktigste å endre."
+    ...scoreInterpretation.map((line) => `- ${line}`)
   ].join("\n");
 }
 
@@ -199,15 +177,16 @@ export function buildResearchSystemPrompt(companyName: string, roleTitle: string
 export function buildCompanyReportSystemPrompt(companyName: string, roleTitle: string): string {
   return [
     buildResearchSystemPrompt(companyName, roleTitle),
-    "Du lager en kort bedriftsrapport på norsk (1–2 sider) som kandidaten kan lese før intervju.",
-    "HOVEDMÅL: finn nisje-info om bedriften som kandidaten kan bruke til å svare på bedriftsspesifikke spørsmål (category company), ikke generisk bedriftsblabla.",
-    "nicheInsights: konkrete, differensierende fakta (produkter, deals, strategiskift, kultur-signaler, konkurranseposisjon) som gjør «Hvorfor oss?»-svar unike.",
-    "companyQuestionPrep: 3–4 typiske bedriftsspesifikke spørsmål med answerAngle (hvordan svare) og nicheHooks (hvilke nisje-fakta som skal inn i svaret).",
-    "Alt innhold skal være relevant for stillingsannonsen og rollen.",
+    "Du lager en kort bedriftsrapport på norsk som kandidaten kan lese før intervju.",
+    "HOVEDMÅL: lag bedriftsrelevante spørsmål kandidaten bør kunne svare på, med konkrete svarforslag basert på kandidatens bakgrunn (CV, karakterutskrift, tillegg) og research om selskapet.",
+    "mustKnow: maks 4 korte fakta som svarene bygger på (produkter, satsinger, kultur-signaler, rollekontekst).",
+    "questionPrep: 6–8 spørsmål. MÅ alltid inkludere: «Fortell om deg selv», «Hvorfor oss?», «Hvorfor denne rollen?», «Hvorfor er du egnet / hva tilfører du?», «Hva vet du om oss?». Legg til 2–3 spørsmål avledet av annonsekrav og bedriftens satsinger.",
+    "For hvert questionPrep-element: whyTheyAsk (hva intervjueren tester), suggestedAnswer (utkast i jeg-form, 60–120 ord), backgroundUsed (CV-/karakterfakta brukt), companyHooks (bedriftsfakta brukt).",
+    "REGLER FOR SVARFORSLAG: bruk KUN fakta fra kandidatbakgrunnen og research. Ikke finn på tall, historier eller motivasjon. Mangler personlig motivasjon i bakgrunnen, skriv en tydelig plassholder som [din personlige grunn for KI] i stedet for å dikte.",
+    "questionsToAsk: 4–6 lure spørsmål kandidaten kan stille dem, med why (hvorfor spørsmålet er lurt). Ta gjerne utgangspunkt i bankforslagene når de finnes, og tilpass til selskapet.",
     "Ikke finn på tall, fakta eller sitater. Hvis noe er usikkert, utelat det.",
     "Hold tekstene korte: overhold feltgrensene i JSON-skjemaet.",
-    "Oppgi kilder fra nettfunnene når du bruker dem.",
-    "jobAdRequirements skal koble annonsekrav til hvordan kandidaten kan vise fit i intervju."
+    "Oppgi kilder fra nettfunnene når du bruker dem."
   ].join("\n");
 }
 
@@ -228,9 +207,8 @@ export function buildCurationSystemPrompt(companyName: string, roleTitle: string
     "Velg 30–50 spørsmål ved å returnere selectedRefs med disse aliasene (f.eks. \"Q1\", \"Q7\"). Ikke bruk lange id-er.",
     "Prioriter bedriftsspesifikke (category company) spørsmål når banken har dem.",
     "Lag generatedQuestions KUN for temaer banken ikke dekker, og oppgi gapReason for hvert.",
-    "reverseQuestions: velg 3–5 spørsmål kandidaten kan stille om selskapet (ask_interviewer_company) og 2–3 personlige spørsmål til intervjueren (ask_interviewer_personal). Ta utgangspunkt i listen merket R1, R2, … og bedriftsrapportens forslag. Tilpass dem til selskapet og rollen med konkrete detaljer fra research (en satsing, et produkt, en nyhet), men ikke finn på fakta. Sett bankRef til aliaset (f.eks. \"R2\") når spørsmålet bygger på et bankspørsmål, ellers null. Disse skal aldri med i selectedRefs eller generatedQuestions.",
-    "tasks: lag konkrete øvingsoppgaver som bruker nisje-info fra bedriftsrapporten til å øve svar på bedriftsspesifikke spørsmål (f.eks. skriv 60-sekunders «Hvorfor oss?» med 2 nicheHooks).",
-    "Ikke finn opp aliaser som ikke finnes i listene."
+    "Ikke finn opp aliaser som ikke finnes i listene.",
+    "Returner KUN selectedRefs og generatedQuestions — ikke oppgaver, case eller spørsmål kandidaten stiller."
   ].join("\n");
 }
 

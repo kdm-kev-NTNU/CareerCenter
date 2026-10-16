@@ -68,7 +68,6 @@ describe("transitionPrepPlan", () => {
     expect(prepPlanResumePoint("clarifications", 2)).toEqual({ kind: "awaiting_answers" });
     expect(prepPlanResumePoint("awaiting_answers", 1)).toEqual({ kind: "awaiting_answers" });
     expect(prepPlanResumePoint("curating_questions", 1)).toEqual({ kind: "curation" });
-    expect(prepPlanResumePoint("curating_cases", 1)).toEqual({ kind: "curation" });
     expect(prepPlanResumePoint("created", 0)).toEqual({ kind: "research", from: "created" });
   });
 

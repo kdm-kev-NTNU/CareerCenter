@@ -86,46 +86,33 @@ export const companyProfileSchema = z.object({
 
 const reportText = (max: number) => z.string().max(max);
 const reportBullet = (max = 200) => z.string().min(1).max(max);
-// Required strings: optional fields make the parent `.default({})` unrepresentable in strict Structured Outputs.
-const reportFact = (max: number) => reportText(max).default("");
 
 export const companyReportSchema = z.object({
   headline: reportText(120).default(""),
-  keyFacts: z
-    .object({
-      industry: reportFact(80),
-      headquarters: reportFact(80),
-      size: reportFact(80),
-      ownership: reportFact(80)
-    })
-    .default({}),
-  aboutCompany: reportText(320).default(""),
-  businessAreas: z.array(reportBullet(140)).max(4).default([]),
-  strategyAndNews: z.array(reportBullet(160)).max(3).default([]),
-  cultureAndValues: z.array(reportBullet(140)).max(3).default([]),
-  roleInContext: reportText(240).default(""),
-  jobAdRequirements: z
-    .array(
-      z.object({
-        requirement: reportBullet(120),
-        howToShowFit: reportBullet(140)
-      })
-    )
-    .max(4)
-    .default([]),
-  nicheInsights: z.array(reportBullet(160)).max(4).default([]),
-  companyQuestionPrep: z
+  mustKnow: z.array(reportBullet(160)).max(4).default([]),
+  questionPrep: z
     .array(
       z.object({
         question: reportBullet(140),
-        answerAngle: reportBullet(200),
-        nicheHooks: z.array(reportBullet(90)).max(2).default([])
+        whyTheyAsk: reportBullet(160),
+        suggestedAnswer: reportText(900).default(""),
+        backgroundUsed: z.array(reportBullet(120)).max(4).default([]),
+        companyHooks: z.array(reportBullet(120)).max(3).default([])
       })
     )
-    .max(4)
+    .min(6)
+    .max(8)
     .default([]),
-  interviewAngles: z.array(reportBullet(140)).max(3).default([]),
-  questionsToAsk: z.array(reportBullet(140)).max(3).default([]),
+  questionsToAsk: z
+    .array(
+      z.object({
+        question: reportBullet(140),
+        why: reportBullet(160)
+      })
+    )
+    .min(4)
+    .max(6)
+    .default([]),
   sources: z.array(reportBullet(140)).max(4).default([])
 });
 
@@ -135,8 +122,6 @@ export const clarificationListSchema = z.object({
     .min(1)
     .max(MAX_CLARIFICATIONS_PER_ROUND)
 });
-
-const reverseAudiences = ["ask_interviewer_company", "ask_interviewer_personal"] as const;
 
 /**
  * Model output for bank curation. Domain min/max are enforced in resolveCuratedSelection,
@@ -152,26 +137,6 @@ export const curatedBankSelectionSchema = z.object({
         category: z.enum(questionCategories),
         target: z.enum(questionTargets).default("interview"),
         gapReason: z.string().min(1)
-      })
-    )
-    .default([]),
-  /** Questions the candidate asks the interviewer, tailored to the company. */
-  reverseQuestions: z
-    .array(
-      z.object({
-        text: z.string().min(1),
-        audience: z.enum(reverseAudiences),
-        /** Short alias R1…Rn from the reverse bank list, or null when generated. */
-        bankRef: z.string().nullable().default(null)
-      })
-    )
-    .max(8)
-    .default([]),
-  tasks: z
-    .array(
-      z.object({
-        title: z.string(),
-        description: z.string().default("")
       })
     )
     .default([])
@@ -268,6 +233,7 @@ export const patchPlanQuestionSchema = z.object({
 export const addPlanQuestionSchema = z.object({
   text: z.string().min(1),
   category: z.enum(questionCategories),
+  /** Plan questions are always interviewer → candidate. Non-candidate is rejected in the route. */
   audience: z.enum(questionAudiences).optional(),
   target: z.enum(questionTargets).optional(),
   notes: z.string().optional(),
