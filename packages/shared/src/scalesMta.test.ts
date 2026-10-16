@@ -1,22 +1,22 @@
 import { describe, expect, it } from "vitest";
 import {
+  MTA_AIRCRAFT_HALF_HEIGHT,
   MTA_AIRCRAFT_HEIGHT_MAX,
   MTA_AIRCRAFT_HEIGHT_MIN,
   MTA_AIRCRAFT_INTERVAL_MS,
   MTA_FLIGHT_DURATION_MS,
   MTA_GATE_CENTER_MAX,
   MTA_GATE_CENTER_MIN,
+  MTA_GATE_HALF_HEIGHT,
   MTA_GATE_STEP,
-  MTA_LANDING_WINDOW_START,
+  aircraftOverlapsGate,
   answerEquation,
   answerLetters,
   buildMtaReport,
-  clickAircraft,
   finishMtaSession,
   generateScalesMta,
-  isLandingHit,
   moveGate,
-  resolveMissedAircraft,
+  resolveArrivedAircraft,
   setGateCenter,
   startMtaSession
 } from "./scalesMta.js";
@@ -89,85 +89,153 @@ describe("generateScalesMta", () => {
   });
 });
 
+describe("aircraftOverlapsGate", () => {
+  it("matches interval overlap of aircraft and gate vertical spans", () => {
+    const threshold = MTA_GATE_HALF_HEIGHT + MTA_AIRCRAFT_HALF_HEIGHT;
+    for (let seed = 0; seed < 40; seed++) {
+      const height = 0.1 + (seed / 40) * 0.8;
+      for (let g = 0; g < 20; g++) {
+        const gate = 0.1 + (g / 20) * 0.8;
+        const expected = Math.abs(height - gate) <= threshold;
+        const acTop = height - MTA_AIRCRAFT_HALF_HEIGHT;
+        const acBottom = height + MTA_AIRCRAFT_HALF_HEIGHT;
+        const gateTop = gate - MTA_GATE_HALF_HEIGHT;
+        const gateBottom = gate + MTA_GATE_HALF_HEIGHT;
+        const intervalOverlap = acTop <= gateBottom && gateTop <= acBottom;
+        expect(aircraftOverlapsGate(height, gate)).toBe(expected);
+        expect(aircraftOverlapsGate(height, gate)).toBe(intervalOverlap);
+        expect(aircraftOverlapsGate(height, gate)).toBe(aircraftOverlapsGate(gate, height));
+      }
+    }
+  });
+
+  it("counts edge overlap where centers are outside the gate half-height", () => {
+    const gate = 0.5;
+    // Center just outside the old center-only hitbox, but plane edge still overlaps.
+    const justOutsideCenter = gate + MTA_GATE_HALF_HEIGHT + 0.01;
+    expect(Math.abs(justOutsideCenter - gate)).toBeGreaterThan(MTA_GATE_HALF_HEIGHT);
+    expect(aircraftOverlapsGate(justOutsideCenter, gate)).toBe(true);
+
+    const beyond = gate + MTA_GATE_HALF_HEIGHT + MTA_AIRCRAFT_HALF_HEIGHT + 0.001;
+    expect(aircraftOverlapsGate(beyond, gate)).toBe(false);
+  });
+});
+
 describe("MTA session", () => {
   const t0 = 1_000_000;
 
-  it("lands when the player aligns the gate and clicks in the window", () => {
+  function arrivalTime(acStartOffsetMs: number): number {
+    return t0 + acStartOffsetMs + MTA_FLIGHT_DURATION_MS;
+  }
+
+  it("lands when the gate is aligned at arrival", () => {
     const timeline = generateScalesMta(3, 60_000);
     const ac = timeline.aircraft[0]!;
     let session = startMtaSession(timeline, 1, t0);
-    expect(session.gateCenter).toBe(0.5);
 
     const aligned = setGateCenter(session, ac.height, t0);
     expect(aligned.ok).toBe(true);
     if (!aligned.ok) return;
     session = aligned.session;
-    expect(session.gateCenter).toBeCloseTo(ac.height);
 
-    const hitOffset =
-      ac.startOffsetMs + Math.floor(MTA_FLIGHT_DURATION_MS * ((MTA_LANDING_WINDOW_START + 1) / 2));
-    expect(isLandingHit(session, ac, hitOffset)).toBe(true);
-
-    const result = clickAircraft(session, t0 + hitOffset);
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.session.aircraftJudgments[0]!.outcome).toBe("landed");
+    session = resolveArrivedAircraft(session, arrivalTime(ac.startOffsetMs));
+    expect(session.aircraftJudgments[0]).toMatchObject({
+      aircraftId: ac.id,
+      outcome: "landed",
+      durationMs: MTA_FLIGHT_DURATION_MS
+    });
   });
 
-  it("misses when the gate is not aligned, even in the landing window", () => {
+  it("misses when the gate is far from the aircraft at arrival", () => {
     const timeline = generateScalesMta(5, 60_000);
     const ac = timeline.aircraft[0]!;
     let session = startMtaSession(timeline, 1, t0);
-    // Put gate far from the aircraft
-    const far =
-      ac.height > 0.5 ? MTA_GATE_CENTER_MIN : MTA_GATE_CENTER_MAX;
+    const far = ac.height > 0.5 ? MTA_GATE_CENTER_MIN : MTA_GATE_CENTER_MAX;
     const moved = setGateCenter(session, far, t0);
     expect(moved.ok).toBe(true);
     if (!moved.ok) return;
     session = moved.session;
 
-    const hitOffset =
-      ac.startOffsetMs + Math.floor(MTA_FLIGHT_DURATION_MS * ((MTA_LANDING_WINDOW_START + 1) / 2));
-    expect(isLandingHit(session, ac, hitOffset)).toBe(false);
-
-    const result = clickAircraft(session, t0 + hitOffset);
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.session.aircraftJudgments[0]!.outcome).toBe("miss");
+    session = resolveArrivedAircraft(session, arrivalTime(ac.startOffsetMs));
+    expect(session.aircraftJudgments[0]).toMatchObject({
+      aircraftId: ac.id,
+      outcome: "miss"
+    });
   });
 
-  it("misses when clicked outside the landing window", () => {
-    const timeline = generateScalesMta(5, 60_000);
+  it("lands on edge overlap that the old center-only check would miss", () => {
+    const timeline = generateScalesMta(7, 60_000);
     const ac = timeline.aircraft[0]!;
     let session = startMtaSession(timeline, 1, t0);
+
+    // Place gate so aircraft center is outside GATE_HALF but still overlaps.
+    const gate =
+      ac.height + MTA_GATE_HALF_HEIGHT + MTA_AIRCRAFT_HALF_HEIGHT * 0.5;
+    const clamped = Math.min(MTA_GATE_CENTER_MAX, Math.max(MTA_GATE_CENTER_MIN, gate));
+    // Skip if clamping would change the intended geometry.
+    if (Math.abs(clamped - gate) > 1e-9) {
+      const altGate =
+        ac.height - MTA_GATE_HALF_HEIGHT - MTA_AIRCRAFT_HALF_HEIGHT * 0.5;
+      const altClamped = Math.min(
+        MTA_GATE_CENTER_MAX,
+        Math.max(MTA_GATE_CENTER_MIN, altGate)
+      );
+      expect(Math.abs(altClamped - altGate)).toBeLessThan(1e-9);
+      const moved = setGateCenter(session, altClamped, t0);
+      expect(moved.ok).toBe(true);
+      if (!moved.ok) return;
+      session = moved.session;
+      expect(Math.abs(ac.height - session.gateCenter)).toBeGreaterThan(MTA_GATE_HALF_HEIGHT);
+      expect(aircraftOverlapsGate(ac.height, session.gateCenter)).toBe(true);
+    } else {
+      const moved = setGateCenter(session, clamped, t0);
+      expect(moved.ok).toBe(true);
+      if (!moved.ok) return;
+      session = moved.session;
+      expect(Math.abs(ac.height - session.gateCenter)).toBeGreaterThan(MTA_GATE_HALF_HEIGHT);
+      expect(aircraftOverlapsGate(ac.height, session.gateCenter)).toBe(true);
+    }
+
+    session = resolveArrivedAircraft(session, arrivalTime(ac.startOffsetMs));
+    expect(session.aircraftJudgments[0]!.outcome).toBe("landed");
+  });
+
+  it("resolves arrived aircraft before moving the gate (determinism)", () => {
+    const timeline = generateScalesMta(9, 60_000);
+    const ac = timeline.aircraft[0]!;
+    let session = startMtaSession(timeline, 1, t0);
+
     const aligned = setGateCenter(session, ac.height, t0);
+    expect(aligned.ok).toBe(true);
     if (!aligned.ok) return;
     session = aligned.session;
 
-    const early = t0 + ac.startOffsetMs + Math.floor(MTA_FLIGHT_DURATION_MS * 0.2);
-    const result = clickAircraft(session, early);
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.session.aircraftJudgments[0]!.outcome).toBe("miss");
+    // After arrival, try to move the gate away — judgment must use the old gate.
+    const afterArrival = arrivalTime(ac.startOffsetMs) + 10;
+    const far = ac.height > 0.5 ? MTA_GATE_CENTER_MIN : MTA_GATE_CENTER_MAX;
+    const moved = setGateCenter(session, far, afterArrival);
+    expect(moved.ok).toBe(true);
+    if (!moved.ok) return;
+    expect(moved.session.aircraftJudgments[0]).toMatchObject({
+      aircraftId: ac.id,
+      outcome: "landed"
+    });
+    expect(moved.session.gateCenter).toBeCloseTo(far);
   });
 
-  it("auto-misses aircraft that pass the runway without a click", () => {
+  it("does not judge aircraft still in flight", () => {
     const timeline = generateScalesMta(8, 60_000);
     const ac = timeline.aircraft[0]!;
     let session = startMtaSession(timeline, 1, t0);
-    const after = t0 + ac.startOffsetMs + MTA_FLIGHT_DURATION_MS + 1;
-    session = resolveMissedAircraft(session, after);
-    expect(session.aircraftJudgments.some((j) => j.aircraftId === ac.id && j.outcome === "miss")).toBe(
-      true
-    );
+    const midFlight = t0 + ac.startOffsetMs + Math.floor(MTA_FLIGHT_DURATION_MS * 0.5);
+    session = resolveArrivedAircraft(session, midFlight);
+    expect(session.aircraftJudgments).toHaveLength(0);
   });
 
   it("moves the gate only when the player nudges it", () => {
     const timeline = generateScalesMta(1, 10_000);
     let session = startMtaSession(timeline, 1, t0);
     const start = session.gateCenter;
-    // Time passing alone must not move the gate
-    expect(session.gateCenter).toBe(start);
 
     const down = moveGate(session, MTA_GATE_STEP, t0 + 100);
     expect(down.ok).toBe(true);

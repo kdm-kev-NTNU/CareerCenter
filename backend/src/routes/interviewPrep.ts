@@ -893,6 +893,18 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
     return reply.code(201).send(toSessionDto(session));
   });
 
+  app.delete("/api/interview/sessions/:id", async (request, reply) => {
+    const sessionId = (request.params as { id: string }).id;
+    const session = await deps.interviewPrepRepository.getSession(request.user.id, sessionId);
+    if (!session) return reply.code(404).send({ message: "Sesjon ikke funnet." });
+    if (!session.finishedAt) {
+      return reply.code(409).send({ message: "En pågående økt kan ikke slettes. Avslutt den først." });
+    }
+    const deleted = await deps.interviewPrepRepository.deleteFinishedSession(request.user.id, sessionId);
+    if (!deleted) return reply.code(404).send({ message: "Sesjon ikke funnet." });
+    return reply.code(204).send();
+  });
+
   app.get("/api/interview/sessions/:id/messages", async (request, reply) => {
     const messages = await deps.interviewPrepRepository.listSessionMessages(
       request.user.id,

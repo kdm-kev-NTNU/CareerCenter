@@ -514,6 +514,8 @@ export interface InterviewPrepRepository {
     sessionId: string,
     feedback: InterviewFeedbackRubric
   ): Promise<InterviewSessionRecord | null>;
+  /** Deletes a finished session with its messages; false when missing or still running. */
+  deleteFinishedSession(userId: string, sessionId: string): Promise<boolean>;
 
   listAbilityAttempts(userId: string, limit?: number): Promise<InterviewAbilityTestAttemptRecord[]>;
   createAbilityAttempt(userId: string, input: AbilityAttemptInput): Promise<InterviewAbilityTestAttemptRecord>;

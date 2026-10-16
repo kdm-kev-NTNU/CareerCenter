@@ -3,7 +3,6 @@ import type {
   AbilitySession,
   AbilitySessionReport,
   AbilityTestKind,
-  InterviewAbilityTestAttemptDto,
   MtaSession,
   MtaSessionReport,
   PuzzleAbilityTestKind,
@@ -72,9 +71,6 @@ const selectedSwitch = ref<number | null>(null);
 const selectedPair = ref<[number | null, number | null]>([null, null]);
 const selectedClx = ref<number[]>([]);
 
-const history = ref<InterviewAbilityTestAttemptDto[]>([]);
-const loadingHistory = ref(true);
-
 const sourcePdfs = ref<AonSourcePdfListItem[]>([]);
 const loadingSources = ref(false);
 const openingSourceId = ref<string | null>(null);
@@ -121,13 +117,8 @@ async function openSourcePdf(item: AonSourcePdfListItem) {
   }
 }
 
-onMounted(async () => {
-  try {
-    history.value = await interviewPrepApi.abilityAttempts();
-  } finally {
-    loadingHistory.value = false;
-  }
-  await loadSourcePdfs();
+onMounted(() => {
+  void loadSourcePdfs();
 });
 
 watch(showSourcePdfs, (show) => {
@@ -162,21 +153,6 @@ watch(mode, (m) => {
   if (m === "playing" && session.value) startTicker();
   else if (!statementSession.value && !mtaSession.value) stopTicker();
 });
-
-async function persistAttempt(
-  kind: AbilityTestKind,
-  seed: number,
-  correct: boolean,
-  durationMs: number
-) {
-  const attempt = await interviewPrepApi.createAbilityAttempt({
-    kind,
-    seed,
-    correct,
-    durationMs
-  });
-  history.value.unshift(attempt);
-}
 
 function resetSelection() {
   selectedSwitch.value = null;
@@ -237,41 +213,23 @@ function onStatementUpdate(next: StatementSession) {
   statementSession.value = next;
 }
 
-async function onStatementFinish(
+function onStatementFinish(
   built: StatementSessionReport,
   finished: StatementSession
 ) {
   statementSession.value = finished;
   statementReport.value = built;
   mode.value = "report";
-  for (const item of built.items) {
-    if (item.correct == null) continue;
-    await persistAttempt(
-      built.kind,
-      built.seed,
-      item.correct,
-      item.durationMs
-    );
-  }
 }
 
 function onMtaUpdate(next: MtaSession) {
   mtaSession.value = next;
 }
 
-async function onMtaFinish(built: MtaSessionReport, finished: MtaSession) {
+function onMtaFinish(built: MtaSessionReport, finished: MtaSession) {
   mtaSession.value = finished;
   mtaReport.value = built;
   mode.value = "report";
-  for (const j of built.aircraftJudgments) {
-    await persistAttempt(built.kind, built.seed, j.outcome === "landed", j.durationMs);
-  }
-  for (const j of built.equationJudgments) {
-    await persistAttempt(built.kind, built.seed, j.correct, j.durationMs);
-  }
-  for (const j of built.letterJudgments) {
-    await persistAttempt(built.kind, built.seed, j.correct, j.durationMs);
-  }
 }
 
 function goMenu() {
@@ -363,9 +321,6 @@ function submitCurrent() {
     return;
   }
 
-  const answered = result.session.items[session.value.currentIndex]!;
-  void persistAttempt(kind, answered.seed, answered.correct === true, answered.durationMs);
-
   session.value = result.session;
   resetSelection();
 
@@ -373,13 +328,6 @@ function submitCurrent() {
     report.value = buildSessionReport(result.session);
     mode.value = "report";
   }
-}
-
-function accuracyFor(kind: AbilityTestKind) {
-  const rows = history.value.filter((h) => h.kind === kind);
-  if (!rows.length) return null;
-  const ok = rows.filter((h) => h.correct).length;
-  return { pct: Math.round((ok / rows.length) * 100), n: rows.length };
 }
 
 function reportSwitchSelection(item: AbilitySessionReport["items"][number]): {
@@ -452,20 +400,6 @@ const catalogGroups = computed(() => {
     <PageHeader :title="provider.name" :lead="provider.shortDescription">
       <template #meta>
         <RouterLink to="/interview/evnetester" class="field-hint">← Alle aktører</RouterLink>
-        <p v-if="loadingHistory" class="field-hint">Laster historikk …</p>
-        <template v-else>
-          <p
-            v-for="t in provider.tests"
-            :key="t.kind"
-            class="field-hint"
-          >
-            {{ t.title }}:
-            <template v-if="accuracyFor(t.kind)">
-              {{ accuracyFor(t.kind)!.pct }}% ({{ accuracyFor(t.kind)!.n }} forsøk)
-            </template>
-            <template v-else>ingen forsøk</template>
-          </p>
-        </template>
       </template>
     </PageHeader>
 
@@ -482,23 +416,27 @@ const catalogGroups = computed(() => {
         <ul>
           <li v-for="(line, i) in provider.howItWorks" :key="i">{{ line }}</li>
         </ul>
-        <h4>Øvingstips</h4>
-        <ul>
-          <li v-for="(line, i) in provider.tips" :key="i">{{ line }}</li>
-        </ul>
-        <h4>Testtyper hos {{ provider.name }}</h4>
-        <div v-for="group in catalogGroups" :key="group.key" class="catalog-group">
-          <strong>{{ group.label }}</strong>
+        <details class="aon-fold">
+          <summary>Øvingstips</summary>
           <ul>
-            <li v-for="item in group.items" :key="item.name">
-              {{ item.name }}
-              <span class="field-hint">
-                — {{ item.duration }}. {{ item.measures }}
-                <template v-if="item.playableKind"> (kan øves her)</template>
-              </span>
-            </li>
+            <li v-for="(line, i) in provider.tips" :key="i">{{ line }}</li>
           </ul>
-        </div>
+        </details>
+        <details class="aon-fold">
+          <summary>Testtyper hos {{ provider.name }}</summary>
+          <div v-for="group in catalogGroups" :key="group.key" class="catalog-group">
+            <strong>{{ group.label }}</strong>
+            <ul>
+              <li v-for="item in group.items" :key="item.name">
+                {{ item.name }}
+                <span class="field-hint">
+                  — {{ item.duration }}. {{ item.measures }}
+                  <template v-if="item.playableKind"> (kan øves her)</template>
+                </span>
+              </li>
+            </ul>
+          </div>
+        </details>
       </article>
 
       <article v-if="showSourcePdfs" class="panel stack aon-pdf-folder">
@@ -761,6 +699,30 @@ const catalogGroups = computed(() => {
 }
 .aon-guide h4 {
   margin: 0.5rem 0 0;
+}
+.aon-fold {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+.aon-fold summary {
+  cursor: pointer;
+  font-weight: 700;
+  list-style: none;
+}
+.aon-fold summary::-webkit-details-marker {
+  display: none;
+}
+.aon-fold summary::before {
+  content: "▸";
+  display: inline-block;
+  width: 1rem;
+  color: var(--muted, #667085);
+}
+.aon-fold[open] summary::before {
+  content: "▾";
+}
+.aon-fold ul {
+  margin-top: 8px;
 }
 .catalog-group {
   margin-top: 8px;
