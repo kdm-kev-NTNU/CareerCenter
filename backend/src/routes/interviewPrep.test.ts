@@ -639,6 +639,121 @@ describe("interview prep routes", () => {
     await app.close();
   });
 
+  it("generates video questions for company and role", async () => {
+    const { app, llmClient } = await buildInterviewApp({
+      structuredResult: {
+        questions: ["Hvorfor McKinsey?", "Fortell om samarbeid.", "Beskriv et initiativ."]
+      }
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/interview/video/questions",
+      payload: {
+        companyName: "McKinsey",
+        roleDescription: "Business Analyst",
+        count: 3,
+        model: "gpt-6-luna"
+      }
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().questions).toHaveLength(3);
+    expect(llmClient.structuredCalls.at(-1)?.options.model).toBe("gpt-6-luna");
+    const user = llmClient.structuredCalls.at(-1)?.options.messages.find((m) => m.role === "user")?.content;
+    expect(user).toContain("McKinsey");
+    expect(user).toContain("Business Analyst");
+    await app.close();
+  });
+
+  it("returns 503 when AI is not configured for video questions", async () => {
+    const { app } = await buildInterviewApp({ configured: false });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/interview/video/questions",
+      payload: { companyName: "BCG", count: 2 }
+    });
+    expect(response.statusCode).toBe(503);
+    await app.close();
+  });
+
+  it("returns 502 when video question generation fails", async () => {
+    const { app } = await buildInterviewApp({
+      structuredError: new Error("generator down")
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/interview/video/questions",
+      payload: { companyName: "BCG", count: 2 }
+    });
+    expect(response.statusCode).toBe(502);
+    expect(response.json().message).toMatch(/spørsmål/i);
+    await app.close();
+  });
+
+  it("rejects empty company on video questions", async () => {
+    const { app } = await buildInterviewApp();
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/interview/video/questions",
+      payload: { companyName: "   ", count: 2 }
+    });
+    expect(response.statusCode).toBeGreaterThanOrEqual(400);
+    await app.close();
+  });
+
+  it("round-trips video settings questionCount", async () => {
+    const { app } = await buildInterviewApp();
+    const saved = await app.inject({
+      method: "PUT",
+      url: "/api/interview/video/settings",
+      payload: {
+        thinkSeconds: 40,
+        answerSeconds: 100,
+        questionCount: 5,
+        ratingModel: "gpt-6-luna"
+      }
+    });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json().questionCount).toBe(5);
+    expect(saved.json().prompts).toBeUndefined();
+
+    const loaded = await app.inject({ method: "GET", url: "/api/interview/video/settings" });
+    expect(loaded.statusCode).toBe(200);
+    expect(loaded.json().questionCount).toBe(5);
+    expect(loaded.json().thinkSeconds).toBe(40);
+    await app.close();
+  });
+
+  it("persists company and role on video runs", async () => {
+    const { app } = await buildInterviewApp();
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/interview/video/runs",
+      payload: {
+        state: "review",
+        cardIndex: 0,
+        transcript: "Mitt svar",
+        prompt: "Hvorfor oss?",
+        companyName: "McKinsey",
+        roleDescription: "Business Analyst",
+        settings: {
+          thinkSeconds: 30,
+          answerSeconds: 90,
+          questionCount: 3,
+          ratingModel: "gpt-6-astra"
+        }
+      }
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json().companyName).toBe("McKinsey");
+    expect(created.json().roleDescription).toBe("Business Analyst");
+
+    const listed = await app.inject({ method: "GET", url: "/api/interview/video/runs" });
+    expect(listed.statusCode).toBe(200);
+    expect(listed.json()[0].companyName).toBe("McKinsey");
+    expect(listed.json()[0].roleDescription).toBe("Business Analyst");
+    await app.close();
+  });
+
   it("keeps session open when finish rubric fails", async () => {
     const { app } = await buildInterviewApp({
       structuredError: new Error("rubric down")
