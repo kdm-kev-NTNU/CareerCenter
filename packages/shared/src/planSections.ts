@@ -7,16 +7,13 @@ import {
 
 /**
  * A slice of a prep plan the simulator can run on its own: one interviewer
- * question category, or the closing round where the candidate asks.
+ * question category.
  */
-export const planSectionKeys = [...questionCategories, "ask_interviewer"] as const;
+export const planSectionKeys = [...questionCategories] as const;
 export type PlanSectionKey = (typeof planSectionKeys)[number];
 
-export const ASK_INTERVIEWER_SECTION = "ask_interviewer" satisfies PlanSectionKey;
-
 export const planSectionLabels: Record<PlanSectionKey, string> = {
-  ...questionCategoryLabels,
-  ask_interviewer: "Spørsmålsrunde (jeg spør)"
+  ...questionCategoryLabels
 };
 
 export function isPlanSectionKey(value: string): value is PlanSectionKey {
@@ -39,43 +36,26 @@ export interface PlanSection {
 /** True when a question belongs to the section, ignoring whether it is included. */
 export function questionInPlanSection(question: PlanSectionQuestion, key: PlanSectionKey): boolean {
   const audience = question.audience ?? "candidate";
-  if (key === ASK_INTERVIEWER_SECTION) return audience !== "candidate";
   return audience === "candidate" && question.category === key;
 }
 
 /**
  * Sections with at least one included question, in the order the plan asks them.
- * The closing round always comes last, as in a real interview.
  */
 export function buildPlanSections(questions: PlanSectionQuestion[]): PlanSection[] {
   const included = [...questions]
     .filter((q) => q.included !== false)
+    .filter((q) => (q.audience ?? "candidate") === "candidate")
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
   const counts = new Map<PlanSectionKey, number>();
   for (const question of included) {
-    const audience = question.audience ?? "candidate";
-    const key: PlanSectionKey | null =
-      audience !== "candidate"
-        ? ASK_INTERVIEWER_SECTION
-        : isPlanSectionKey(question.category)
-          ? question.category
-          : null;
+    const key = isPlanSectionKey(question.category) ? question.category : null;
     if (!key) continue;
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
-  const askCount = counts.get(ASK_INTERVIEWER_SECTION);
-  counts.delete(ASK_INTERVIEWER_SECTION);
-  const sections = [...counts].map(([key, questionCount]) => ({
+  return [...counts].map(([key, questionCount]) => ({
     key,
     title: planSectionLabels[key],
     questionCount
   }));
-  if (askCount) {
-    sections.push({
-      key: ASK_INTERVIEWER_SECTION,
-      title: planSectionLabels[ASK_INTERVIEWER_SECTION],
-      questionCount: askCount
-    });
-  }
-  return sections;
 }

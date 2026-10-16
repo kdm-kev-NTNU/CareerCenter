@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import type {
   InterviewBankQuestionDto,
-  InterviewPrepPlanCaseDto,
   InterviewPrepPlanDto,
   InterviewPrepQuestionDto,
   PrepPlanPipelineStep,
-  QuestionAudience,
   QuestionCategory
 } from "@careercenter/shared";
 import {
@@ -13,8 +11,6 @@ import {
   canDeletePrepPlan,
   canStartSimulators,
   isPrepPlanPipelineActive,
-  questionAudienceLabels,
-  questionAudiences,
   questionCategories,
   questionCategoryLabels,
   researchModelLabels
@@ -32,7 +28,6 @@ import StateView from "../../components/ui/StateView.vue";
 const route = useRoute();
 const router = useRouter();
 const plan = ref<InterviewPrepPlanDto | null>(null);
-const rankedCases = ref<InterviewPrepPlanCaseDto[]>([]);
 const loading = ref(true);
 const saving = ref(false);
 const error = ref<string | null>(null);
@@ -47,7 +42,6 @@ const editText = ref("");
 const editNotes = ref("");
 const newQuestionText = ref("");
 const newQuestionCategory = ref<QuestionCategory>("behavioral");
-const newQuestionAudience = ref<QuestionAudience>("candidate");
 let pollTimer: ReturnType<typeof setInterval> | undefined;
 
 const planId = computed(() => route.params.id as string);
@@ -64,15 +58,11 @@ const candidateQuestions = computed(
   () => plan.value?.questions.filter((q) => q.audience === "candidate") ?? []
 );
 const includedCount = computed(() => candidateQuestions.value.filter((q) => q.included).length);
+const questionsToAsk = computed(() => plan.value?.companyReport?.questionsToAsk ?? []);
 
-const askGroupTitles: Record<Exclude<QuestionAudience, "candidate">, string> = {
-  ask_interviewer_company: "Om selskapet",
-  ask_interviewer_personal: "Til intervjueren (personlig)"
-};
-
-/** Interviewer questions grouped by category, then the questions the candidate asks the interviewer. */
+/** Interviewer questions grouped by category. */
 const questionGroups = computed(() => {
-  const groups: Array<{ key: string; title: string; ask: boolean; items: InterviewPrepQuestionDto[] }> = [];
+  const groups: Array<{ key: string; title: string; items: InterviewPrepQuestionDto[] }> = [];
   const byCategory = new Map<QuestionCategory, InterviewPrepQuestionDto[]>();
   for (const q of candidateQuestions.value) {
     const list = byCategory.get(q.category) ?? [];
@@ -80,19 +70,13 @@ const questionGroups = computed(() => {
     byCategory.set(q.category, list);
   }
   for (const [category, items] of byCategory) {
-    groups.push({ key: category, title: questionCategoryLabels[category] ?? category, ask: false, items });
-  }
-  for (const audience of ["ask_interviewer_company", "ask_interviewer_personal"] as const) {
-    const items = plan.value?.questions.filter((q) => q.audience === audience) ?? [];
-    if (items.length) groups.push({ key: audience, title: askGroupTitles[audience], ask: true, items });
+    groups.push({ key: category, title: questionCategoryLabels[category] ?? category, items });
   }
   return groups;
 });
-const firstAskGroupKey = computed(() => questionGroups.value.find((group) => group.ask)?.key);
 
-function applyDetail(detail: { plan: InterviewPrepPlanDto; rankedCases: InterviewPrepPlanCaseDto[] }) {
+function applyDetail(detail: { plan: InterviewPrepPlanDto }) {
   plan.value = detail.plan;
-  rankedCases.value = detail.rankedCases.length ? detail.rankedCases : detail.plan.recommendedCases;
   for (const item of detail.plan.clarifications) {
     if (answers.value[item.id] === undefined || item.answer) {
       answers.value[item.id] = item.answer;
@@ -165,7 +149,7 @@ async function submitAnswers(skip = false) {
       plan.value.clarifications.map((item) => ({ id: item.id, answer: answers.value[item.id] ?? "" })),
       skip
     );
-    applyDetail({ plan: updated, rankedCases: updated.recommendedCases });
+    applyDetail({ plan: updated });
     followLive.value = true;
     ensurePolling();
   } catch (err) {
@@ -181,7 +165,7 @@ async function resumeFromFailure() {
   error.value = null;
   try {
     const updated = await interviewPrepApi.resumePlan(plan.value.id);
-    applyDetail({ plan: updated, rankedCases: updated.recommendedCases });
+    applyDetail({ plan: updated });
     followLive.value = true;
     ensurePolling();
   } catch (err) {
@@ -204,7 +188,7 @@ async function retryResearch() {
   error.value = null;
   try {
     const updated = await interviewPrepApi.startPlanResearch(plan.value.id);
-    applyDetail({ plan: updated, rankedCases: updated.recommendedCases });
+    applyDetail({ plan: updated });
     followLive.value = true;
     ensurePolling();
   } catch (err) {
@@ -220,7 +204,7 @@ async function stopResearch() {
   error.value = null;
   try {
     const updated = await interviewPrepApi.cancelPlan(plan.value.id);
-    applyDetail({ plan: updated, rankedCases: updated.recommendedCases });
+    applyDetail({ plan: updated });
     stopPolling();
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Kunne ikke stoppe.";
@@ -256,7 +240,7 @@ async function searchSwap() {
   if (!swapQuestion.value) return;
   bankHits.value = await interviewPrepApi.searchQuestions({
     q: bankQ.value || undefined,
-    audience: swapQuestion.value.audience
+    audience: "candidate"
   });
 }
 
@@ -308,8 +292,7 @@ async function addQuestion() {
   try {
     plan.value = await interviewPrepApi.addPlanQuestion(plan.value.id, {
       text: newQuestionText.value.trim(),
-      category: newQuestionCategory.value,
-      audience: newQuestionAudience.value
+      category: newQuestionCategory.value
     });
     newQuestionText.value = "";
   } catch (err) {
@@ -421,27 +404,28 @@ async function downloadCompanyReport() {
           <template v-else-if="selectedStep === 'company_report'">
             <template v-if="plan.companyReport">
               <p class="plan-step-prose">{{ plan.companyReport.headline || "Bedriftsrapport klar." }}</p>
-              <p v-if="plan.companyReport.aboutCompany" class="field-hint">
-                {{ plan.companyReport.aboutCompany }}
-              </p>
-              <div v-if="plan.companyReport.nicheInsights?.length" class="stack">
-                <h4>Nisje-info til bedriftsspesifikke svar</h4>
+              <div v-if="plan.companyReport.mustKnow?.length" class="stack">
+                <h4>Må vite</h4>
                 <ul class="plain-list">
-                  <li v-for="(insight, i) in plan.companyReport.nicheInsights" :key="i">{{ insight }}</li>
+                  <li v-for="(fact, i) in plan.companyReport.mustKnow" :key="i">{{ fact }}</li>
                 </ul>
               </div>
-              <div v-if="plan.companyReport.companyQuestionPrep?.length" class="stack">
-                <h4>Svarforslag</h4>
+              <div v-if="plan.companyReport.questionPrep?.length" class="stack">
+                <h4>Spørsmål du bør kunne svare på</h4>
                 <ul class="plain-list">
                   <li
-                    v-for="(prep, i) in plan.companyReport.companyQuestionPrep"
+                    v-for="(prep, i) in plan.companyReport.questionPrep"
                     :key="i"
                     class="stack"
                   >
                     <strong>{{ prep.question }}</strong>
-                    <span class="field-hint">{{ prep.answerAngle }}</span>
-                    <span v-if="prep.nicheHooks?.length" class="field-hint">
-                      Hooks: {{ prep.nicheHooks.join("; ") }}
+                    <span class="field-hint">Hvorfor de spør: {{ prep.whyTheyAsk }}</span>
+                    <span>{{ prep.suggestedAnswer }}</span>
+                    <span v-if="prep.backgroundUsed?.length" class="field-hint">
+                      Fra bakgrunnen: {{ prep.backgroundUsed.join("; ") }}
+                    </span>
+                    <span v-if="prep.companyHooks?.length" class="field-hint">
+                      Bedriftshooks: {{ prep.companyHooks.join("; ") }}
                     </span>
                   </li>
                 </ul>
@@ -450,7 +434,17 @@ async function downloadCompanyReport() {
                 Last ned bedriftsrapport (PDF)
               </AppButton>
             </template>
-            <p v-else>Skriver bedriftsrapport med nisje-info og svarforslag …</p>
+            <template
+              v-else-if="
+                plan.pipelineStep !== 'company_report' &&
+                ['clarifications', 'awaiting_answers', 'curating_questions', 'ready'].includes(plan.pipelineStep)
+              "
+            >
+              <p class="error-text">
+                Rapporten er i gammelt format. Start research på nytt for å få spørsmål med svarforslag.
+              </p>
+            </template>
+            <p v-else>Skriver bedriftsrapport med spørsmål og svarforslag …</p>
           </template>
           <template v-else-if="selectedStep === 'clarifications'">
             <p v-if="plan.clarifications.length">
@@ -460,8 +454,8 @@ async function downloadCompanyReport() {
           </template>
           <template v-else-if="selectedStep === 'awaiting_answers'">
             <p class="field-hint">
-              Runde {{ plan.clarificationRound }}. Dette er ikke intervjuspørsmål — svarene styrer hvilke spørsmål og
-              cases som velges fra banken.
+              Runde {{ plan.clarificationRound }}. Dette er ikke intervjuspørsmål — svarene styrer hvilke spørsmål
+              som velges fra banken.
             </p>
             <div v-if="plan.clarifications.length" class="stack">
               <label v-for="item in plan.clarifications" :key="item.id">
@@ -481,11 +475,11 @@ async function downloadCompanyReport() {
               Modellen valgte for få; {{ plan.curationFilledCount }} ble fylt inn fra rangeringen.
             </p>
           </template>
-          <template v-else-if="selectedStep === 'curating_cases'">
-            <p>Kobler case og øvingsoppgaver til profilen.</p>
-          </template>
           <template v-else>
-            <p>Planen har {{ plan.questions.length }} spørsmål og {{ rankedCases.length }} anbefalte case.</p>
+            <p>Planen har {{ plan.questions.length }} spørsmål klar for øving.</p>
+            <p v-if="!plan.companyReport && plan.status === 'ready'" class="error-text">
+              Rapporten er i gammelt format. Start research på nytt for å få spørsmål med svarforslag.
+            </p>
           </template>
         </div>
         <div class="form-grid">
@@ -521,13 +515,6 @@ async function downloadCompanyReport() {
           </AppButton>
         </div>
         <template v-for="group in questionGroups" :key="group.key">
-          <div v-if="group.key === firstAskGroupKey" class="stack">
-            <h3>Spørsmål du stiller dem</h3>
-            <p class="field-hint">
-              Ha fem klare, still to eller tre, og minst ett personlig. KI-intervjueren svarer på dem i
-              avslutningsrunden når du øver med planen.
-            </p>
-          </div>
           <div class="stack">
           <h4>{{ group.title }}</h4>
           <ul class="plain-list">
@@ -572,26 +559,29 @@ async function downloadCompanyReport() {
         <div class="stack">
           <h4>Legg til spørsmål</h4>
           <textarea v-model="newQuestionText" rows="2" placeholder="Skriv et spørsmål …" />
-          <div class="form-grid">
-            <label>
-              Hvem spør
-              <select v-model="newQuestionAudience">
-                <option v-for="audience in questionAudiences" :key="audience" :value="audience">
-                  {{ questionAudienceLabels[audience] }}
-                </option>
-              </select>
-            </label>
-            <label v-if="newQuestionAudience === 'candidate'">
-              Kategori
-              <select v-model="newQuestionCategory">
-                <option v-for="item in questionCategories" :key="item" :value="item">
-                  {{ questionCategoryLabels[item] }}
-                </option>
-              </select>
-            </label>
-          </div>
+          <label>
+            Kategori
+            <select v-model="newQuestionCategory">
+              <option v-for="item in questionCategories" :key="item" :value="item">
+                {{ questionCategoryLabels[item] }}
+              </option>
+            </select>
+          </label>
           <AppButton :loading="saving" :disabled="!newQuestionText.trim()" @click="addQuestion">Legg til</AppButton>
         </div>
+      </article>
+
+      <article v-if="questionsToAsk.length" class="panel stack">
+        <h3>Lure spørsmål å stille dem</h3>
+        <p class="field-hint">
+          Leseliste til intervjuet — ikke en egen øvingseksjon. Ha noen klare, still to eller tre, og minst ett personlig.
+        </p>
+        <ul class="plain-list">
+          <li v-for="(item, i) in questionsToAsk" :key="i" class="stack">
+            <strong>{{ item.question }}</strong>
+            <span class="field-hint">{{ item.why }}</span>
+          </li>
+        </ul>
       </article>
 
       <article v-if="swapQuestion" class="panel stack">
@@ -608,23 +598,6 @@ async function downloadCompanyReport() {
           </li>
         </ul>
         <AppButton variant="ghost" @click="swapQuestion = null">Lukk</AppButton>
-      </article>
-
-      <article v-if="plan.tasks.length" class="panel stack">
-        <h3>Oppgaver</h3>
-        <ul class="plain-list">
-          <li v-for="task in plan.tasks" :key="task.id">{{ task.title }} — {{ task.description }}</li>
-        </ul>
-      </article>
-
-      <article v-if="rankedCases.length" class="panel stack">
-        <h3>Anbefalte case</h3>
-        <ul class="plain-list">
-          <li v-for="item in rankedCases" :key="item.id">
-            <strong>{{ item.title }}</strong>
-            <p>{{ item.prompt.slice(0, 200) }}</p>
-          </li>
-        </ul>
       </article>
     </template>
   </section>

@@ -99,23 +99,6 @@ export interface InterviewPrepQuestionDto {
   notes: string;
 }
 
-export interface InterviewPrepPlanCaseDto {
-  id: string;
-  caseEntryId: string;
-  title: string;
-  prompt: string;
-  sourceKind: CaseSourceKind;
-  sortOrder: number;
-}
-
-export interface InterviewPrepTaskDto {
-  id: string;
-  title: string;
-  description: string;
-  sortOrder: number;
-  done: boolean;
-}
-
 export interface InterviewPrepPlanDto {
   id: string;
   companyName: string;
@@ -133,8 +116,6 @@ export interface InterviewPrepPlanDto {
   failureReason?: string;
   clarifications: InterviewPrepClarificationDto[];
   questions: InterviewPrepQuestionDto[];
-  tasks: InterviewPrepTaskDto[];
-  recommendedCases: InterviewPrepPlanCaseDto[];
   repeatedStoryIds: string[];
   createdAt: string;
   updatedAt: string;

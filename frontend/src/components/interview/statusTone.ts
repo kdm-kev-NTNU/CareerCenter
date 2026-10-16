@@ -33,7 +33,6 @@ export const prepPlanPipelineStepLabel = {
   clarifications: "Oppklaringsspørsmål",
   awaiting_answers: "Dine svar",
   curating_questions: "Spørsmål fra banken",
-  curating_cases: "Case og oppgaver",
   ready: "Planen er klar"
 } as const satisfies Record<PrepPlanPipelineStep, string>;
 
