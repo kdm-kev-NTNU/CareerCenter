@@ -206,7 +206,7 @@ export interface InterviewVideoSettingsRecord {
   userId: string;
   thinkSeconds: number;
   answerSeconds: number;
-  promptsJson: string;
+  questionCount: number;
   ratingModel: string;
   updatedAt: string;
 }
@@ -220,6 +220,8 @@ export interface InterviewVideoRunRecord {
   blobKey?: string;
   transcript: string;
   prompt: string;
+  companyName: string;
+  roleDescription: string;
   feedback?: InterviewFeedbackRubric;
   createdAt: string;
   updatedAt: string;
@@ -231,6 +233,8 @@ export interface VideoRunInput {
   blobKey?: string;
   transcript: string;
   prompt?: string;
+  companyName?: string;
+  roleDescription?: string;
   feedback?: InterviewFeedbackRubric;
   settings: VideoSimulatorSettings;
 }

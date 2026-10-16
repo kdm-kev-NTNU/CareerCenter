@@ -9,6 +9,7 @@ vi.mock("../../api/interviewPrep.js", () => ({
   interviewPrepApi: {
     videoSettings: vi.fn(),
     saveVideoSettings: vi.fn(),
+    generateVideoQuestions: vi.fn(),
     transcribeVideo: vi.fn(),
     rateVideo: vi.fn(),
     createVideoRun: vi.fn()
@@ -32,6 +33,12 @@ const MediaDeviceCheckStub = defineComponent({
 
 const api = vi.mocked(interviewPrepApi);
 
+const generatedQuestions = [
+  "Fortell om en gang du tok initiativ under tidspress.",
+  "Hvorfor vil du jobbe hos oss?",
+  "Beskriv en konflikt du løste konstruktivt."
+];
+
 function fakeStream(): MediaStream {
   return {
     getTracks: () => [{ stop: vi.fn() }],
@@ -39,8 +46,17 @@ function fakeStream(): MediaStream {
   } as unknown as MediaStream;
 }
 
-async function advanceToRecording(wrapper: ReturnType<typeof mount>, startLabel: string) {
+async function fillRoundContext(wrapper: ReturnType<typeof mount>) {
   await flushPromises();
+  const inputs = wrapper.findAll("input");
+  const companyInput = inputs.find((input) => input.attributes("placeholder")?.includes("McKinsey"));
+  expect(companyInput).toBeTruthy();
+  await companyInput!.setValue("McKinsey");
+  await wrapper.get("textarea").setValue("Business Analyst");
+}
+
+async function advanceToRecording(wrapper: ReturnType<typeof mount>, startLabel: string) {
+  await fillRoundContext(wrapper);
   await wrapper.findAll("button").find((b) => b.text().includes(startLabel))!.trigger("click");
   await flushPromises();
   await wrapper.get("button").trigger("click");
@@ -63,6 +79,7 @@ describe("InterviewVideoView", () => {
     stop.mockClear();
     api.videoSettings.mockResolvedValue({ ...defaultVideoSimulatorSettings });
     api.saveVideoSettings.mockImplementation(async (settings) => settings);
+    api.generateVideoQuestions.mockResolvedValue({ questions: [...generatedQuestions] });
     api.transcribeVideo.mockResolvedValue({
       mock: false,
       transcript: "Mitt svar",
@@ -106,6 +123,8 @@ describe("InterviewVideoView", () => {
       state: "review",
       transcript: "Mitt svar",
       prompt: "q",
+      companyName: "McKinsey",
+      roleDescription: "Business Analyst",
       settings: defaultVideoSimulatorSettings,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -145,6 +164,91 @@ describe("InterviewVideoView", () => {
     vi.restoreAllMocks();
   });
 
+  it("does not show question text on the setup page", async () => {
+    const wrapper = mount(InterviewVideoView, {
+      global: { stubs: { MediaDeviceCheck: MediaDeviceCheckStub } }
+    });
+    await flushPromises();
+    expect(wrapper.text()).not.toContain(generatedQuestions[0]);
+    expect(wrapper.text()).not.toContain("Administrer spørsmål");
+    expect(wrapper.text()).toContain("Antall spørsmål");
+    expect(wrapper.text()).toContain("Bedrift");
+    expect(wrapper.text()).toContain("Rollebeskrivelse");
+  });
+
+  it("generates questions with form values when starting", async () => {
+    const wrapper = mount(InterviewVideoView, {
+      global: { stubs: { MediaDeviceCheck: MediaDeviceCheckStub } }
+    });
+    await fillRoundContext(wrapper);
+    const countInput = wrapper
+      .findAll("input")
+      .find((input) => input.attributes("type") === "number" && input.attributes("min") === "1");
+    await countInput!.setValue(2);
+    await wrapper.findAll("button").find((b) => b.text().includes("Start ekte runde"))!.trigger("click");
+    await flushPromises();
+
+    expect(api.generateVideoQuestions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        companyName: "McKinsey",
+        roleDescription: "Business Analyst",
+        count: 2
+      })
+    );
+  });
+
+  it("builds a deck with one card per generated question", async () => {
+    api.generateVideoQuestions.mockResolvedValue({
+      questions: ["Q1?", "Q2?"]
+    });
+    const wrapper = mount(InterviewVideoView, {
+      global: { stubs: { MediaDeviceCheck: MediaDeviceCheckStub } }
+    });
+    await fillRoundContext(wrapper);
+    await wrapper.findAll("button").find((b) => b.text().includes("Start ekte runde"))!.trigger("click");
+    await flushPromises();
+    await wrapper.get("button").trigger("click");
+    await flushPromises();
+
+    expect(wrapper.findAll(".deck-card")).toHaveLength(2);
+    expect(wrapper.text()).toContain("0 av 2 fullført");
+    expect(wrapper.text()).not.toContain("Q1?");
+    expect(wrapper.text()).not.toContain("Q2?");
+  });
+
+  it("reveals a question only after a card is selected", async () => {
+    api.generateVideoQuestions.mockResolvedValue({
+      questions: ["Hemmelig spørsmål?"]
+    });
+    const wrapper = mount(InterviewVideoView, {
+      global: { stubs: { MediaDeviceCheck: MediaDeviceCheckStub } }
+    });
+    await fillRoundContext(wrapper);
+    await wrapper.findAll("button").find((b) => b.text().includes("Start ekte runde"))!.trigger("click");
+    await flushPromises();
+    await wrapper.get("button").trigger("click");
+    await flushPromises();
+    expect(wrapper.text()).not.toContain("Hemmelig spørsmål?");
+
+    await wrapper.get(".deck-card").trigger("click");
+    await flushPromises();
+    expect(wrapper.text()).toContain("Hemmelig spørsmål?");
+  });
+
+  it("stays in setup and shows the error when generation fails", async () => {
+    api.generateVideoQuestions.mockRejectedValue(new Error("Kunne ikke lage spørsmål."));
+    const wrapper = mount(InterviewVideoView, {
+      global: { stubs: { MediaDeviceCheck: MediaDeviceCheckStub } }
+    });
+    await fillRoundContext(wrapper);
+    await wrapper.findAll("button").find((b) => b.text().includes("Start ekte runde"))!.trigger("click");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Kunne ikke lage spørsmål.");
+    expect(wrapper.text()).toContain("Innstillinger");
+    expect(wrapper.text()).toContain("Start ekte runde");
+  });
+
   it("starts recording on the stream acquired for the recording phase", async () => {
     const wrapper = mount(InterviewVideoView, {
       global: { stubs: { MediaDeviceCheck: MediaDeviceCheckStub } }
@@ -166,7 +270,7 @@ describe("InterviewVideoView", () => {
     await flushPromises();
 
     expect(api.transcribeVideo).not.toHaveBeenCalled();
-    expect(wrapper.text()).toContain("Øverunde: ingen transkribering");
+    expect(wrapper.text()).toContain("ikke transkribert eller vurdert");
 
     await wrapper.findAll("button").find((b) => b.text() === "Neste kort")!.trigger("click");
     await flushPromises();
@@ -197,6 +301,8 @@ describe("InterviewVideoView", () => {
     expect(api.createVideoRun).toHaveBeenCalledTimes(1);
     expect(api.createVideoRun.mock.calls[0]![0].transcript).toBe("Mitt svar");
     expect(api.createVideoRun.mock.calls[0]![0].feedback).toBeDefined();
+    expect(api.createVideoRun.mock.calls[0]![0].companyName).toBe("McKinsey");
+    expect(api.createVideoRun.mock.calls[0]![0].roleDescription).toBe("Business Analyst");
   });
 
   it("shows rating retry without scores when rating is unavailable", async () => {
@@ -229,7 +335,7 @@ describe("InterviewVideoView", () => {
     const wrapper = mount(InterviewVideoView, {
       global: { stubs: { MediaDeviceCheck: MediaDeviceCheckStub } }
     });
-    await flushPromises();
+    await fillRoundContext(wrapper);
     const select = wrapper.get("select");
     await select.setValue("gpt-6-luna");
     await wrapper.findAll("button").find((b) => b.text().includes("Start ekte runde"))!.trigger("click");

@@ -14,6 +14,7 @@ import {
   inferKnowledgeKind,
   normalizeEssentialsInput,
   resolveEssentialsSheet,
+  videoQuestionRequestSchema,
   videoSimulatorSettingsSchema
 } from "@careercenter/shared";
 import { createReadStream } from "node:fs";
@@ -99,6 +100,7 @@ import {
 } from "../interview/meccaSchemas.js";
 import { PrepResearchService } from "../interview/prepResearchService.js";
 import { reindexAllBankQuestions, reindexBankQuestionsForDoc } from "../interview/reindexBankQuestions.js";
+import { generateVideoQuestions } from "../interview/videoQuestions.js";
 import {
   buildPlanPracticeScript,
   buildSimulatorSystemPrompt,
@@ -1074,6 +1076,29 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
     const body = videoSimulatorSettingsSchema.parse(request.body);
     const saved = await deps.interviewPrepRepository.upsertVideoSettings(request.user.id, body);
     return toVideoSettingsDto(saved);
+  });
+
+  app.post("/api/interview/video/questions", async (request, reply) => {
+    if (!deps.llmClient.isConfigured()) {
+      return reply.code(503).send({ message: "AI er ikke konfigurert." });
+    }
+    const body = videoQuestionRequestSchema.parse(request.body);
+    const generated = await generateVideoQuestions(
+      deps.llmClient,
+      {
+        companyName: body.companyName,
+        roleDescription: body.roleDescription,
+        count: body.count
+      },
+      { log: request.log, model: body.model }
+    );
+    if (!generated.ok) {
+      request.log.warn({ reason: generated.reason }, "Video-spørsmålsgenerering feilet");
+      return reply.code(502).send({
+        message: "Kunne ikke lage spørsmål. Prøv på nytt."
+      });
+    }
+    return { questions: generated.questions };
   });
 
   app.get("/api/interview/video/runs", async (request) => {

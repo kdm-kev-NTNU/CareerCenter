@@ -553,25 +553,27 @@ model InterviewVideoSettings {
   userId        String   @unique
   thinkSeconds  Int      @default(30)
   answerSeconds Int      @default(90)
-  promptsJson   String   @default("[]")
+  questionCount Int      @default(3)
   ratingModel   String   @default("gpt-6-astra")
   updatedAt     DateTime @updatedAt
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model InterviewVideoRun {
-  id           String   @id @default(cuid())
-  userId       String
-  settingsJson String
-  state        String   @default("done")
-  cardIndex    Int?
-  blobKey      String?
-  transcript   String   @default("")
-  prompt       String   @default("")
-  feedbackJson String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id              String   @id @default(cuid())
+  userId          String
+  settingsJson    String
+  state           String   @default("done")
+  cardIndex       Int?
+  blobKey         String?
+  transcript      String   @default("")
+  prompt          String   @default("")
+  companyName     String   @default("")
+  roleDescription String   @default("")
+  feedbackJson    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
 }

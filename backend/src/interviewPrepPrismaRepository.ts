@@ -894,13 +894,13 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
         userId,
         thinkSeconds: settings.thinkSeconds,
         answerSeconds: settings.answerSeconds,
-        promptsJson: JSON.stringify(settings.prompts),
+        questionCount: settings.questionCount,
         ratingModel: settings.ratingModel
       },
       update: {
         thinkSeconds: settings.thinkSeconds,
         answerSeconds: settings.answerSeconds,
-        promptsJson: JSON.stringify(settings.prompts),
+        questionCount: settings.questionCount,
         ratingModel: settings.ratingModel
       }
     });
@@ -926,6 +926,8 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
         blobKey: input.blobKey,
         transcript: input.transcript,
         prompt: input.prompt ?? "",
+        companyName: input.companyName ?? "",
+        roleDescription: input.roleDescription ?? "",
         feedbackJson: input.feedback ? JSON.stringify(input.feedback) : null
       }
     });
@@ -1329,7 +1331,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
     userId: string;
     thinkSeconds: number;
     answerSeconds: number;
-    promptsJson: string;
+    questionCount: number;
     ratingModel: string;
     updatedAt: Date;
   }): InterviewVideoSettingsRecord {
@@ -1337,7 +1339,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       userId: row.userId,
       thinkSeconds: row.thinkSeconds,
       answerSeconds: row.answerSeconds,
-      promptsJson: row.promptsJson || JSON.stringify(defaultVideoSimulatorSettings.prompts),
+      questionCount: row.questionCount || defaultVideoSimulatorSettings.questionCount,
       ratingModel: row.ratingModel || defaultVideoSimulatorSettings.ratingModel,
       updatedAt: row.updatedAt.toISOString()
     };
@@ -1352,6 +1354,8 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
     blobKey: string | null;
     transcript: string;
     prompt: string;
+    companyName: string;
+    roleDescription: string;
     feedbackJson: string | null;
     createdAt: Date;
     updatedAt: Date;
@@ -1365,6 +1369,8 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       blobKey: row.blobKey ?? undefined,
       transcript: row.transcript,
       prompt: row.prompt,
+      companyName: row.companyName,
+      roleDescription: row.roleDescription,
       feedback: row.feedbackJson ? (JSON.parse(row.feedbackJson) as InterviewFeedbackRubric) : undefined,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString()

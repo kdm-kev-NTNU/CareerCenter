@@ -642,10 +642,18 @@ export {
 } from "./simulatorCallState.js";
 export type { SimulatorCallState, SimulatorCallEvent } from "./simulatorCallState.js";
 export {
+  VIDEO_QUESTION_COUNT_MIN,
+  VIDEO_QUESTION_COUNT_MAX,
+  DEFAULT_VIDEO_QUESTION_COUNT,
   videoSimulatorSettingsSchema,
+  videoQuestionRequestSchema,
   defaultVideoSimulatorSettings
 } from "./videoSimulatorSettings.js";
-export type { VideoSimulatorSettings } from "./videoSimulatorSettings.js";
+export type {
+  VideoSimulatorSettings,
+  VideoQuestionRequest,
+  VideoQuestionsDto
+} from "./videoSimulatorSettings.js";
 export {
   DEFAULT_SIMULATOR_TONE,
   DEFAULT_SIMULATOR_LANGUAGE,

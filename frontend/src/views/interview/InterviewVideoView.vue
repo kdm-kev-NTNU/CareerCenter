@@ -55,6 +55,10 @@ const phase = ref<VideoSimState>("setup");
 const practiceMode = ref<PracticeMode>("scored");
 const settings = ref<VideoSimulatorSettings>({ ...defaultVideoSimulatorSettings });
 const settingsDraft = ref({ ...defaultVideoSimulatorSettings });
+const companyName = ref("");
+const roleDescription = ref("");
+const roundQuestions = ref<string[]>([]);
+const generatingQuestions = ref(false);
 const { stream: mediaStream, acquire: acquireMedia, release: releaseMedia, error: mediaError } =
   useMediaStream();
 const selectedDevices = ref<{ audioDeviceId?: string; videoDeviceId?: string }>({});
@@ -85,9 +89,8 @@ let thinkTimer: ReturnType<typeof setInterval> | null = null;
 let answerTimer: ReturnType<typeof setInterval> | null = null;
 let recordingStartedAt = 0;
 
-const promptCount = computed(() => settingsDraft.value.prompts.length);
-const activePrompt = computed(() => settings.value.prompts[currentCard.value] ?? "Ingen flere spørsmål.");
-const deckDone = computed(() => completedCards.value.length >= settings.value.prompts.length);
+const activePrompt = computed(() => roundQuestions.value[currentCard.value] ?? "Ingen flere spørsmål.");
+const deckDone = computed(() => completedCards.value.length >= roundQuestions.value.length);
 const phaseTone = computed(() => toneForVideoPhase(phase.value));
 const showPrompt = computed(() => phaseRevealsPrompt(phase.value));
 const usesAi = computed(() => modeUsesAi(practiceMode.value));
@@ -102,6 +105,7 @@ const scoreEntries = computed(() => {
 const ratingModelLabel = computed(
   () => researchModelLabels[settings.value.ratingModel] ?? settings.value.ratingModel
 );
+const startBusy = computed(() => generatingQuestions.value || saving.value || rating.value);
 
 watch(mediaError, (value) => {
   if (value) error.value = value;
@@ -164,16 +168,31 @@ watch(phase, async (value, prev) => {
 
 async function confirmSettings(mode: PracticeMode) {
   error.value = null;
+  const company = companyName.value.trim();
+  if (!company) {
+    error.value = "Skriv inn bedrift før du starter.";
+    return;
+  }
+  generatingQuestions.value = true;
   try {
     practiceMode.value = mode;
     settings.value = await interviewPrepApi.saveVideoSettings(settingsDraft.value);
+    const generated = await interviewPrepApi.generateVideoQuestions({
+      companyName: company,
+      roleDescription: roleDescription.value.trim(),
+      count: settings.value.questionCount,
+      model: settings.value.ratingModel
+    });
+    roundQuestions.value = generated.questions;
     deckSeed.value = Date.now();
-    shuffledDeck.value = shuffleIndices(settings.value.prompts.length, deckSeed.value);
+    shuffledDeck.value = shuffleIndices(roundQuestions.value.length, deckSeed.value);
     completedCards.value = [];
     currentCard.value = 0;
     phase.value = transitionVideoSim(phase.value, { type: "settings_confirmed" });
   } catch (err) {
-    error.value = err instanceof Error ? err.message : "Kunne ikke lagre innstillinger.";
+    error.value = err instanceof Error ? err.message : "Kunne ikke starte runden.";
+  } finally {
+    generatingQuestions.value = false;
   }
 }
 
@@ -388,6 +407,8 @@ async function saveCardRun() {
       blobKey: blobKey.value ?? undefined,
       transcript: transcript.value,
       prompt: activePrompt.value,
+      companyName: companyName.value.trim(),
+      roleDescription: roleDescription.value.trim(),
       feedback: ratingStatus.value === "ok" ? (feedback.value ?? undefined) : undefined,
       settings: settings.value
     });
@@ -413,7 +434,7 @@ async function nextCard() {
   }
   completedCards.value = [...completedCards.value, currentCard.value];
   clearReviewState();
-  if (completedCards.value.length >= settings.value.prompts.length) {
+  if (completedCards.value.length >= roundQuestions.value.length) {
     phase.value = transitionVideoSim(phase.value, { type: "all_done" });
     return;
   }
@@ -426,6 +447,7 @@ function restartFromDone() {
   shuffledDeck.value = [];
   completedCards.value = [];
   currentCard.value = 0;
+  roundQuestions.value = [];
   practiceMode.value = "scored";
 }
 </script>
@@ -447,8 +469,25 @@ function restartFromDone() {
 
     <article v-if="phase === 'setup'" class="panel stack">
       <h3>Innstillinger</h3>
+      <label>
+        Antall spørsmål
+        <input v-model.number="settingsDraft.questionCount" type="number" min="1" max="10" />
+      </label>
       <label>Tenk (sek) <input v-model.number="settingsDraft.thinkSeconds" type="number" min="5" max="180" /></label>
       <label>Svar (sek) <input v-model.number="settingsDraft.answerSeconds" type="number" min="15" max="600" /></label>
+      <label>
+        Bedrift
+        <input v-model="companyName" type="text" maxlength="200" placeholder="F.eks. McKinsey" />
+      </label>
+      <label>
+        Rollebeskrivelse
+        <textarea
+          v-model="roleDescription"
+          rows="4"
+          maxlength="8000"
+          placeholder="Lim inn eller skriv kort om rollen du søker."
+        />
+      </label>
       <label>
         Vurderingsmodell
         <select v-model="settingsDraft.ratingModel">
@@ -458,19 +497,26 @@ function restartFromDone() {
         </select>
       </label>
       <p class="muted">
-        Modellen brukes bare når ekte runde vurderer svaret. Transkribering og øverunde påvirkes ikke.
+        Spørsmålene lages med KI ut fra bedrift og rolle, og holdes skjult til du trekker kortet.
+        Vurderingsmodellen brukes bare i ekte runde.
       </p>
-      <p class="muted">Antall spørsmål: <strong>{{ promptCount }}</strong></p>
-      <details>
-        <summary>Administrer spørsmål</summary>
-        <label v-for="(prompt, index) in settingsDraft.prompts" :key="index" class="stack-tight">
-          Spørsmål {{ index + 1 }}
-          <input v-model="settingsDraft.prompts[index]" />
-        </label>
-      </details>
+      <p v-if="generatingQuestions" class="field-hint">Lager spørsmål …</p>
       <div class="form-grid">
-        <AppButton variant="ghost" @click="confirmSettings('practice')">Øverunde (uten KI)</AppButton>
-        <AppButton @click="confirmSettings('scored')">Start ekte runde</AppButton>
+        <AppButton
+          variant="ghost"
+          :loading="generatingQuestions"
+          :disabled="startBusy"
+          @click="confirmSettings('practice')"
+        >
+          Øverunde
+        </AppButton>
+        <AppButton
+          :loading="generatingQuestions"
+          :disabled="startBusy"
+          @click="confirmSettings('scored')"
+        >
+          Start ekte runde
+        </AppButton>
       </div>
     </article>
 
@@ -486,7 +532,7 @@ function restartFromDone() {
 
     <article v-else-if="phase === 'deck'" class="panel stack">
       <h3>Kortstokk</h3>
-      <p>{{ completedCards.length }} av {{ settings.prompts.length }} fullført</p>
+      <p>{{ completedCards.length }} av {{ roundQuestions.length }} fullført</p>
       <ul class="deck-grid plain-list">
         <li v-for="(promptIndex, deckIndex) in shuffledDeck" :key="deckIndex">
           <button
@@ -563,7 +609,9 @@ function restartFromDone() {
           </AppButton>
         </div>
       </template>
-      <p v-else class="field-hint">Øverunde: ingen transkribering eller KI-vurdering.</p>
+      <p v-else class="field-hint">
+        Øverunde: spørsmålene er laget med KI, men svaret blir ikke transkribert eller vurdert.
+      </p>
       <div class="form-grid">
         <AppButton variant="ghost" :disabled="rating || saving" @click="retake">Ta på nytt</AppButton>
         <AppButton :loading="saving" :disabled="rating" @click="nextCard">Neste kort</AppButton>
@@ -573,7 +621,7 @@ function restartFromDone() {
     <article v-else-if="phase === 'done'" class="panel stack">
       <h3>Ferdig</h3>
       <p v-if="practiceMode === 'practice'">
-        Øverunde fullført, ingenting ble lagret eller vurdert.
+        Øverunde fullført. Spørsmålene ble laget med KI; svaret ble ikke lagret eller vurdert.
       </p>
       <p v-else>
         Du har gjennomført runden. Opptak lagres lokalt (IndexedDB) og hvert kort er logget med

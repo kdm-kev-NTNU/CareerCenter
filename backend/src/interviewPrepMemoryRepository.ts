@@ -878,7 +878,7 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       userId,
       thinkSeconds: settings.thinkSeconds,
       answerSeconds: settings.answerSeconds,
-      promptsJson: JSON.stringify(settings.prompts),
+      questionCount: settings.questionCount,
       ratingModel: settings.ratingModel,
       updatedAt: nowIso()
     };
@@ -904,6 +904,8 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       blobKey: input.blobKey,
       transcript: input.transcript,
       prompt: input.prompt ?? "",
+      companyName: input.companyName ?? "",
+      roleDescription: input.roleDescription ?? "",
       feedback: input.feedback,
       createdAt: timestamp,
       updatedAt: timestamp

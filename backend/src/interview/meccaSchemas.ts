@@ -22,6 +22,8 @@ export const videoRunInputSchema = z.object({
   blobKey: z.string().optional(),
   transcript: z.string().default(""),
   prompt: z.string().default(""),
+  companyName: z.string().max(200).default(""),
+  roleDescription: z.string().max(8000).default(""),
   feedback: interviewFeedbackRubricSchema.optional(),
   settings: videoSimulatorSettingsSchema
 });
