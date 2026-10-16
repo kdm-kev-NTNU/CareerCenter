@@ -7,13 +7,16 @@ import type {
   InterviewSessionDto,
   InterviewSimulatorSettingsDto,
   PlanSectionKey,
+  SectionKey,
   SimulatorCallState,
   VoiceSessionDto
 } from "@careercenter/shared";
 import {
   buildPlanSections,
+  buildSectionAttemptHistory,
   canStartSimulators,
   interviewModes,
+  latestSectionAttempt,
   phaseShowsCallStage,
   planSectionLabels,
   transitionSimulatorCall
@@ -22,6 +25,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { interviewPrepApi } from "../../api/interviewPrep.js";
 import InterviewCallStage from "../../components/interview/call/InterviewCallStage.vue";
+import SectionAttemptHistory from "../../components/interview/SectionAttemptHistory.vue";
 import { toneForPrepPlanStatus } from "../../components/interview/statusTone.js";
 import EssentialsSheetEditor from "../../components/interview/EssentialsSheetEditor.vue";
 import { useMediaStream } from "../../composables/useMediaStream.js";
@@ -46,6 +50,9 @@ const savedPlans = ref<InterviewPrepPlanDto[]>([]);
 /** null practises the whole interview; a key practises one section of the plan. */
 const selectedSection = ref<PlanSectionKey | null>(null);
 const planSessions = ref<InterviewSessionDto[]>([]);
+const historyExpandedId = ref<string | null>(null);
+const historyMessages = ref<InterviewMessageDto[] | null>(null);
+const historyMessagesLoading = ref(false);
 const {
   stream: voiceStream,
   acquire: acquireVoiceStream,
@@ -136,20 +143,19 @@ const planLabel = computed(() => {
 });
 
 const planSections = computed(() => (prepPlan.value ? buildPlanSections(prepPlan.value.questions) : []));
-/** Latest finished session per section; "full" is the whole interview. */
-const sectionResults = computed(() => {
-  const latest = new Map<PlanSectionKey | "full", InterviewSessionDto>();
-  for (const item of planSessions.value) {
-    if (!item.finishedAt) continue;
-    const key = item.planSection ?? "full";
-    const current = latest.get(key);
-    if (!current || item.finishedAt > (current.finishedAt ?? "")) latest.set(key, item);
-  }
-  return latest;
-});
+/** Finished attempts per section, versioned by finishedAt. */
+const attemptHistory = computed(() => buildSectionAttemptHistory(planSessions.value));
 const practisedSectionCount = computed(
-  () => planSections.value.filter((item) => sectionResults.value.has(item.key)).length
+  () => planSections.value.filter((item) => attemptHistory.value.has(item.key)).length
 );
+const selectedSectionKey = computed<SectionKey>(() => selectedSection.value ?? "full");
+const selectedAttempts = computed(() => attemptHistory.value.get(selectedSectionKey.value) ?? []);
+const historyTitle = computed(() => {
+  if (!prepPlan.value) return "Historikk";
+  const sectionTitle =
+    selectedSection.value === null ? "Hele intervjuet" : planSectionLabels[selectedSection.value];
+  return `${prepPlan.value.companyName} – ${sectionTitle}: historikk`;
+});
 const startLabel = computed(() => {
   if (inCall.value) return "Opptak pågår";
   return selectedSection.value ? `Start: ${planSectionLabels[selectedSection.value]}` : "Start opptak";
@@ -163,14 +169,56 @@ const modeLabel = computed(() => {
 
 const companyName = computed(() => settings.value?.companyName || prepPlan.value?.companyName || "Intervju");
 
-function sectionMeta(key: PlanSectionKey | "full", fallback: string): string {
-  const sum = sectionResults.value.get(key)?.feedback?.sum;
-  return sum === undefined ? fallback : `${fallback} · sum ${sum}`;
+function formatDelta(delta: number | undefined): string {
+  if (delta === undefined) return "";
+  const sign = delta > 0 ? "+" : "";
+  return ` (${sign}${delta})`;
+}
+
+function sectionMeta(key: SectionKey, fallback: string): string {
+  const latest = latestSectionAttempt(attemptHistory.value, key);
+  if (!latest) return fallback;
+  if (latest.sum === undefined) return `v${latest.version}`;
+  return `v${latest.version} · sum ${latest.sum}${formatDelta(latest.deltaFromPrevious)}`;
+}
+
+function sectionDone(key: SectionKey): boolean {
+  return attemptHistory.value.has(key);
 }
 
 function selectSection(key: PlanSectionKey | null) {
   if (inCall.value || loading.value) return;
   selectedSection.value = key;
+  closeHistoryAttempt();
+}
+
+function closeHistoryAttempt() {
+  historyExpandedId.value = null;
+  historyMessages.value = null;
+  historyMessagesLoading.value = false;
+}
+
+async function openHistoryAttempt(sessionId: string) {
+  historyExpandedId.value = sessionId;
+  historyMessages.value = null;
+  historyMessagesLoading.value = true;
+  try {
+    const all = await interviewPrepApi.sessionMessages(sessionId);
+    historyMessages.value = all.filter((m) => m.role !== "system");
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : "Kunne ikke hente samtale.";
+    historyMessages.value = [];
+  } finally {
+    historyMessagesLoading.value = false;
+  }
+}
+
+/** Select the section (if needed) and start a fresh attempt — creates a new version. */
+async function retrySection(key: PlanSectionKey | null) {
+  if (inCall.value || loading.value) return;
+  selectedSection.value = key;
+  closeHistoryAttempt();
+  await startSession();
 }
 
 async function loadPlanSessions(planId: string) {
@@ -211,6 +259,7 @@ async function loadSavedPlans() {
 async function loadPlan() {
   selectedSection.value = null;
   planSessions.value = [];
+  closeHistoryAttempt();
   if (!routePlanId.value) {
     prepPlan.value = null;
     return;
@@ -391,10 +440,16 @@ async function finishSession(reason: "leave" | "end_tool" = "leave") {
   }
 }
 
-function restartFromFeedback() {
+function backToSetup() {
   applyCallEvent({ type: "restart" });
   messages.value = [];
   session.value = null;
+}
+
+/** Keep the selected section and start the next version immediately. */
+async function restartFromFeedback() {
+  backToSetup();
+  await startSession();
 }
 
 function chatRole(role: string): "user" | "assistant" {
@@ -474,43 +529,73 @@ function printEssentials() {
           {{ practisedSectionCount }} av {{ planSections.length }} seksjoner øvd.
         </p>
         <ul class="section-grid plain-list">
-          <li>
+          <li class="section-tile">
             <button
               type="button"
               class="section-card section-card--full"
               :class="{
                 'section-card--selected': selectedSection === null,
-                'section-card--done': sectionResults.has('full')
+                'section-card--done': sectionDone('full')
               }"
               :aria-pressed="selectedSection === null"
               :disabled="inCall || loading"
               data-test="section-card-full"
               @click="selectSection(null)"
             >
-              <span v-if="sectionResults.has('full')" class="section-card__mark" aria-hidden="true">✓</span>
+              <span v-if="sectionDone('full')" class="section-card__mark" aria-hidden="true">✓</span>
               <span class="section-card__label">Hele intervjuet</span>
               <span class="section-card__meta">{{ sectionMeta("full", "Alle seksjoner") }}</span>
             </button>
+            <button
+              v-if="sectionDone('full')"
+              type="button"
+              class="section-retry"
+              :disabled="inCall || loading"
+              data-test="section-retry-full"
+              @click="retrySection(null)"
+            >
+              Øv på nytt
+            </button>
           </li>
-          <li v-for="item in planSections" :key="item.key">
+          <li v-for="item in planSections" :key="item.key" class="section-tile">
             <button
               type="button"
               class="section-card"
               :class="{
                 'section-card--selected': selectedSection === item.key,
-                'section-card--done': sectionResults.has(item.key)
+                'section-card--done': sectionDone(item.key)
               }"
               :aria-pressed="selectedSection === item.key"
               :disabled="inCall || loading"
               :data-test="`section-card-${item.key}`"
               @click="selectSection(item.key)"
             >
-              <span v-if="sectionResults.has(item.key)" class="section-card__mark" aria-hidden="true">✓</span>
+              <span v-if="sectionDone(item.key)" class="section-card__mark" aria-hidden="true">✓</span>
               <span class="section-card__label">{{ item.title }}</span>
               <span class="section-card__meta">{{ sectionMeta(item.key, `${item.questionCount} spørsmål`) }}</span>
             </button>
+            <button
+              v-if="sectionDone(item.key)"
+              type="button"
+              class="section-retry"
+              :disabled="inCall || loading"
+              :data-test="`section-retry-${item.key}`"
+              @click="retrySection(item.key)"
+            >
+              Øv på nytt
+            </button>
           </li>
         </ul>
+        <SectionAttemptHistory
+          v-if="selectedAttempts.length"
+          :title="historyTitle"
+          :attempts="selectedAttempts"
+          :expanded-session-id="historyExpandedId"
+          :messages="historyMessages"
+          :loading-messages="historyMessagesLoading"
+          @open="openHistoryAttempt"
+          @close="closeHistoryAttempt"
+        />
       </div>
       <label>
         Modus
@@ -573,8 +658,12 @@ function printEssentials() {
         <p>{{ session.feedback.improvement }}</p>
       </div>
       <div class="form-grid">
-        <AppButton data-test="restart-session" @click="restartFromFeedback">Start ny samtale</AppButton>
-        <AppButton variant="ghost" @click="restartFromFeedback">Tilbake til innstillinger</AppButton>
+        <AppButton data-test="restart-session" :loading="loading" @click="restartFromFeedback">
+          Start ny samtale
+        </AppButton>
+        <AppButton variant="ghost" data-test="back-to-setup" @click="backToSetup">
+          Tilbake til innstillinger
+        </AppButton>
       </div>
     </article>
 
@@ -587,6 +676,13 @@ function printEssentials() {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
   gap: 0.75rem;
+}
+
+.section-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
 }
 
 .section-card {
@@ -613,14 +709,19 @@ function printEssentials() {
 }
 
 .section-card--done {
-  border-color: var(--border);
-  background: var(--surface-strong);
-  color: inherit;
+  border-color: #4a7a5c;
+  background: linear-gradient(145deg, #1e4a38, #123528);
+  color: #e8f5ee;
 }
 
 .section-card--selected {
-  outline: 3px solid var(--accent);
+  outline: 3px solid var(--accent, #3d8bfd);
   outline-offset: 2px;
+  color: #e8f0fa;
+}
+
+.section-card--done.section-card--selected {
+  color: #e8f5ee;
 }
 
 .section-card:disabled {
@@ -637,11 +738,35 @@ function printEssentials() {
 
 .section-card__label {
   font-weight: 600;
+  overflow-wrap: anywhere;
+  max-width: 100%;
 }
 
 .section-card__meta {
   font-size: 0.85rem;
   opacity: 0.85;
+  overflow-wrap: anywhere;
+}
+
+.section-retry {
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #2a5078;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.section-retry:hover:not(:disabled) {
+  border-color: var(--accent, #3d8bfd);
+}
+
+.section-retry:disabled {
+  cursor: default;
+  opacity: 0.55;
 }
 
 .essentials-drawer {
