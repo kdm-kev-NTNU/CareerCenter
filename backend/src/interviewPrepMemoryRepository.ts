@@ -841,6 +841,16 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
     return updated;
   }
 
+  async deleteFinishedSession(userId: string, sessionId: string): Promise<boolean> {
+    const session = await this.getSession(userId, sessionId);
+    if (!session?.finishedAt) return false;
+    this.sessions.delete(sessionId);
+    for (const [messageId, message] of this.messages) {
+      if (message.sessionId === sessionId) this.messages.delete(messageId);
+    }
+    return true;
+  }
+
   async listAbilityAttempts(userId: string, limit = 50): Promise<InterviewAbilityTestAttemptRecord[]> {
     return [...this.abilityAttempts.values()]
       .filter((row) => row.userId === userId)

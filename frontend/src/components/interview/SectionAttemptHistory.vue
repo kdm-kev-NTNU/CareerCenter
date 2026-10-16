@@ -3,25 +3,24 @@ import type { InterviewMessageDto, SectionAttempt } from "@careercenter/shared";
 import { starRubricCriterionLabels, starRubricCriteria } from "@careercenter/shared";
 import ChatMessage from "../ui/ChatMessage.vue";
 import AppButton from "../ui/AppButton.vue";
+import { formatScoreDelta } from "./sectionCardView.js";
 
 const props = defineProps<{
   title: string;
   attempts: readonly SectionAttempt[];
+  open: boolean;
   expandedSessionId: string | null;
   messages: InterviewMessageDto[] | null;
   loadingMessages: boolean;
+  deletingSessionId: string | null;
 }>();
 
 const emit = defineEmits<{
+  "toggle-open": [];
   open: [sessionId: string];
   close: [];
+  delete: [attempt: SectionAttempt];
 }>();
-
-function formatDelta(delta: number | undefined): string {
-  if (delta === undefined) return "";
-  const sign = delta > 0 ? "+" : "";
-  return ` (${sign}${delta})`;
-}
 
 function formatDate(iso: string | undefined): string {
   if (!iso) return "";
@@ -43,30 +42,58 @@ function toggle(sessionId: string) {
   if (props.expandedSessionId === sessionId) emit("close");
   else emit("open", sessionId);
 }
+
+function attemptCountLabel(count: number): string {
+  return count === 1 ? "1 forsøk" : `${count} forsøk`;
+}
 </script>
 
 <template>
   <section class="attempt-history stack-tight" data-test="section-attempt-history">
-    <h3 class="attempt-history__title">{{ title }}</h3>
-    <ul class="attempt-history__list plain-list">
+    <button
+      type="button"
+      class="attempt-history__header"
+      :aria-expanded="open"
+      data-test="attempt-history-toggle"
+      @click="emit('toggle-open')"
+    >
+      <span class="attempt-history__title">
+        <span aria-hidden="true">{{ open ? "▾" : "▸" }}</span>
+        {{ title }} ({{ attemptCountLabel(attempts.length) }})
+      </span>
+      <span class="attempt-history__hint">{{ open ? "Skjul" : "Vis" }}</span>
+    </button>
+    <ul v-if="open" class="attempt-history__list plain-list" data-test="attempt-history-list">
       <li v-for="attempt in attempts" :key="attempt.session.id" class="attempt-row">
-        <button
-          type="button"
-          class="attempt-row__toggle"
-          :aria-expanded="expandedSessionId === attempt.session.id"
-          :data-test="`attempt-row-${attempt.version}`"
-          @click="toggle(attempt.session.id)"
-        >
-          <span class="attempt-row__version">Versjon {{ attempt.version }}</span>
-          <span class="attempt-row__meta">
-            <template v-if="attempt.session.finishedAt">
-              {{ formatDate(attempt.session.finishedAt) }}
-            </template>
-            <template v-if="attempt.sum !== undefined">
-              · sum {{ attempt.sum }}{{ formatDelta(attempt.deltaFromPrevious) }}
-            </template>
-          </span>
-        </button>
+        <div class="attempt-row__head" :class="{ 'attempt-row__head--open': expandedSessionId === attempt.session.id }">
+          <button
+            type="button"
+            class="attempt-row__toggle"
+            :aria-expanded="expandedSessionId === attempt.session.id"
+            :data-test="`attempt-row-${attempt.version}`"
+            @click="toggle(attempt.session.id)"
+          >
+            <span class="attempt-row__version">Versjon {{ attempt.version }}</span>
+            <span class="attempt-row__meta">
+              <template v-if="attempt.session.finishedAt">
+                {{ formatDate(attempt.session.finishedAt) }}
+              </template>
+              <template v-if="attempt.sum !== undefined">
+                · sum {{ attempt.sum }}{{ formatScoreDelta(attempt.deltaFromPrevious) }}
+              </template>
+            </span>
+          </button>
+          <button
+            type="button"
+            class="attempt-row__delete danger"
+            :disabled="deletingSessionId !== null"
+            :aria-label="`Slett versjon ${attempt.version}`"
+            :data-test="`attempt-delete-${attempt.version}`"
+            @click="emit('delete', attempt)"
+          >
+            {{ deletingSessionId === attempt.session.id ? "Sletter …" : "Slett" }}
+          </button>
+        </div>
         <div
           v-if="expandedSessionId === attempt.session.id"
           class="attempt-row__detail stack-tight"
@@ -99,9 +126,40 @@ function toggle(sessionId: string) {
 </template>
 
 <style scoped>
+.attempt-history__header,
+.attempt-row__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: #17202a;
+}
+
+.attempt-history__header {
+  padding: 0.65rem 0.75rem;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.attempt-history__header[aria-expanded="true"],
+.attempt-row__head--open {
+  border-color: var(--accent);
+}
+
 .attempt-history__title {
-  margin: 0;
-  font-size: 1rem;
+  display: inline-flex;
+  gap: 0.5rem;
+  font-weight: 600;
+}
+
+.attempt-history__hint {
+  font-size: 0.85rem;
+  color: var(--muted);
 }
 
 .attempt-history__list {
@@ -110,24 +168,24 @@ function toggle(sessionId: string) {
   gap: 0.5rem;
 }
 
+.attempt-row__head {
+  padding: 0.35rem 0.5rem 0.35rem 0;
+}
+
 .attempt-row__toggle {
   display: flex;
+  flex: 1;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 0.35rem 0.75rem;
-  width: 100%;
-  padding: 0.65rem 0.75rem;
-  border: 1px solid var(--border, #2a3648);
-  border-radius: 8px;
-  background: var(--surface-strong, #161e2e);
+  min-width: 0;
+  padding: 0.3rem 0.75rem;
+  border: 0;
+  background: transparent;
   color: inherit;
   font: inherit;
   text-align: left;
   cursor: pointer;
-}
-
-.attempt-row__toggle[aria-expanded="true"] {
-  border-color: var(--accent, #3d8bfd);
 }
 
 .attempt-row__version {
@@ -136,13 +194,29 @@ function toggle(sessionId: string) {
 
 .attempt-row__meta {
   font-size: 0.9rem;
-  opacity: 0.85;
+  color: var(--muted);
+}
+
+.attempt-row__delete {
+  flex-shrink: 0;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.attempt-row__delete:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: #fef3f2;
 }
 
 .attempt-row__detail {
   margin-top: 0.5rem;
   padding: 0.75rem;
-  border-left: 3px solid var(--accent, #3d8bfd);
+  border-left: 3px solid var(--accent);
 }
 
 .attempt-scores {

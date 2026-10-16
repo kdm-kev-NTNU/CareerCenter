@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import {
+  MTA_AIRCRAFT_HALF_HEIGHT,
   MTA_GATE_STEP,
   formatMtaEquation,
   generateScalesMta,
@@ -11,6 +12,10 @@ import MtaRunner from "./MtaRunner.vue";
 describe("MtaRunner", () => {
   const timeline = generateScalesMta(21, 60_000);
   const session = startMtaSession(timeline, 1, Date.now());
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   it("renders sky, equation, letters, gate controls and timer", () => {
     const wrapper = mount(MtaRunner, {
@@ -50,5 +55,26 @@ describe("MtaRunner", () => {
     expect(next.equationIndex).toBe(1);
     expect(next.equationJudgments).toHaveLength(1);
     expect(formatMtaEquation(timeline.equations[0]!)).toBe(first);
+  });
+
+  it("renders the aircraft as a non-button sized from MTA_AIRCRAFT_HALF_HEIGHT", () => {
+    const t0 = 1_000_000;
+    const ac = timeline.aircraft[0]!;
+    vi.useFakeTimers();
+    vi.setSystemTime(t0 + ac.startOffsetMs + 1_000);
+    const earlySession = startMtaSession(timeline, 1, t0);
+
+    const wrapper = mount(MtaRunner, {
+      props: { session: earlySession, title: "Scales MTA VI" }
+    });
+
+    const plane = wrapper.find(".mta-aircraft");
+    expect(plane.exists()).toBe(true);
+    expect(plane.element.tagName.toLowerCase()).toBe("div");
+    const style = plane.attributes("style") ?? "";
+    const expectedHeight = `${MTA_AIRCRAFT_HALF_HEIGHT * 2 * 100}%`;
+    expect(style).toContain(`height: ${expectedHeight}`);
+
+    wrapper.unmount();
   });
 });
