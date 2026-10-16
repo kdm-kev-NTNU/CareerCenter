@@ -1,5 +1,6 @@
 import type {
   AonSourcePdfMeta,
+  CandidateBackgroundDto,
   EssentialsDraftDto,
   InterviewAbilityTestAttemptDto,
   InterviewBankQuestionDto,
@@ -9,7 +10,6 @@ import type {
   InterviewImportJobDto,
   InterviewKnowledgeDocDto,
   InterviewMessageDto,
-  InterviewPrepPlanCaseDto,
   InterviewPrepPlanDto,
   InterviewSessionDto,
   InterviewSimulatorSettingsDto,
@@ -46,7 +46,6 @@ export interface KnowledgeImportResult {
 
 export interface PrepPlanDetail {
   plan: InterviewPrepPlanDto;
-  rankedCases: InterviewPrepPlanCaseDto[];
 }
 
 export const interviewPrepApi = {
@@ -148,6 +147,23 @@ export const interviewPrepApi = {
     request<InterviewImportJobDto>(`/api/interview/import-jobs/${id}/cancel`, { method: "POST" }),
   deleteImportJob: (id: string) => request<void>(`/api/interview/import-jobs/${id}`, { method: "DELETE" }),
 
+  background: () => request<CandidateBackgroundDto>("/api/interview/background"),
+  saveBackgroundNotes: (notes: string) =>
+    request<CandidateBackgroundDto>("/api/interview/background", {
+      method: "PUT",
+      body: JSON.stringify({ notes })
+    }),
+  uploadBackgroundCv: (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return uploadRequest<CandidateBackgroundDto>("/api/interview/background/cv", formData);
+  },
+  uploadBackgroundTranscript: (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return uploadRequest<CandidateBackgroundDto>("/api/interview/background/transcript", formData);
+  },
+
   plans: () => request<InterviewPrepPlanDto[]>("/api/interview/plans"),
   plan: (id: string) => request<PrepPlanDetail>(`/api/interview/plans/${id}`),
   createPlan: (payload: {
@@ -212,7 +228,6 @@ export const interviewPrepApi = {
     payload: {
       text: string;
       category: string;
-      audience?: QuestionAudience;
       target?: string;
       notes?: string;
       included?: boolean;
@@ -220,7 +235,7 @@ export const interviewPrepApi = {
   ) =>
     request<InterviewPrepPlanDto>(`/api/interview/plans/${planId}/questions`, {
       method: "POST",
-      body: JSON.stringify(payload)
+      body: JSON.stringify({ ...payload, audience: "candidate" })
     }),
   deletePlanQuestion: (planId: string, questionId: string) =>
     request<InterviewPrepPlanDto>(`/api/interview/plans/${planId}/questions/${questionId}`, {

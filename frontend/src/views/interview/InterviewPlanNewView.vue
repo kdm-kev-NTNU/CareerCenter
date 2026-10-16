@@ -8,6 +8,7 @@ import {
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { interviewPrepApi } from "../../api/interviewPrep.js";
+import CandidateBackgroundPanel from "../../components/interview/CandidateBackgroundPanel.vue";
 import AppButton from "../../components/ui/AppButton.vue";
 import PageHeader from "../../components/ui/PageHeader.vue";
 
@@ -45,8 +46,9 @@ async function submit() {
   <section class="stack">
     <PageHeader
       title="Ny prep-plan"
-      lead="Oppgi bedrift, stilling og lim inn stillingsannonsen. Researchen lager en bedriftsrapport med nisje-info og svarforslag til bedriftsspesifikke spørsmål."
+      lead="Oppdater bakgrunnen din, oppgi bedrift og stilling, og lim inn annonsen. Researchen lager en bedriftsrapport med spørsmål du bør kunne svare på og svarforslag basert på CV-en din."
     />
+    <CandidateBackgroundPanel />
     <form class="panel stack" @submit.prevent="submit">
       <label>
         Bedrift
