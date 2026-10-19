@@ -3,6 +3,7 @@ import {
   canDeletePrepPlan,
   canStartSimulators,
   isPrepPlanPipelineActive,
+  parsePrepPlanPipelineStep,
   prepPlanResumePoint,
   prepPlanStepVisual,
   transitionPrepPlan
@@ -62,28 +63,31 @@ describe("transitionPrepPlan", () => {
     expect(prepPlanResumePoint("searching", 0)).toEqual({ kind: "research", from: "searching" });
     expect(prepPlanResumePoint("research_notes", 0)).toEqual({ kind: "research", from: "research_notes" });
     expect(prepPlanResumePoint("company_profile", 0)).toEqual({ kind: "research", from: "company_profile" });
-    expect(prepPlanResumePoint("company_report", 0)).toEqual({ kind: "research", from: "company_report" });
     expect(prepPlanResumePoint("clarifications", 0)).toEqual({ kind: "research", from: "clarifications" });
     expect(prepPlanResumePoint("clarifications", 1)).toEqual({ kind: "awaiting_answers" });
     expect(prepPlanResumePoint("clarifications", 2)).toEqual({ kind: "awaiting_answers" });
     expect(prepPlanResumePoint("awaiting_answers", 1)).toEqual({ kind: "awaiting_answers" });
     expect(prepPlanResumePoint("curating_questions", 1)).toEqual({ kind: "curation" });
+    expect(prepPlanResumePoint("drafting_answers", 1)).toEqual({ kind: "answers" });
     expect(prepPlanResumePoint("created", 0)).toEqual({ kind: "research", from: "created" });
+  });
+
+  it("maps legacy company_report to clarifications", () => {
+    expect(parsePrepPlanPipelineStep("company_report")).toBe("clarifications");
+    expect(parsePrepPlanPipelineStep("drafting_answers")).toBe("drafting_answers");
+    expect(parsePrepPlanPipelineStep("unknown_step")).toBe("created");
   });
 
   it("marks earlier pipeline steps done and later steps pending", () => {
     expect(prepPlanStepVisual("created", "research_notes", "researching")).toBe("done");
     expect(prepPlanStepVisual("research_notes", "research_notes", "researching")).toBe("active");
     expect(prepPlanStepVisual("company_profile", "research_notes", "researching")).toBe("pending");
-    expect(prepPlanStepVisual("company_report", "company_profile", "researching")).toBe("pending");
-    expect(prepPlanStepVisual("company_profile", "company_report", "researching")).toBe("done");
-    expect(prepPlanStepVisual("company_report", "company_report", "researching")).toBe("active");
-    expect(prepPlanStepVisual("clarifications", "company_report", "researching")).toBe("pending");
+    expect(prepPlanStepVisual("clarifications", "company_profile", "researching")).toBe("pending");
     expect(prepPlanStepVisual("searching", "searching", "failed")).toBe("failed");
     expect(prepPlanStepVisual("created", "ready", "ready")).toBe("done");
     expect(prepPlanStepVisual("ready", "ready", "ready")).toBe("done");
     expect(isPrepPlanPipelineActive("searching", "researching")).toBe(true);
-    expect(isPrepPlanPipelineActive("company_report", "researching")).toBe(true);
+    expect(isPrepPlanPipelineActive("drafting_answers", "curating")).toBe(true);
     expect(isPrepPlanPipelineActive("awaiting_answers", "awaiting_answers")).toBe(false);
     expect(isPrepPlanPipelineActive("clarifications", "awaiting_answers")).toBe(true);
     expect(isPrepPlanPipelineActive("ready", "ready")).toBe(false);

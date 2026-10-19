@@ -29,10 +29,10 @@ export const prepPlanPipelineStepLabel = {
   searching: "Nett-søk",
   research_notes: "Research-notater",
   company_profile: "Bedriftsprofil",
-  company_report: "Bedriftsrapport",
   clarifications: "Oppklaringsspørsmål",
   awaiting_answers: "Dine svar",
   curating_questions: "Spørsmål fra banken",
+  drafting_answers: "Eksempelsvar og tips",
   ready: "Planen er klar"
 } as const satisfies Record<PrepPlanPipelineStep, string>;
 

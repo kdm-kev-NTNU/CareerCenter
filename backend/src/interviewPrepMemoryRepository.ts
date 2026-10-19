@@ -367,7 +367,6 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       researchNotes: "",
       searchSnippet: "",
       companyProfileJson: "{}",
-      companyReportJson: "",
       clarificationRound: 0,
       curationFilledCount: 0,
       clarifications: [],
@@ -400,7 +399,6 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       researchNotes?: string;
       searchSnippet?: string;
       companyProfileJson?: string;
-      companyReportJson?: string;
       curationFilledCount?: number;
     }
   ): Promise<InterviewPrepPlanRecord | null> {
@@ -412,7 +410,6 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       researchNotes: input.researchNotes ?? plan.researchNotes,
       searchSnippet: input.searchSnippet ?? plan.searchSnippet,
       companyProfileJson: input.companyProfileJson ?? plan.companyProfileJson,
-      companyReportJson: input.companyReportJson ?? plan.companyReportJson,
       curationFilledCount: input.curationFilledCount ?? plan.curationFilledCount,
       updatedAt: nowIso()
     };
@@ -427,7 +424,6 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       researchNotes: string;
       clarifications: Array<{ question: string; sortOrder: number }>;
       companyProfileJson?: string;
-      companyReportJson?: string;
       clarificationRound?: number;
     }
   ): Promise<InterviewPrepPlanRecord | null> {
@@ -437,7 +433,6 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       ...plan,
       researchNotes: input.researchNotes,
       companyProfileJson: input.companyProfileJson ?? plan.companyProfileJson,
-      companyReportJson: input.companyReportJson ?? plan.companyReportJson,
       clarificationRound: input.clarificationRound ?? 1,
       clarifications: input.clarifications.map((item) => ({
         id: nanoid(),
@@ -530,11 +525,31 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
         storyId: item.storyId,
         gapReason: item.gapReason,
         included: true,
-        notes: item.notes ?? ""
+        notes: item.notes ?? "",
+        exampleAnswer: "",
+        tips: []
       })),
       updatedAt: nowIso()
     };
     this.prepPlans.set(id, updated);
+    return updated;
+  }
+
+  async setPrepPlanAnswerDrafts(
+    userId: string,
+    planId: string,
+    drafts: Array<{ questionAlias: string; exampleAnswer: string; tips: string[] }>
+  ): Promise<InterviewPrepPlanRecord | null> {
+    const plan = await this.getPrepPlan(userId, planId);
+    if (!plan) return null;
+    const draftMap = new Map(drafts.map((d) => [d.questionAlias, d]));
+    const questions = plan.questions.map((q) => {
+      const draft = draftMap.get(q.id);
+      if (!draft) return q;
+      return { ...q, exampleAnswer: draft.exampleAnswer, tips: draft.tips };
+    });
+    const updated = { ...plan, questions, updatedAt: nowIso() };
+    this.prepPlans.set(planId, updated);
     return updated;
   }
 
@@ -569,7 +584,9 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       storyId: replacement.storyId,
       gapReason: undefined,
       included: existing.included,
-      notes: existing.notes
+      notes: existing.notes,
+      exampleAnswer: "",
+      tips: []
     };
     const updated = { ...plan, questions, updatedAt: nowIso() };
     this.prepPlans.set(planId, updated);
@@ -588,6 +605,7 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
     if (index < 0) return null;
     const existing = plan.questions[index]!;
     const questions = [...plan.questions];
+    const textChanged = patch.text !== undefined && patch.text !== existing.text;
     questions[index] = {
       ...existing,
       text: patch.text ?? existing.text,
@@ -595,7 +613,9 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       notes: patch.notes ?? existing.notes,
       included: patch.included ?? existing.included,
       source: patch.source ?? existing.source,
-      gapReason: patch.text && patch.text !== existing.text ? undefined : existing.gapReason
+      gapReason: textChanged ? undefined : existing.gapReason,
+      exampleAnswer: textChanged ? "" : existing.exampleAnswer,
+      tips: textChanged ? [] : existing.tips
     };
     const updated = { ...plan, questions, updatedAt: nowIso() };
     this.prepPlans.set(planId, updated);
@@ -620,7 +640,9 @@ export class InterviewPrepMemoryRepository implements InterviewPrepRepository {
       sortOrder: maxOrder + 1,
       source: "custom" as const,
       included: input.included ?? true,
-      notes: input.notes ?? ""
+      notes: input.notes ?? "",
+      exampleAnswer: "",
+      tips: []
     };
     const updated = {
       ...plan,

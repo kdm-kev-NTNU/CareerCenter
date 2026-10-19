@@ -84,36 +84,14 @@ export const companyProfileSchema = z.object({
   summary: z.string().default("")
 });
 
-const reportText = (max: number) => z.string().max(max);
-const reportBullet = (max = 200) => z.string().min(1).max(max);
-
-export const companyReportSchema = z.object({
-  headline: reportText(120).default(""),
-  mustKnow: z.array(reportBullet(160)).max(4).default([]),
-  questionPrep: z
-    .array(
-      z.object({
-        question: reportBullet(140),
-        whyTheyAsk: reportBullet(160),
-        suggestedAnswer: reportText(900).default(""),
-        backgroundUsed: z.array(reportBullet(120)).max(4).default([]),
-        companyHooks: z.array(reportBullet(120)).max(3).default([])
-      })
-    )
-    .min(6)
-    .max(8)
-    .default([]),
-  questionsToAsk: z
-    .array(
-      z.object({
-        question: reportBullet(140),
-        why: reportBullet(160)
-      })
-    )
-    .min(4)
-    .max(6)
-    .default([]),
-  sources: z.array(reportBullet(140)).max(4).default([])
+export const answerDraftBatchSchema = z.object({
+  drafts: z.array(
+    z.object({
+      questionAlias: z.string().min(1),
+      exampleAnswer: z.string().min(1),
+      tips: z.array(z.string().min(1)).min(1).max(5)
+    })
+  )
 });
 
 export const clarificationListSchema = z.object({

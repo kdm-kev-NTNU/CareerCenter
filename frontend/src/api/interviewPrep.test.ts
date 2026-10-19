@@ -179,19 +179,19 @@ describe("interviewPrepApi", () => {
     );
   });
 
-  it("downloads company report PDF via requestBlob", async () => {
+  it("downloads practice docx via requestBlob", async () => {
     const click = vi.fn();
     const anchor = { href: "", download: "", click } as unknown as HTMLAnchorElement;
     vi.spyOn(document, "createElement").mockReturnValue(anchor);
-    const createObjectURL = vi.fn(() => "blob:report");
+    const createObjectURL = vi.fn(() => "blob:practice");
     const revokeObjectURL = vi.fn();
     vi.stubGlobal("URL", { createObjectURL, revokeObjectURL });
 
-    await interviewPrepApi.downloadCompanyReport("p1", "DNB ASA");
+    await interviewPrepApi.downloadPracticeDocx("p1", "DNB ASA");
 
-    expect(mockedRequestBlob).toHaveBeenCalledWith("/api/interview/plans/p1/company-report.pdf");
-    expect(anchor.download).toBe("dnb-asa-bedriftsrapport.pdf");
+    expect(mockedRequestBlob).toHaveBeenCalledWith("/api/interview/plans/p1/practice.docx");
+    expect(anchor.download).toBe("dnb-asa-øvingsdokument.docx");
     expect(click).toHaveBeenCalled();
-    expect(revokeObjectURL).toHaveBeenCalledWith("blob:report");
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:practice");
   });
 });

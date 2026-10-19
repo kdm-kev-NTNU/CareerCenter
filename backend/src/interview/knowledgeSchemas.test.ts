@@ -1,8 +1,8 @@
 import { zodTextFormat } from "openai/helpers/zod";
 import { describe, expect, it } from "vitest";
 import {
+  answerDraftBatchSchema,
   bankQuestionExtractSchema,
-  companyReportSchema,
   curatedBankSelectionSchema,
   essentialsDraftSchema,
   prepPlanIntakeSchema,
@@ -86,57 +86,34 @@ describe("prepPlanIntakeSchema", () => {
   });
 });
 
-function sampleQuestionPrep(count: number) {
-  return Array.from({ length: count }, (_, i) => ({
-    question: `Spørsmål ${i + 1}?`,
-    whyTheyAsk: "Tester fit.",
-    suggestedAnswer: "Jeg …",
-    backgroundUsed: ["CV-faktum"],
-    companyHooks: ["Bedriftsfaktum"]
-  }));
-}
-
-function sampleQuestionsToAsk(count: number) {
-  return Array.from({ length: count }, (_, i) => ({
-    question: `Spørsmål til dem ${i + 1}?`,
-    why: "Lurt fordi …"
-  }));
-}
-
-describe("companyReportSchema", () => {
+describe("answerDraftBatchSchema", () => {
   it("converts to strict structured outputs", () => {
-    expect(() => zodTextFormat(companyReportSchema, "structured_response")).not.toThrow();
+    expect(() => zodTextFormat(answerDraftBatchSchema, "structured_response")).not.toThrow();
   });
 
-  it("accepts a full question-prep report", () => {
-    const parsed = companyReportSchema.parse({
-      headline: "DNB",
-      mustKnow: ["Markets"],
-      questionPrep: sampleQuestionPrep(6),
-      questionsToAsk: sampleQuestionsToAsk(4),
-      sources: ["dnb.no"]
+  it("accepts a batch of answer drafts", () => {
+    const parsed = answerDraftBatchSchema.parse({
+      drafts: [
+        { questionAlias: "Q1", exampleAnswer: "Jeg ville …", tips: ["Bruk STAR-metoden"] },
+        { questionAlias: "Q2", exampleAnswer: "Mitt sterkeste …", tips: ["Vær konkret", "Gi eksempler"] }
+      ]
     });
-    expect(parsed.questionPrep).toHaveLength(6);
-    expect(parsed.questionsToAsk).toHaveLength(4);
-    expect(parsed.mustKnow).toEqual(["Markets"]);
+    expect(parsed.drafts).toHaveLength(2);
+    expect(parsed.drafts[0].tips).toEqual(["Bruk STAR-metoden"]);
   });
 
-  it("rejects legacy report shapes", () => {
+  it("rejects empty exampleAnswer", () => {
     expect(() =>
-      companyReportSchema.parse({
-        headline: "Gammel",
-        nicheInsights: ["x"],
-        companyQuestionPrep: [{ question: "Hvorfor?", answerAngle: "vinkel", nicheHooks: [] }],
-        questionsToAsk: ["En string"]
+      answerDraftBatchSchema.parse({
+        drafts: [{ questionAlias: "Q1", exampleAnswer: "", tips: ["tips"] }]
       })
     ).toThrow();
   });
 
-  it("rejects too few questionPrep items", () => {
+  it("rejects empty tips array", () => {
     expect(() =>
-      companyReportSchema.parse({
-        questionPrep: sampleQuestionPrep(3),
-        questionsToAsk: sampleQuestionsToAsk(4)
+      answerDraftBatchSchema.parse({
+        drafts: [{ questionAlias: "Q1", exampleAnswer: "Svar", tips: [] }]
       })
     ).toThrow();
   });

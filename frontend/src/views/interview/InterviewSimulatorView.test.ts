@@ -82,7 +82,9 @@ function makePlan(id: string, status: PrepPlanStatus): InterviewPrepPlanDto {
         sortOrder: 0,
         source: "bank",
         included: true,
-        notes: ""
+        notes: "",
+        exampleAnswer: "",
+        tips: []
       }
     ],
     repeatedStoryIds: [],
@@ -557,5 +559,76 @@ describe("InterviewSimulatorView plan picker", () => {
     expect(api.finishSession).toHaveBeenCalledWith("s1");
     expect(document.body.querySelector("[data-test='call-stage']")).toBeNull();
     expect(wrapper.get("[data-test='feedback-panel']").text()).toContain("Feedback (sum 24)");
+  });
+
+  it("awaits in-flight transcript appends before calling finish", async () => {
+    const stop = vi.fn();
+    let resolveAppend: (value: Awaited<ReturnType<typeof api.appendTranscript>>) => void = () => undefined;
+    const appendGate = new Promise<Awaited<ReturnType<typeof api.appendTranscript>>>((resolve) => {
+      resolveAppend = resolve;
+    });
+
+    api.createSession.mockResolvedValue({ id: "s1" } as Awaited<ReturnType<typeof api.createSession>>);
+    api.createVoiceSession.mockResolvedValue({
+      mock: false,
+      model: "gpt-realtime",
+      clientSecret: "secret",
+      expiresAt: "2026-10-15T12:00:00.000Z",
+      tools: []
+    });
+    api.appendTranscript.mockReturnValue(appendGate);
+    api.finishSession.mockResolvedValue({
+      id: "s1",
+      mode: "behavioral_mock",
+      title: "Øving: Bedrift a",
+      prepPlanId: "a",
+      finishedAt: "2026-10-15T12:05:00.000Z",
+      feedback: {
+        scores: {
+          openingAndStructure: 3,
+          situationAndTask: 3,
+          action: 3,
+          result: 3,
+          learning: 3,
+          ownership: 3,
+          tempoAndLength: 3,
+          relevance: 3
+        },
+        sum: 24,
+        improvement: "Bra."
+      },
+      createdAt: "2026-10-15T12:00:00.000Z",
+      updatedAt: "2026-10-15T12:05:00.000Z"
+    });
+
+    let onTranscript: ((role: "user" | "assistant", text: string) => void) | undefined;
+    connectVoice.mockImplementation(async (input) => {
+      onTranscript = input.onTranscript;
+      return { pc: {} as RTCPeerConnection, stop };
+    });
+
+    const { wrapper } = await mountView("/interview/simulator?planId=a");
+    await wrapper.get("[data-test='start-recording']").trigger("click");
+    await flushPromises();
+
+    onTranscript?.("user", "Jeg ledet RAG-prosjektet.");
+    expect(api.appendTranscript).toHaveBeenCalled();
+
+    const leave = document.body.querySelector("[data-test='leave-call']") as HTMLButtonElement;
+    leave.click();
+    await flushPromises();
+
+    expect(api.finishSession).not.toHaveBeenCalled();
+
+    resolveAppend({
+      id: "m1",
+      role: "user",
+      content: "Jeg ledet RAG-prosjektet.",
+      createdAt: "2026-10-15T12:01:00.000Z"
+    });
+    await flushPromises();
+
+    expect(api.finishSession).toHaveBeenCalledWith("s1");
+    wrapper.unmount();
   });
 });
