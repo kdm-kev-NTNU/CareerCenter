@@ -419,6 +419,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       researchNotes?: string;
       searchSnippet?: string;
       companyProfileJson?: string;
+      companyReportJson?: string;
       curationFilledCount?: number;
     }
   ): Promise<InterviewPrepPlanRecord | null> {
@@ -431,6 +432,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
         ...(input.researchNotes !== undefined ? { researchNotes: input.researchNotes } : {}),
         ...(input.searchSnippet !== undefined ? { searchSnippet: input.searchSnippet } : {}),
         ...(input.companyProfileJson !== undefined ? { companyProfileJson: input.companyProfileJson } : {}),
+        ...(input.companyReportJson !== undefined ? { companyReportJson: input.companyReportJson } : {}),
         ...(input.curationFilledCount !== undefined
           ? { curationFilledCount: input.curationFilledCount }
           : {})
@@ -447,6 +449,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       researchNotes: string;
       clarifications: Array<{ question: string; sortOrder: number }>;
       companyProfileJson?: string;
+      companyReportJson?: string;
       clarificationRound?: number;
     }
   ): Promise<InterviewPrepPlanRecord | null> {
@@ -462,6 +465,9 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
           clarificationRound: round,
           ...(input.companyProfileJson !== undefined
             ? { companyProfileJson: input.companyProfileJson }
+            : {}),
+          ...(input.companyReportJson !== undefined
+            ? { companyReportJson: input.companyReportJson }
             : {}),
           clarifications: {
             create: input.clarifications.map((item) => ({
@@ -568,28 +574,6 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
     return this.getPrepPlan(userId, id);
   }
 
-  async setPrepPlanAnswerDrafts(
-    userId: string,
-    planId: string,
-    drafts: Array<{ questionAlias: string; exampleAnswer: string; tips: string[] }>
-  ): Promise<InterviewPrepPlanRecord | null> {
-    const plan = await this.getPrepPlan(userId, planId);
-    if (!plan) return null;
-    await this.prisma.$transaction(
-      drafts.map((d) =>
-        this.prisma.interviewPrepQuestion.updateMany({
-          where: { id: d.questionAlias, planId },
-          data: { exampleAnswer: d.exampleAnswer, tips: d.tips }
-        })
-      )
-    );
-    await this.prisma.interviewPrepPlan.update({
-      where: { id: planId },
-      data: { updatedAt: new Date() }
-    });
-    return this.getPrepPlan(userId, planId);
-  }
-
   async replacePlanQuestion(
     userId: string,
     planId: string,
@@ -616,9 +600,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
         source: replacement.source,
         bankQuestionId: replacement.bankQuestionId ?? null,
         storyId: replacement.storyId ?? null,
-        gapReason: null,
-        exampleAnswer: "",
-        tips: []
+        gapReason: null
       }
     });
     await this.prisma.interviewPrepPlan.update({
@@ -647,7 +629,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
         ...(patch.notes !== undefined ? { notes: patch.notes } : {}),
         ...(patch.included !== undefined ? { included: patch.included } : {}),
         ...(patch.source !== undefined ? { source: patch.source } : {}),
-        ...(textChanged ? { gapReason: null, exampleAnswer: "", tips: [] } : {})
+        ...(textChanged ? { gapReason: null } : {})
       }
     });
     await this.prisma.interviewPrepPlan.update({
@@ -1142,6 +1124,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
       researchNotes: row.researchNotes,
       searchSnippet: row.searchSnippet,
       companyProfileJson: row.companyProfileJson,
+      companyReportJson: row.companyReportJson,
       clarificationRound: row.clarificationRound,
       curationFilledCount: row.curationFilledCount,
       failureReason: row.failureReason ?? undefined,
@@ -1167,9 +1150,7 @@ export class InterviewPrepPrismaRepository implements InterviewPrepRepository {
           storyId: item.storyId ?? undefined,
           gapReason: item.gapReason ?? undefined,
           included: item.included,
-          notes: item.notes,
-          exampleAnswer: item.exampleAnswer ?? "",
-          tips: item.tips ?? []
+          notes: item.notes
         })),
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString()
@@ -1415,6 +1396,7 @@ type PlanRow = {
   researchNotes: string;
   searchSnippet: string;
   companyProfileJson: string;
+  companyReportJson: string;
   clarificationRound: number;
   curationFilledCount: number;
   failureReason: string | null;
@@ -1434,7 +1416,5 @@ type PlanRow = {
     gapReason: string | null;
     included: boolean;
     notes: string;
-    exampleAnswer?: string;
-    tips?: string[];
   }>;
 };

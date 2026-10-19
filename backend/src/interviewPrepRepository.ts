@@ -93,8 +93,6 @@ export interface InterviewPrepQuestionRecord {
   gapReason?: string;
   included: boolean;
   notes: string;
-  exampleAnswer: string;
-  tips: string[];
 }
 
 export interface InterviewPrepPlanRecord {
@@ -110,6 +108,7 @@ export interface InterviewPrepPlanRecord {
   researchNotes: string;
   searchSnippet: string;
   companyProfileJson: string;
+  companyReportJson: string;
   clarificationRound: number;
   curationFilledCount: number;
   failureReason?: string;
@@ -404,6 +403,7 @@ export interface InterviewPrepRepository {
       researchNotes?: string;
       searchSnippet?: string;
       companyProfileJson?: string;
+      companyReportJson?: string;
       curationFilledCount?: number;
     }
   ): Promise<InterviewPrepPlanRecord | null>;
@@ -414,6 +414,7 @@ export interface InterviewPrepRepository {
       researchNotes: string;
       clarifications: Array<{ question: string; sortOrder: number }>;
       companyProfileJson?: string;
+      companyReportJson?: string;
       clarificationRound?: number;
     }
   ): Promise<InterviewPrepPlanRecord | null>;
@@ -445,11 +446,6 @@ export interface InterviewPrepRepository {
       }>;
       curationFilledCount?: number;
     }
-  ): Promise<InterviewPrepPlanRecord | null>;
-  setPrepPlanAnswerDrafts(
-    userId: string,
-    planId: string,
-    drafts: Array<{ questionAlias: string; exampleAnswer: string; tips: string[] }>
   ): Promise<InterviewPrepPlanRecord | null>;
   getCandidateBackground(userId: string): Promise<CandidateBackgroundRecord | null>;
   upsertCandidateBackgroundNotes(

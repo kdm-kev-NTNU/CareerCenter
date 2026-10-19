@@ -18,30 +18,9 @@ const VOICE_TOOLS = [
   }
 ];
 
-/** Session body for OpenAI Realtime GA client_secrets. Transcription must be explicit — off by default. */
-interface RealtimeSessionBody {
-  type: "realtime";
-  model: string;
-  tools: Array<{
-    type: "function";
-    name: string;
-    description: string;
-    parameters: { type: "object"; properties: Record<string, never> };
-  }>;
-  instructions?: string;
-  audio: {
-    input: {
-      transcription: {
-        model: string;
-        language: string;
-      };
-    };
-  };
-}
-
 /** Ephemeral Realtime client secret. Never returns the API key. */
 export async function createVoiceSession(
-  env: Pick<Env, "OPENAI_API_KEY" | "OPENAI_VOICE_MODEL" | "OPENAI_TRANSCRIBE_MODEL">,
+  env: Pick<Env, "OPENAI_API_KEY" | "OPENAI_VOICE_MODEL">,
   instructions?: string
 ): Promise<VoiceSessionPayload> {
   const expiresAt = new Date(Date.now() + 55_000).toISOString();
@@ -57,23 +36,15 @@ export async function createVoiceSession(
     };
   }
 
-  const sessionBody: RealtimeSessionBody = {
+  const sessionBody: Record<string, unknown> = {
     type: "realtime",
     model,
     tools: VOICE_TOOLS.map((tool) => ({
-      type: "function" as const,
+      type: "function",
       name: tool.name,
       description: tool.description,
-      parameters: { type: "object" as const, properties: {} }
-    })),
-    audio: {
-      input: {
-        transcription: {
-          model: env.OPENAI_TRANSCRIBE_MODEL,
-          language: "no"
-        }
-      }
-    }
+      parameters: { type: "object", properties: {} }
+    }))
   };
   if (instructions?.trim()) {
     sessionBody.instructions = instructions.trim();

@@ -53,8 +53,8 @@ describe("describePipelineFailure", () => {
 
 describe("PrepPipelineError", () => {
   it("keeps step metadata", () => {
-    const error = new PrepPipelineError("drafting_answers", "Svar feilet.", new ZodError([]));
-    expect(error.step).toBe("drafting_answers");
+    const error = new PrepPipelineError("company_report", "Rapport feilet.", new ZodError([]));
+    expect(error.step).toBe("company_report");
     expect(error.cause).toBeInstanceOf(ZodError);
   });
 });

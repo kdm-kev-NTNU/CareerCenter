@@ -1,4 +1,5 @@
 import type { CompanyProfile } from "./companyProfile.js";
+import type { CompanyReport } from "./companyReport.js";
 import type { PlanSectionKey } from "./planSections.js";
 import type { PrepPlanPipelineStep } from "./prepPlanState.js";
 import type {
@@ -96,8 +97,6 @@ export interface InterviewPrepQuestionDto {
   gapReason?: string;
   included: boolean;
   notes: string;
-  exampleAnswer: string;
-  tips: string[];
 }
 
 export interface InterviewPrepPlanDto {
@@ -111,6 +110,7 @@ export interface InterviewPrepPlanDto {
   jobAdText: string;
   researchNotes: string;
   companyProfile?: CompanyProfile;
+  companyReport?: CompanyReport;
   clarificationRound: number;
   curationFilledCount: number;
   failureReason?: string;

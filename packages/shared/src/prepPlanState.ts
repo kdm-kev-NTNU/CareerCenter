@@ -13,18 +13,17 @@ export type PrepPlanEvent =
   | { type: "cancel" }
   | { type: "resume_research" }
   | { type: "resume_answers" }
-  | { type: "resume_curation" }
-  | { type: "resume_answers_draft" };
+  | { type: "resume_curation" };
 
 export const prepPlanPipelineSteps = [
   "created",
   "searching",
   "research_notes",
   "company_profile",
+  "company_report",
   "clarifications",
   "awaiting_answers",
   "curating_questions",
-  "drafting_answers",
   "ready"
 ] as const;
 export type PrepPlanPipelineStep = (typeof prepPlanPipelineSteps)[number];
@@ -35,6 +34,7 @@ export const researchPipelineSteps = [
   "searching",
   "research_notes",
   "company_profile",
+  "company_report",
   "clarifications"
 ] as const;
 export type ResearchPipelineStep = (typeof researchPipelineSteps)[number];
@@ -42,8 +42,7 @@ export type ResearchPipelineStep = (typeof researchPipelineSteps)[number];
 export type PrepPlanResumePoint =
   | { kind: "research"; from: ResearchPipelineStep }
   | { kind: "awaiting_answers" }
-  | { kind: "curation" }
-  | { kind: "answers" };
+  | { kind: "curation" };
 
 /**
  * Where to resume a failed/cancelled plan without redoing finished work.
@@ -54,9 +53,6 @@ export function prepPlanResumePoint(
   step: PrepPlanPipelineStep,
   clarificationRound: number
 ): PrepPlanResumePoint {
-  if (step === "drafting_answers") {
-    return { kind: "answers" };
-  }
   if (step === "curating_questions" || step === "ready") {
     return { kind: "curation" };
   }
@@ -75,7 +71,6 @@ export function prepPlanResumePoint(
 export type PrepPlanStepVisual = "done" | "active" | "pending" | "failed";
 
 export function parsePrepPlanPipelineStep(value: string | null | undefined): PrepPlanPipelineStep {
-  if (value === "company_report") return "clarifications";
   if (value && (prepPlanPipelineSteps as readonly string[]).includes(value)) {
     return value as PrepPlanPipelineStep;
   }
@@ -111,9 +106,9 @@ export function isPrepPlanPipelineActive(step: PrepPlanPipelineStep, status: Pre
     step === "searching" ||
     step === "research_notes" ||
     step === "company_profile" ||
+    step === "company_report" ||
     step === "clarifications" ||
-    step === "curating_questions" ||
-    step === "drafting_answers"
+    step === "curating_questions"
   );
 }
 
@@ -175,7 +170,6 @@ export function transitionPrepPlan(status: PrepPlanStatus, event: PrepPlanEvent)
       if (event.type === "start_research" || event.type === "resume_research") return "researching";
       if (event.type === "resume_answers") return "awaiting_answers";
       if (event.type === "resume_curation") return "curating";
-      if (event.type === "resume_answers_draft") return "curating";
       break;
   }
   return status;

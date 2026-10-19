@@ -39,9 +39,7 @@ function makePlan(id: string, status: PrepPlanStatus, included = 2): InterviewPr
       sortOrder: i,
       source: "bank",
       included: true,
-      notes: "",
-      exampleAnswer: "",
-      tips: []
+      notes: ""
     })),
     repeatedStoryIds: [],
     createdAt: "2026-10-01T10:00:00.000Z",
