@@ -174,15 +174,19 @@ export function buildResearchSystemPrompt(companyName: string, roleTitle: string
   ].join(" ");
 }
 
-export function buildAnswerDraftSystemPrompt(companyName: string, roleTitle: string): string {
+export function buildCompanyReportSystemPrompt(companyName: string, roleTitle: string): string {
   return [
     buildResearchSystemPrompt(companyName, roleTitle),
-    "Du lager eksempelsvar og tips på norsk til intervjuspørsmål kandidaten kan øve på.",
-    "For hvert spørsmål i batchen: returnér questionAlias (f.eks. \"Q1\") pluss:",
-    "  exampleAnswer — et konkret svarutkast i jeg-form (80–150 ord). Bruk STAR-metoden der det passer. Bruk KUN fakta fra kandidatbakgrunnen og research. Mangler fakta, skriv en tydelig plassholder som [din erfaring med X].",
-    "  tips — 2–4 korte, konkrete tips for å svare godt (f.eks. «Bruk et tall som viser effekten», «Knytt svaret til selskapets verdier»).",
-    "Ikke finn på tall, historier eller motivasjon kandidaten ikke har oppgitt.",
-    "Hold tekstene korte og praktiske."
+    "Du lager en kort bedriftsrapport på norsk som kandidaten kan lese før intervju.",
+    "HOVEDMÅL: lag bedriftsrelevante spørsmål kandidaten bør kunne svare på, med konkrete svarforslag basert på kandidatens bakgrunn (CV, karakterutskrift, tillegg) og research om selskapet.",
+    "mustKnow: maks 4 korte fakta som svarene bygger på (produkter, satsinger, kultur-signaler, rollekontekst).",
+    "questionPrep: 6–8 spørsmål. MÅ alltid inkludere: «Fortell om deg selv», «Hvorfor oss?», «Hvorfor denne rollen?», «Hvorfor er du egnet / hva tilfører du?», «Hva vet du om oss?». Legg til 2–3 spørsmål avledet av annonsekrav og bedriftens satsinger.",
+    "For hvert questionPrep-element: whyTheyAsk (hva intervjueren tester), suggestedAnswer (utkast i jeg-form, 60–120 ord), backgroundUsed (CV-/karakterfakta brukt), companyHooks (bedriftsfakta brukt).",
+    "REGLER FOR SVARFORSLAG: bruk KUN fakta fra kandidatbakgrunnen og research. Ikke finn på tall, historier eller motivasjon. Mangler personlig motivasjon i bakgrunnen, skriv en tydelig plassholder som [din personlige grunn for KI] i stedet for å dikte.",
+    "questionsToAsk: 4–6 lure spørsmål kandidaten kan stille dem, med why (hvorfor spørsmålet er lurt). Ta gjerne utgangspunkt i bankforslagene når de finnes, og tilpass til selskapet.",
+    "Ikke finn på tall, fakta eller sitater. Hvis noe er usikkert, utelat det.",
+    "Hold tekstene korte: overhold feltgrensene i JSON-skjemaet.",
+    "Oppgi kilder fra nettfunnene når du bruker dem."
   ].join("\n");
 }
 

@@ -2,7 +2,7 @@ import { interviewModes, starRubricCriteria, starRubricCriterionLabels } from "@
 import { describe, expect, it } from "vitest";
 import { rubricCriterionDescriptions } from "./interviewerPlaybook.js";
 import {
-  buildAnswerDraftSystemPrompt,
+  buildCompanyReportSystemPrompt,
   buildFinishRubricPrompt,
   buildPlanPracticeScript,
   buildSimulatorSystemPrompt,
@@ -102,14 +102,14 @@ describe("essentials in the simulator prompt", () => {
   });
 });
 
-describe("buildAnswerDraftSystemPrompt", () => {
-  it("instructs STAR method, placeholders for missing facts, and tips", () => {
-    const prompt = buildAnswerDraftSystemPrompt("DNB", "Analyst");
-    expect(prompt).toContain("eksempelsvar");
-    expect(prompt).toContain("STAR");
-    expect(prompt).toContain("tips");
-    expect(prompt).toContain("plassholder");
-    expect(prompt).toContain("questionAlias");
+describe("buildCompanyReportSystemPrompt", () => {
+  it("requires answer drafts grounded in candidate background", () => {
+    const prompt = buildCompanyReportSystemPrompt("DNB", "Analyst");
+    expect(prompt).toContain("Fortell om deg selv");
+    expect(prompt).toContain("Hvorfor oss?");
+    expect(prompt).toContain("suggestedAnswer");
+    expect(prompt).toContain("[din personlige grunn for KI]");
+    expect(prompt).toContain("questionsToAsk");
   });
 });
 

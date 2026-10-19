@@ -21,15 +21,15 @@ import {
   USER_CANCEL_MESSAGE
 } from "./jobCancellationRegistry.js";
 import {
-  answerDraftBatchSchema,
   clarificationListSchema,
   companyProfileSchema,
+  companyReportSchema,
   curatedBankSelectionSchema
 } from "./knowledgeSchemas.js";
 import { describePipelineFailure, PrepPipelineError } from "./pipelineErrors.js";
 import {
-  buildAnswerDraftSystemPrompt,
   buildClarificationSystemPrompt,
+  buildCompanyReportSystemPrompt,
   buildCurationSystemPrompt,
   buildResearchSystemPrompt
 } from "./prompts.js";
@@ -41,8 +41,6 @@ import {
 const WEB_SEARCH_TIMEOUT_MS = 300_000;
 const RESEARCH_STEP_TIMEOUT_MS = 180_000;
 const CURATION_TIMEOUT_MS = 180_000;
-const ANSWER_DRAFT_TIMEOUT_MS = 180_000;
-const ANSWER_DRAFT_BATCH_SIZE = 10;
 
 export interface PipelineFailureLogger {
   error(details: Record<string, unknown>, message: string): void;
@@ -154,24 +152,6 @@ export class PrepResearchService {
       const current = await this.repository.getPrepPlan(userId, planId);
       if (!current) throw new Error("Plan ikke funnet.");
       return current;
-    }
-
-    if (point.kind === "answers") {
-      return this.enqueue(
-        userId,
-        planId,
-        "curate",
-        async () => {
-          const next = transitionPrepPlan(plan.status, { type: "resume_answers_draft" });
-          await this.repository.updatePrepPlanStatus(userId, planId, next);
-          const updated = await this.repository.setPrepPlanPipeline(userId, planId, {
-            pipelineStep: "drafting_answers"
-          });
-          if (!updated) throw new Error("Plan ikke funnet.");
-          return updated;
-        },
-        (signal) => this.draftAnswers(userId, planId, signal)
-      );
     }
 
     if (point.kind === "curation") {
@@ -289,6 +269,7 @@ export class PrepResearchService {
       searchSnippet: "",
       researchNotes: "",
       companyProfileJson: "{}",
+      companyReportJson: "",
       curationFilledCount: 0
     });
     if (!updated) throw new Error("Plan ikke funnet.");
@@ -323,13 +304,16 @@ export class PrepResearchService {
       : "\n\nStillingsannonse: (ikke oppgitt)";
 
     const stepIndex = (step: ResearchPipelineStep) =>
-      (["created", "searching", "research_notes", "company_profile", "clarifications"] as const).indexOf(step);
+      (["created", "searching", "research_notes", "company_profile", "company_report", "clarifications"] as const).indexOf(
+        step
+      );
     const startIndex = stepIndex(from === "created" ? "searching" : from);
 
     try {
       let searchSnippet = plan.searchSnippet?.trim() ?? "";
       let researchNotes = plan.researchNotes?.trim() ?? "";
       let profileJson = plan.companyProfileJson;
+      let reportJson = plan.companyReportJson;
 
       if (startIndex <= stepIndex("searching") || !searchSnippet) {
         throwIfAborted(signal);
@@ -388,8 +372,58 @@ export class PrepResearchService {
         );
         profileJson = JSON.stringify(profile);
         await this.repository.setPrepPlanPipeline(userId, planId, {
-          pipelineStep: "clarifications",
+          pipelineStep: "company_report",
           companyProfileJson: profileJson
+        });
+      }
+
+      let report = tryParseReport(reportJson);
+      if (startIndex <= stepIndex("company_report") || !report) {
+        throwIfAborted(signal);
+        await this.repository.setPrepPlanPipeline(userId, planId, { pipelineStep: "company_report" });
+        const backgroundRow = await this.repository.getCandidateBackground(userId);
+        const backgroundBlock =
+          formatCandidateBackgroundForPrompt({
+            cvText: backgroundRow?.cvText ?? "",
+            transcriptText: backgroundRow?.transcriptText ?? "",
+            notes: backgroundRow?.notes ?? ""
+          }) || "Ingen CV/karakterutskrift lastet opp. Skriv generiske svarforslag med plassholdere.";
+        const reverseBank = await this.repository.listBankQuestions(userId, { status: "active" });
+        const askInspiration = reverseBank
+          .filter((q) => q.audience === "ask_interviewer_company" || q.audience === "ask_interviewer_personal")
+          .slice(0, 20)
+          .map((q, index) => `R${index + 1} | ${q.audience} | ${q.text}`)
+          .join("\n");
+        report = await this.llmClient.completeStructured(
+          {
+            model,
+            signal,
+            timeoutMs: RESEARCH_STEP_TIMEOUT_MS,
+            messages: [
+              {
+                role: "system",
+                content: buildCompanyReportSystemPrompt(plan.companyName, plan.roleTitle)
+              },
+              {
+                role: "user",
+                content: [
+                  `Lag en companyReport-JSON (bedriftsrapport) for kandidaten.`,
+                  jobAdBlock.trim(),
+                  `Kandidatbakgrunn:\n${backgroundBlock}`,
+                  `Research:\n${researchNotes}`,
+                  `Profil:\n${profileJson}`,
+                  `Nettfunn:\n${searchSnippet}`,
+                  `Inspirasjon til questionsToAsk (valgfritt):\n${askInspiration || "–"}`
+                ].join("\n\n")
+              }
+            ]
+          },
+          companyReportSchema
+        );
+        reportJson = JSON.stringify(report);
+        await this.repository.setPrepPlanPipeline(userId, planId, {
+          pipelineStep: "clarifications",
+          companyReportJson: reportJson
         });
       }
 
@@ -404,7 +438,7 @@ export class PrepResearchService {
             { role: "system", content: buildClarificationSystemPrompt(plan.companyName, plan.roleTitle) },
             {
               role: "user",
-              content: `Research:\n${researchNotes}\n\nProfil:\n${profileJson}\n\nLag oppklaringsspørsmål om hull i research (ikke intervjuspørsmål).`
+              content: `Research:\n${researchNotes}\n\nProfil:\n${profileJson}\n\nRapport:\n${reportJson}\n\nLag oppklaringsspørsmål om hull i research (ikke intervjuspørsmål).`
             }
           ]
         },
@@ -415,6 +449,7 @@ export class PrepResearchService {
       await this.repository.setPrepPlanResearch(userId, planId, {
         researchNotes,
         companyProfileJson: profileJson,
+        companyReportJson: reportJson,
         clarificationRound: 1,
         clarifications: clarificationPayload.clarifications.map((item, index) => ({
           question: item.question,
@@ -547,6 +582,7 @@ export class PrepResearchService {
         120
       );
 
+      const report = safeParseReport(plan.companyReportJson);
       const candidateLines = candidates
         .map((q, index) => `Q${index + 1} | ${q.category} | ${q.text}`)
         .join("\n");
@@ -564,6 +600,10 @@ export class PrepResearchService {
               content: [
                 `Research:\n${plan.researchNotes}`,
                 `Profil:\n${JSON.stringify(profile)}`,
+                `Bedriftsrapport (må-vite og svarforslag):\n${JSON.stringify({
+                  mustKnow: report.mustKnow,
+                  questionPrep: report.questionPrep
+                })}`,
                 `Avklaringer:\n${plan.clarifications.map((c) => `${c.question}\nSvar: ${c.answer}`).join("\n\n")}`,
                 `Kandidater fra banken (velg ${MIN_CURATED_QUESTIONS}-${MAX_CURATED_QUESTIONS} alias Q1…):\n${candidateLines}`
               ].join("\n\n")
@@ -613,17 +653,19 @@ export class PrepResearchService {
         });
       }
 
+      attachCompanyAnswerNotes(questions, report);
+
       throwIfAborted(signal);
       await this.repository.setPrepPlanCurated(userId, planId, {
         questions,
         curationFilledCount: resolved.filledCount
       });
+      const ready = transitionPrepPlan("curating", { type: "curation_done" });
       await this.repository.setPrepPlanPipeline(userId, planId, {
-        pipelineStep: "drafting_answers",
+        pipelineStep: "ready",
         curationFilledCount: resolved.filledCount
       });
-
-      await this.draftAnswers(userId, planId, signal);
+      await this.repository.updatePrepPlanStatus(userId, planId, ready);
     } catch (error) {
       if (isAbortError(error) || signal.aborted) {
         await this.repository.updatePrepPlanStatus(userId, planId, "cancelled", USER_CANCEL_MESSAGE);
@@ -633,110 +675,6 @@ export class PrepResearchService {
       throw error;
     }
   }
-
-  private async draftAnswers(userId: string, planId: string, signal: AbortSignal): Promise<void> {
-    const plan = await this.repository.getPrepPlan(userId, planId);
-    if (!plan) throw new Error("Plan ikke funnet.");
-
-    try {
-      throwIfAborted(signal);
-      await this.repository.setPrepPlanPipeline(userId, planId, { pipelineStep: "drafting_answers" });
-
-      const included = plan.questions.filter(
-        (q) => q.included && (q.audience ?? "candidate") === "candidate"
-      );
-      const unanswered = included.filter((q) => !q.exampleAnswer.trim());
-      if (unanswered.length === 0) {
-        const ready = transitionPrepPlan("curating", { type: "curation_done" });
-        await this.repository.setPrepPlanPipeline(userId, planId, { pipelineStep: "ready" });
-        await this.repository.updatePrepPlanStatus(userId, planId, ready);
-        return;
-      }
-
-      const backgroundRow = await this.repository.getCandidateBackground(userId);
-      const backgroundBlock =
-        formatCandidateBackgroundForPrompt({
-          cvText: backgroundRow?.cvText ?? "",
-          transcriptText: backgroundRow?.transcriptText ?? "",
-          notes: backgroundRow?.notes ?? ""
-        }) || "Ingen CV/karakterutskrift lastet opp. Bruk plassholdere der personlige fakta mangler.";
-
-      const batches: typeof unanswered[] = [];
-      for (let i = 0; i < unanswered.length; i += ANSWER_DRAFT_BATCH_SIZE) {
-        batches.push(unanswered.slice(i, i + ANSWER_DRAFT_BATCH_SIZE));
-      }
-
-      for (const batch of batches) {
-        throwIfAborted(signal);
-        const aliasedLines = batch.map(
-          (q, index) => `Q${index + 1} | ${q.category} | ${q.text}`
-        );
-        const result = await this.llmClient.completeStructured(
-          {
-            model: plan.researchModel,
-            signal,
-            timeoutMs: ANSWER_DRAFT_TIMEOUT_MS,
-            messages: [
-              {
-                role: "system",
-                content: buildAnswerDraftSystemPrompt(plan.companyName, plan.roleTitle)
-              },
-              {
-                role: "user",
-                content: [
-                  `Kandidatbakgrunn:\n${backgroundBlock}`,
-                  `Research:\n${plan.researchNotes}`,
-                  `Profil:\n${plan.companyProfileJson}`,
-                  `Spørsmål i denne batchen:\n${aliasedLines.join("\n")}`
-                ].join("\n\n")
-              }
-            ]
-          },
-          answerDraftBatchSchema
-        );
-
-        const mapped = mapDraftsToQuestions(result.drafts, batch);
-        if (mapped.length > 0) {
-          await this.repository.setPrepPlanAnswerDrafts(userId, planId, mapped);
-        }
-      }
-
-      const ready = transitionPrepPlan("curating", { type: "curation_done" });
-      await this.repository.setPrepPlanPipeline(userId, planId, { pipelineStep: "ready" });
-      await this.repository.updatePrepPlanStatus(userId, planId, ready);
-    } catch (error) {
-      if (isAbortError(error) || signal.aborted) {
-        await this.repository.updatePrepPlanStatus(userId, planId, "cancelled", USER_CANCEL_MESSAGE);
-        throw Object.assign(new Error(USER_CANCEL_MESSAGE), { name: "AbortError" });
-      }
-      await this.markFailed(userId, planId, error, "Svargenerering feilet.");
-      throw error;
-    }
-  }
-}
-
-/**
- * Maps LLM answer drafts onto questions by alias. Drops unknown/duplicate aliases;
- * unanswered questions stay empty.
- */
-function mapDraftsToQuestions(
-  drafts: Array<{ questionAlias: string; exampleAnswer: string; tips: string[] }>,
-  batch: Array<{ id: string }>
-): Array<{ questionAlias: string; exampleAnswer: string; tips: string[] }> {
-  const seen = new Set<string>();
-  const result: Array<{ questionAlias: string; exampleAnswer: string; tips: string[] }> = [];
-  for (const draft of drafts) {
-    const alias = draft.questionAlias;
-    const match = alias.match(/^Q(\d+)$/i);
-    if (!match) continue;
-    const index = parseInt(match[1], 10) - 1;
-    if (index < 0 || index >= batch.length) continue;
-    const questionId = batch[index].id;
-    if (seen.has(questionId)) continue;
-    seen.add(questionId);
-    result.push({ questionAlias: questionId, exampleAnswer: draft.exampleAnswer, tips: draft.tips });
-  }
-  return result;
 }
 
 interface CuratedQuestion {
@@ -760,6 +698,15 @@ function tryParseProfile(json: string) {
   }
 }
 
+function tryParseReport(json: string) {
+  try {
+    if (!json || !json.trim()) return null;
+    return companyReportSchema.parse(JSON.parse(json));
+  } catch {
+    return null;
+  }
+}
+
 function safeParseProfile(json: string) {
   try {
     return companyProfileSchema.parse(JSON.parse(json || "{}"));
@@ -768,3 +715,43 @@ function safeParseProfile(json: string) {
   }
 }
 
+function safeParseReport(json: string) {
+  try {
+    return companyReportSchema.parse(JSON.parse(json || "{}"));
+  } catch {
+    return companyReportSchema.parse({});
+  }
+}
+
+/**
+ * Attaches answer-draft notes from the company report onto company-category questions.
+ * Invariant: only fills empty notes; never overwrites existing notes.
+ */
+function attachCompanyAnswerNotes(
+  questions: Array<{ category: QuestionCategory; audience?: QuestionAudience; text: string; notes?: string }>,
+  report: ReturnType<typeof safeParseReport>
+): void {
+  const prep = [...report.questionPrep];
+  if (prep.length === 0 && report.mustKnow.length === 0) return;
+
+  let prepIndex = 0;
+  for (const question of questions) {
+    if (question.category !== "company" || (question.audience ?? "candidate") !== "candidate") continue;
+    if (question.notes?.trim()) continue;
+
+    const match =
+      prep.find((item) =>
+        question.text.toLowerCase().includes(item.question.toLowerCase().slice(0, 24))
+      ) ?? prep[prepIndex++];
+
+    if (match) {
+      const hooks = match.companyHooks.length ? ` Hooks: ${match.companyHooks.join("; ")}.` : "";
+      question.notes = `Svarforslag: ${match.suggestedAnswer.slice(0, 280)}.${hooks}`;
+      continue;
+    }
+
+    if (report.mustKnow.length) {
+      question.notes = `Bruk må-vite: ${report.mustKnow.slice(0, 2).join("; ")}.`;
+    }
+  }
+}

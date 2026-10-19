@@ -4,6 +4,7 @@ import {
   resolveEssentialsSheet,
   type CandidateBackgroundDto,
   type CompanyProfile,
+  type CompanyReport,
   type InterviewBankQuestionDto,
   type InterviewImportJobDto,
   type InterviewKnowledgeDocDto,
@@ -22,7 +23,7 @@ import type {
   InterviewSessionRecord,
   InterviewSimulatorSettingsRecord
 } from "../interviewPrepRepository.js";
-import { companyProfileSchema } from "./knowledgeSchemas.js";
+import { companyProfileSchema, companyReportSchema } from "./knowledgeSchemas.js";
 
 export function toKnowledgeDocDto(doc: InterviewKnowledgeDoc): InterviewKnowledgeDocDto {
   return {
@@ -94,6 +95,7 @@ export function toPrepPlanDto(plan: InterviewPrepPlanRecord): InterviewPrepPlanD
     jobAdText: plan.jobAdText,
     researchNotes: plan.researchNotes,
     companyProfile: parseCompanyProfile(plan.companyProfileJson),
+    companyReport: parseCompanyReport(plan.companyReportJson),
     clarificationRound: plan.clarificationRound,
     curationFilledCount: plan.curationFilledCount,
     failureReason: plan.failureReason,
@@ -110,9 +112,7 @@ export function toPrepPlanDto(plan: InterviewPrepPlanRecord): InterviewPrepPlanD
       storyId: q.storyId,
       gapReason: q.gapReason,
       included: q.included,
-      notes: q.notes,
-      exampleAnswer: q.exampleAnswer,
-      tips: q.tips
+      notes: q.notes
     })),
     repeatedStoryIds: findRepeatedStories(plan.questions),
     createdAt: plan.createdAt,
@@ -176,3 +176,16 @@ function parseCompanyProfile(json: string): CompanyProfile {
   }
 }
 
+/**
+ * Legacy report JSON fails the strict schema → null (UI asks to re-run research).
+ * Empty/missing JSON is also null.
+ */
+function parseCompanyReport(json: string): CompanyReport | undefined {
+  const raw = json?.trim();
+  if (!raw || raw === "{}" || raw === '""') return undefined;
+  try {
+    return companyReportSchema.parse(JSON.parse(raw));
+  } catch {
+    return undefined;
+  }
+}

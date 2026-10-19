@@ -80,8 +80,6 @@ const voiceConnection: { stop: (() => void) | null } = { stop: null };
 /** Ephemeral secrets are single-use; block overlapping connects. */
 let connectVoiceInFlight = false;
 let elapsedTimer: ReturnType<typeof setInterval> | null = null;
-/** In-flight transcript POSTs — finish must wait so the last answer is not lost. */
-const pendingTranscripts = new Set<Promise<unknown>>();
 
 function stopVoiceConnection() {
   const stop = voiceConnection.stop;
@@ -365,18 +363,9 @@ async function connectFreshVoice(sessionId: string, voice: VoiceSessionDto) {
       model: voice.model,
       stream: voiceStream.value,
       onTranscript: (role, text) => {
-        const save = interviewPrepApi
-          .appendTranscript(sessionId, { role, content: text })
-          .then((saved) => {
-            messages.value.push(saved);
-          })
-          .catch((err) => {
-            error.value = err instanceof Error ? err.message : "Kunne ikke lagre transkript.";
-          })
-          .finally(() => {
-            pendingTranscripts.delete(save);
-          });
-        pendingTranscripts.add(save);
+        void interviewPrepApi.appendTranscript(sessionId, { role, content: text }).then((saved) => {
+          messages.value.push(saved);
+        });
       },
       onToolCall: (name) => {
         if (name === "end_interview") void finishSession("end_tool");
@@ -459,8 +448,6 @@ async function finishSession(reason: "leave" | "end_tool" = "leave") {
   // Tear down media first — finishSession API waits on LLM feedback and must not keep the call open.
   stopVoiceConnection();
   releaseVoiceStream();
-  // Drain in-flight appends so the last candidate turn is persisted before scoring.
-  await Promise.allSettled([...pendingTranscripts]);
   try {
     const finished = await interviewPrepApi.finishSession(session.value.id);
     session.value = finished;

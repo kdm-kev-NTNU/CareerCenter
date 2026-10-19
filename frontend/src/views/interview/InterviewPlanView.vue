@@ -52,14 +52,13 @@ const pipelineActive = computed(() =>
 const canCancel = computed(() => (plan.value ? canCancelPrepPlan(plan.value.status) : false));
 const canDelete = computed(() => (plan.value ? canDeletePrepPlan(plan.value.status) : false));
 const canPractice = computed(() => (plan.value ? canStartSimulators(plan.value.status) : false));
-const canDownloadPractice = computed(
-  () => plan.value?.status === "ready" && plan.value?.pipelineStep === "ready"
-);
-const downloadingPractice = ref(false);
+const canDownloadReport = computed(() => Boolean(plan.value?.companyReport));
+const downloadingReport = ref(false);
 const candidateQuestions = computed(
   () => plan.value?.questions.filter((q) => q.audience === "candidate") ?? []
 );
 const includedCount = computed(() => candidateQuestions.value.filter((q) => q.included).length);
+const questionsToAsk = computed(() => plan.value?.companyReport?.questionsToAsk ?? []);
 
 /** Interviewer questions grouped by category. */
 const questionGroups = computed(() => {
@@ -216,7 +215,7 @@ async function stopResearch() {
 
 async function deletePlan() {
   if (!plan.value) return;
-  if (!confirm(`Slette planen for «${plan.value.companyName}»? Spørsmål og svar slettes. Øvingsøktene blir liggende.`)) {
+  if (!confirm(`Slette planen for «${plan.value.companyName}»? Spørsmål, svar og bedriftsrapport slettes. Øvingsøktene blir liggende.`)) {
     return;
   }
   saving.value = true;
@@ -323,16 +322,16 @@ function practiceWithPlan() {
   void router.push({ name: "interview-simulator", query: { planId: plan.value.id } });
 }
 
-async function downloadPracticeDocx() {
+async function downloadCompanyReport() {
   if (!plan.value) return;
-  downloadingPractice.value = true;
+  downloadingReport.value = true;
   error.value = null;
   try {
-    await interviewPrepApi.downloadPracticeDocx(plan.value.id, plan.value.companyName);
+    await interviewPrepApi.downloadCompanyReport(plan.value.id, plan.value.companyName);
   } catch (err) {
-    error.value = err instanceof Error ? err.message : "Kunne ikke laste ned øvingsdokument.";
+    error.value = err instanceof Error ? err.message : "Kunne ikke laste ned bedriftsrapport.";
   } finally {
-    downloadingPractice.value = false;
+    downloadingReport.value = false;
   }
 }
 </script>
@@ -349,12 +348,12 @@ async function downloadPracticeDocx() {
         </template>
         <template #actions>
           <AppButton
-            v-if="canDownloadPractice"
+            v-if="canDownloadReport"
             variant="secondary"
-            :loading="downloadingPractice"
-            @click="downloadPracticeDocx"
+            :loading="downloadingReport"
+            @click="downloadCompanyReport"
           >
-            Last ned øvingsdokument (Word)
+            Last ned bedriftsrapport (PDF)
           </AppButton>
           <AppButton v-if="canPractice" :disabled="includedCount === 0" @click="practiceWithPlan">
             Øv med denne planen
@@ -402,11 +401,50 @@ async function downloadPracticeDocx() {
               Temaer: {{ plan.companyProfile.themes.join(", ") }}
             </p>
           </template>
-          <template v-else-if="selectedStep === 'drafting_answers'">
-            <p v-if="plan.pipelineStep === 'drafting_answers'">
-              Skriver eksempelsvar og tips til spørsmålene …
-            </p>
-            <p v-else>Eksempelsvar og tips er klare.</p>
+          <template v-else-if="selectedStep === 'company_report'">
+            <template v-if="plan.companyReport">
+              <p class="plan-step-prose">{{ plan.companyReport.headline || "Bedriftsrapport klar." }}</p>
+              <div v-if="plan.companyReport.mustKnow?.length" class="stack">
+                <h4>Må vite</h4>
+                <ul class="plain-list">
+                  <li v-for="(fact, i) in plan.companyReport.mustKnow" :key="i">{{ fact }}</li>
+                </ul>
+              </div>
+              <div v-if="plan.companyReport.questionPrep?.length" class="stack">
+                <h4>Spørsmål du bør kunne svare på</h4>
+                <ul class="plain-list">
+                  <li
+                    v-for="(prep, i) in plan.companyReport.questionPrep"
+                    :key="i"
+                    class="stack"
+                  >
+                    <strong>{{ prep.question }}</strong>
+                    <span class="field-hint">Hvorfor de spør: {{ prep.whyTheyAsk }}</span>
+                    <span>{{ prep.suggestedAnswer }}</span>
+                    <span v-if="prep.backgroundUsed?.length" class="field-hint">
+                      Fra bakgrunnen: {{ prep.backgroundUsed.join("; ") }}
+                    </span>
+                    <span v-if="prep.companyHooks?.length" class="field-hint">
+                      Bedriftshooks: {{ prep.companyHooks.join("; ") }}
+                    </span>
+                  </li>
+                </ul>
+              </div>
+              <AppButton variant="secondary" :loading="downloadingReport" @click="downloadCompanyReport">
+                Last ned bedriftsrapport (PDF)
+              </AppButton>
+            </template>
+            <template
+              v-else-if="
+                plan.pipelineStep !== 'company_report' &&
+                ['clarifications', 'awaiting_answers', 'curating_questions', 'ready'].includes(plan.pipelineStep)
+              "
+            >
+              <p class="error-text">
+                Rapporten er i gammelt format. Start research på nytt for å få spørsmål med svarforslag.
+              </p>
+            </template>
+            <p v-else>Skriver bedriftsrapport med spørsmål og svarforslag …</p>
           </template>
           <template v-else-if="selectedStep === 'clarifications'">
             <p v-if="plan.clarifications.length">
@@ -439,6 +477,9 @@ async function downloadPracticeDocx() {
           </template>
           <template v-else>
             <p>Planen har {{ plan.questions.length }} spørsmål klar for øving.</p>
+            <p v-if="!plan.companyReport && plan.status === 'ready'" class="error-text">
+              Rapporten er i gammelt format. Start research på nytt for å få spørsmål med svarforslag.
+            </p>
           </template>
         </div>
         <div class="form-grid">
@@ -509,15 +550,6 @@ async function downloadPracticeDocx() {
                   <template v-if="question.gapReason"> — {{ question.gapReason }}</template>
                   <template v-if="question.notes"> — notater: {{ question.notes }}</template>
                 </span>
-                <div v-if="question.exampleAnswer" class="stack">
-                  <details>
-                    <summary class="field-hint">Eksempelsvar og tips</summary>
-                    <p class="plan-step-prose">{{ question.exampleAnswer }}</p>
-                    <ul v-if="question.tips?.length" class="plain-list">
-                      <li v-for="(tip, ti) in question.tips" :key="ti" class="field-hint">💡 {{ tip }}</li>
-                    </ul>
-                  </details>
-                </div>
               </template>
             </li>
           </ul>
@@ -537,6 +569,19 @@ async function downloadPracticeDocx() {
           </label>
           <AppButton :loading="saving" :disabled="!newQuestionText.trim()" @click="addQuestion">Legg til</AppButton>
         </div>
+      </article>
+
+      <article v-if="questionsToAsk.length" class="panel stack">
+        <h3>Lure spørsmål å stille dem</h3>
+        <p class="field-hint">
+          Leseliste til intervjuet — ikke en egen øvingseksjon. Ha noen klare, still to eller tre, og minst ett personlig.
+        </p>
+        <ul class="plain-list">
+          <li v-for="(item, i) in questionsToAsk" :key="i" class="stack">
+            <strong>{{ item.question }}</strong>
+            <span class="field-hint">{{ item.why }}</span>
+          </li>
+        </ul>
       </article>
 
       <article v-if="swapQuestion" class="panel stack">
