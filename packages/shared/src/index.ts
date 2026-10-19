@@ -444,12 +444,6 @@ export { answerStats } from "./answerStats.js";
 export type { AnswerStats } from "./answerStats.js";
 export { emptyCompanyProfile } from "./companyProfile.js";
 export type { CompanyProfile } from "./companyProfile.js";
-export { emptyCompanyReport } from "./companyReport.js";
-export type {
-  CompanyReport,
-  CompanyQuestionPrep,
-  QuestionToAsk
-} from "./companyReport.js";
 
 export { emptyCandidateBackground, hasCandidateCv } from "./candidateBackground.js";
 export type { CandidateBackgroundDto } from "./candidateBackground.js";

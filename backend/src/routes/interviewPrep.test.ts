@@ -54,6 +54,17 @@ class GatedLlmClient extends FakeLlmClient {
   }
 }
 
+function answerDraftBatches(total: number) {
+  const count = Math.ceil(total / 10);
+  return Array.from({ length: count }, () => ({
+    drafts: Array.from({ length: 10 }, (_, i) => ({
+      questionAlias: `Q${i + 1}`,
+      exampleAnswer: `Svar ${i + 1}`,
+      tips: ["Tips"]
+    }))
+  }));
+}
+
 describe("interview prep routes", () => {
   async function seedBank(repo: InterviewPrepMemoryRepository, userId = "__test__") {
     const doc = await repo.createKnowledgeDoc(userId, {
@@ -217,30 +228,12 @@ describe("interview prep routes", () => {
           themes: ["leadership"],
           summary: "profile"
         },
-        {
-          headline: "DNB oversikt",
-          mustKnow: ["Nordisk markets"],
-          questionPrep: [
-            { question: "Fortell om deg selv", whyTheyAsk: "Struktur", suggestedAnswer: "Jeg ...", backgroundUsed: ["NTNU"], companyHooks: [] },
-            { question: "Hvorfor oss?", whyTheyAsk: "Research", suggestedAnswer: "Fordi ...", backgroundUsed: ["SpareBank"], companyHooks: ["Nordisk markets"] },
-            { question: "Hvorfor denne rollen?", whyTheyAsk: "Motivasjon", suggestedAnswer: "Rollen ...", backgroundUsed: ["RAG"], companyHooks: [] },
-            { question: "Hvorfor er du egnet?", whyTheyAsk: "Fit", suggestedAnswer: "Jeg tilfører ...", backgroundUsed: ["Cogito"], companyHooks: [] },
-            { question: "Hva vet du om oss?", whyTheyAsk: "Research", suggestedAnswer: "Dere ...", backgroundUsed: [], companyHooks: ["markets"] },
-            { question: "Hvordan jobber du i team?", whyTheyAsk: "Samarbeid", suggestedAnswer: "I team ...", backgroundUsed: ["tverrfaglig"], companyHooks: [] }
-          ],
-          questionsToAsk: [
-            { question: "Hvordan måles suksess?", why: "Forventninger" },
-            { question: "Hvordan ser en uke ut?", why: "Praktisk" },
-            { question: "Hvilke prosjekter er aktuelle?", why: "Fit" },
-            { question: "Hva liker du best?", why: "Personlig" }
-          ],
-          sources: []
-        },
         { clarifications: [{ question: "Hvilken rolle?" }] },
         {
           selectedRefs: bank.map((_, i) => `Q${i + 1}`),
           generatedQuestions: []
-        }
+        },
+        ...answerDraftBatches(bank.length)
       ]
     });
     const app = await buildServer({
@@ -274,7 +267,7 @@ describe("interview prep routes", () => {
         ? research.json()
         : await waitForPlanStatus(app, planId, "awaiting_answers");
     expect(researched.pipelineStep).toBe("awaiting_answers");
-    expect(researched.companyReport?.headline).toBe("DNB oversikt");
+    expect(researched.companyProfile?.summary).toBeTruthy();
 
     const clarifications = researched.clarifications as Array<{ id: string }>;
     const curated = await app.inject({
@@ -316,7 +309,8 @@ describe("interview prep routes", () => {
         {
           selectedRefs: Array.from({ length: 30 }, (_, i) => `Q${i + 1}`),
           generatedQuestions: []
-        }
+        },
+        ...answerDraftBatches(30)
       ]
     });
     const app = await buildServer({
@@ -365,26 +359,7 @@ describe("interview prep routes", () => {
         values: [],
         themes: [],
         summary: ""
-      }),
-      companyReportJson: JSON.stringify({
-          headline: "DNB oversikt",
-          mustKnow: ["Nordisk markets"],
-          questionPrep: [
-            { question: "Fortell om deg selv", whyTheyAsk: "Struktur", suggestedAnswer: "Jeg ...", backgroundUsed: ["NTNU"], companyHooks: [] },
-            { question: "Hvorfor oss?", whyTheyAsk: "Research", suggestedAnswer: "Fordi ...", backgroundUsed: ["SpareBank"], companyHooks: ["Nordisk markets"] },
-            { question: "Hvorfor denne rollen?", whyTheyAsk: "Motivasjon", suggestedAnswer: "Rollen ...", backgroundUsed: ["RAG"], companyHooks: [] },
-            { question: "Hvorfor er du egnet?", whyTheyAsk: "Fit", suggestedAnswer: "Jeg tilfører ...", backgroundUsed: ["Cogito"], companyHooks: [] },
-            { question: "Hva vet du om oss?", whyTheyAsk: "Research", suggestedAnswer: "Dere ...", backgroundUsed: [], companyHooks: ["markets"] },
-            { question: "Hvordan jobber du i team?", whyTheyAsk: "Samarbeid", suggestedAnswer: "I team ...", backgroundUsed: ["tverrfaglig"], companyHooks: [] }
-          ],
-          questionsToAsk: [
-            { question: "Hvordan måles suksess?", why: "Forventninger" },
-            { question: "Hvordan ser en uke ut?", why: "Praktisk" },
-            { question: "Hvilke prosjekter er aktuelle?", why: "Fit" },
-            { question: "Hva liker du best?", why: "Personlig" }
-          ],
-          sources: []
-        })
+      })
     });
     await interviewPrepRepository.setPrepPlanResearch(user!.id, plan.id, {
       researchNotes: "notes",
@@ -469,6 +444,35 @@ describe("interview prep routes", () => {
     const finished = await app.inject({ method: "POST", url: `/api/interview/sessions/${sessionId}/finish` });
     expect(finished.statusCode).toBe(503);
     expect(llmClient.structuredCalls).toHaveLength(0);
+    const stored = await app.inject({ method: "GET", url: "/api/interview/sessions" });
+    const row = (stored.json() as Array<{ id: string; finishedAt?: string; feedback?: unknown }>).find(
+      (item) => item.id === sessionId
+    );
+    expect(row?.finishedAt).toBeUndefined();
+    expect(row?.feedback).toBeUndefined();
+    await app.close();
+  });
+
+  it("refuses to finish when the transcript has no candidate answers", async () => {
+    const { app, llmClient } = await buildInterviewApp({ configured: true });
+    const session = await app.inject({
+      method: "POST",
+      url: "/api/interview/sessions",
+      payload: { mode: "behavioral_mock", title: "Empty candidate" }
+    });
+    const sessionId = session.json().id as string;
+
+    await app.inject({
+      method: "POST",
+      url: `/api/interview/sessions/${sessionId}/transcript`,
+      payload: { role: "assistant", content: "Fortell om en gang du ledet et team." }
+    });
+
+    const finished = await app.inject({ method: "POST", url: `/api/interview/sessions/${sessionId}/finish` });
+    expect(finished.statusCode).toBe(422);
+    expect(finished.json().message).toMatch(/ingen svar fra deg/i);
+    expect(llmClient.structuredCalls).toHaveLength(0);
+
     const stored = await app.inject({ method: "GET", url: "/api/interview/sessions" });
     const row = (stored.json() as Array<{ id: string; finishedAt?: string; feedback?: unknown }>).find(
       (item) => item.id === sessionId
@@ -1409,7 +1413,33 @@ describe("interview prep routes", () => {
     await app.close();
   });
 
-  it("serves company report PDF when report exists and 404 otherwise", async () => {
+  it("returns 404 for legacy company-report.pdf endpoint", async () => {
+    const main = new MemoryRepository();
+    const repo = new InterviewPrepMemoryRepository();
+    const app = await buildServer({
+      repository: main,
+      authDisabled: true,
+      llmClient: new FakeLlmClient({ configured: true }),
+      interviewPrepRepository: repo
+    });
+    await app.ready();
+    await app.inject({ method: "GET", url: "/api/interview/status" });
+    const user = await main.findUserByName("__test__");
+    const plan = await repo.createPrepPlan(user!.id, {
+      companyName: "DNB ASA",
+      roleTitle: "Associate",
+      format: "interview",
+      researchModel: "gpt-6-astra"
+    });
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/interview/plans/${plan.id}/company-report.pdf`
+    });
+    expect(res.statusCode).toBe(404);
+    await app.close();
+  });
+
+  it("serves practice.docx for ready plans and 409 otherwise", async () => {
     const main = new MemoryRepository();
     const repo = new InterviewPrepMemoryRepository();
     const app = await buildServer({
@@ -1427,49 +1457,38 @@ describe("interview prep routes", () => {
       companyName: "DNB ASA",
       roleTitle: "Associate",
       format: "interview",
-      researchModel: "gpt-6-astra",
-      jobAdText: "Vi søker en associate."
+      researchModel: "gpt-6-astra"
     });
 
-    const missing = await app.inject({
+    const notReady = await app.inject({
       method: "GET",
-      url: `/api/interview/plans/${plan.id}/company-report.pdf`
+      url: `/api/interview/plans/${plan.id}/practice.docx`
     });
-    expect(missing.statusCode).toBe(404);
+    expect(notReady.statusCode).toBe(409);
 
-    await repo.setPrepPlanPipeline(user!.id, plan.id, {
-      pipelineStep: "awaiting_answers",
-      companyReportJson: JSON.stringify({
-          headline: "DNB oversikt",
-          mustKnow: ["Nordisk markets"],
-          questionPrep: [
-            { question: "Fortell om deg selv", whyTheyAsk: "Struktur", suggestedAnswer: "Jeg ...", backgroundUsed: ["NTNU"], companyHooks: [] },
-            { question: "Hvorfor oss?", whyTheyAsk: "Research", suggestedAnswer: "Fordi ...", backgroundUsed: ["SpareBank"], companyHooks: ["Nordisk markets"] },
-            { question: "Hvorfor denne rollen?", whyTheyAsk: "Motivasjon", suggestedAnswer: "Rollen ...", backgroundUsed: ["RAG"], companyHooks: [] },
-            { question: "Hvorfor er du egnet?", whyTheyAsk: "Fit", suggestedAnswer: "Jeg tilfører ...", backgroundUsed: ["Cogito"], companyHooks: [] },
-            { question: "Hva vet du om oss?", whyTheyAsk: "Research", suggestedAnswer: "Dere ...", backgroundUsed: [], companyHooks: ["markets"] },
-            { question: "Hvordan jobber du i team?", whyTheyAsk: "Samarbeid", suggestedAnswer: "I team ...", backgroundUsed: ["tverrfaglig"], companyHooks: [] }
-          ],
-          questionsToAsk: [
-            { question: "Hvordan måles suksess?", why: "Forventninger" },
-            { question: "Hvordan ser en uke ut?", why: "Praktisk" },
-            { question: "Hvilke prosjekter er aktuelle?", why: "Fit" },
-            { question: "Hva liker du best?", why: "Personlig" }
-          ],
-          sources: []
-        })
+    await repo.setPrepPlanCurated(user!.id, plan.id, {
+      questions: [
+        { text: "Fortell om deg selv?", category: "behavioral", target: "interview", source: "bank" }
+      ]
     });
+    await repo.setPrepPlanAnswerDrafts(user!.id, plan.id, [
+      {
+        questionAlias: (await repo.getPrepPlan(user!.id, plan.id))!.questions[0]!.id,
+        exampleAnswer: "Jeg heter ...",
+        tips: ["Bruk STAR"]
+      }
+    ]);
+    await repo.updatePrepPlanStatus(user!.id, plan.id, "ready");
+    await repo.setPrepPlanPipeline(user!.id, plan.id, { pipelineStep: "ready" });
 
-    const pdf = await app.inject({
+    const docx = await app.inject({
       method: "GET",
-      url: `/api/interview/plans/${plan.id}/company-report.pdf`
+      url: `/api/interview/plans/${plan.id}/practice.docx`
     });
-    expect(pdf.statusCode).toBe(200);
-    expect(pdf.headers["content-type"]).toContain("application/pdf");
-    expect(pdf.headers["content-disposition"]).toMatch(/attachment; filename=".*bedriftsrapport\.pdf"/);
-    expect(pdf.rawPayload.subarray(0, 4).toString("utf8")).toBe("%PDF");
+    expect(docx.statusCode).toBe(200);
+    expect(docx.headers["content-type"]).toContain("application/vnd.openxmlformats");
+    expect(docx.headers["content-disposition"]).toMatch(/attachment; filename=".*\.docx"/);
 
-    // authDisabled uses __test__; a plan owned by another user must 404.
     const otherUser = await main.createUser("other", "x");
     const otherPlan = await repo.createPrepPlan(otherUser.id, {
       companyName: "Secret",
@@ -1477,31 +1496,11 @@ describe("interview prep routes", () => {
       format: "interview",
       researchModel: "gpt-6-astra"
     });
-    await repo.setPrepPlanPipeline(otherUser.id, otherPlan.id, {
-      pipelineStep: "ready",
-      companyReportJson: JSON.stringify({
-          headline: "DNB oversikt",
-          mustKnow: ["Nordisk markets"],
-          questionPrep: [
-            { question: "Fortell om deg selv", whyTheyAsk: "Struktur", suggestedAnswer: "Jeg ...", backgroundUsed: ["NTNU"], companyHooks: [] },
-            { question: "Hvorfor oss?", whyTheyAsk: "Research", suggestedAnswer: "Fordi ...", backgroundUsed: ["SpareBank"], companyHooks: ["Nordisk markets"] },
-            { question: "Hvorfor denne rollen?", whyTheyAsk: "Motivasjon", suggestedAnswer: "Rollen ...", backgroundUsed: ["RAG"], companyHooks: [] },
-            { question: "Hvorfor er du egnet?", whyTheyAsk: "Fit", suggestedAnswer: "Jeg tilfører ...", backgroundUsed: ["Cogito"], companyHooks: [] },
-            { question: "Hva vet du om oss?", whyTheyAsk: "Research", suggestedAnswer: "Dere ...", backgroundUsed: [], companyHooks: ["markets"] },
-            { question: "Hvordan jobber du i team?", whyTheyAsk: "Samarbeid", suggestedAnswer: "I team ...", backgroundUsed: ["tverrfaglig"], companyHooks: [] }
-          ],
-          questionsToAsk: [
-            { question: "Hvordan måles suksess?", why: "Forventninger" },
-            { question: "Hvordan ser en uke ut?", why: "Praktisk" },
-            { question: "Hvilke prosjekter er aktuelle?", why: "Fit" },
-            { question: "Hva liker du best?", why: "Personlig" }
-          ],
-          sources: []
-        })
-    });
+    await repo.updatePrepPlanStatus(otherUser.id, otherPlan.id, "ready");
+    await repo.setPrepPlanPipeline(otherUser.id, otherPlan.id, { pipelineStep: "ready" });
     const denied = await app.inject({
       method: "GET",
-      url: `/api/interview/plans/${otherPlan.id}/company-report.pdf`
+      url: `/api/interview/plans/${otherPlan.id}/practice.docx`
     });
     expect(denied.statusCode).toBe(404);
     await app.close();

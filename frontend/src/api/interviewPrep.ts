@@ -183,8 +183,8 @@ export const interviewPrepApi = {
   cancelPlan: (id: string) =>
     request<InterviewPrepPlanDto>(`/api/interview/plans/${id}/cancel`, { method: "POST" }),
   deletePlan: (id: string) => request<void>(`/api/interview/plans/${id}`, { method: "DELETE" }),
-  downloadCompanyReport: async (planId: string, companyName: string) => {
-    const blob = await requestBlob(`/api/interview/plans/${planId}/company-report.pdf`);
+  downloadPracticeDocx: async (planId: string, companyName: string) => {
+    const blob = await requestBlob(`/api/interview/plans/${planId}/practice.docx`);
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     const safeName = companyName
@@ -194,7 +194,7 @@ export const interviewPrepApi = {
       .toLowerCase()
       .slice(0, 60);
     anchor.href = url;
-    anchor.download = `${safeName || "bedrift"}-bedriftsrapport.pdf`;
+    anchor.download = `${safeName || "bedrift"}-øvingsdokument.docx`;
     anchor.click();
     URL.revokeObjectURL(url);
   },

@@ -9,8 +9,34 @@ function service(llmClient: FakeLlmClient, repository: InterviewPrepMemoryReposi
   return new PrepResearchService(llmClient, repository, new JobCancellationRegistry(), { error: () => {} });
 }
 
+const emptyProfile = {
+  industries: [],
+  businessAreas: [],
+  interviewFormats: [],
+  caseTypes: [],
+  values: [],
+  themes: [],
+  summary: ""
+};
+
+function sampleAnswerDraftBatch() {
+  return {
+    drafts: Array.from({ length: 10 }, (_, i) => ({
+      questionAlias: `Q${i + 1}`,
+      exampleAnswer: `Svar til spørsmål ${i + 1}`,
+      tips: ["Tips 1"]
+    }))
+  };
+}
+
+/** Enough answer draft batches to cover `total` questions at batch size 10. */
+function answerDraftBatches(total: number) {
+  const count = Math.ceil(total / 10);
+  return Array.from({ length: count }, () => sampleAnswerDraftBatch());
+}
+
 describe("PrepResearchService", () => {
-  it("runs research and bank-driven curation flow", async () => {
+  it("runs research and bank-driven curation flow with answer drafting", async () => {
     const repository = new InterviewPrepMemoryRepository();
     const doc = await repository.createKnowledgeDoc("u1", {
       kind: "star",
@@ -45,30 +71,12 @@ describe("PrepResearchService", () => {
           themes: ["leadership"],
           summary: "DNB profile"
         },
-        {
-          headline: "DNB oversikt",
-          mustKnow: ["Nordisk markets-franchise"],
-          questionPrep: [
-            { question: "Fortell om deg selv", whyTheyAsk: "Struktur", suggestedAnswer: "Jeg ...", backgroundUsed: ["NTNU"], companyHooks: [] },
-            { question: "Hvorfor oss?", whyTheyAsk: "Research", suggestedAnswer: "Fordi ...", backgroundUsed: ["SpareBank"], companyHooks: ["Nordisk markets"] },
-            { question: "Hvorfor denne rollen?", whyTheyAsk: "Motivasjon", suggestedAnswer: "Rollen ...", backgroundUsed: ["RAG"], companyHooks: [] },
-            { question: "Hvorfor er du egnet?", whyTheyAsk: "Fit", suggestedAnswer: "Jeg tilfører ...", backgroundUsed: ["Cogito"], companyHooks: [] },
-            { question: "Hva vet du om oss?", whyTheyAsk: "Research", suggestedAnswer: "Dere ...", backgroundUsed: [], companyHooks: ["markets"] },
-            { question: "Hvordan jobber du i team?", whyTheyAsk: "Samarbeid", suggestedAnswer: "I team ...", backgroundUsed: ["tverrfaglig"], companyHooks: [] }
-          ],
-          questionsToAsk: [
-            { question: "Hvordan måles suksess?", why: "Forventninger" },
-            { question: "Hvordan ser en uke ut?", why: "Praktisk" },
-            { question: "Hvilke prosjekter er aktuelle?", why: "Fit" },
-            { question: "Hva liker du best?", why: "Personlig" }
-          ],
-          sources: []
-        },
         { clarifications: [{ question: "Hvilken avdeling?" }] },
         {
           selectedRefs: selectedIds.map((_, i) => `Q${i + 1}`),
           generatedQuestions: []
-        }
+        },
+        ...answerDraftBatches(30)
       ]
     });
     const research = service(llmClient, repository);
@@ -96,17 +104,14 @@ describe("PrepResearchService", () => {
       "searching",
       "research_notes",
       "company_profile",
-      "company_report",
       "clarifications",
       "awaiting_answers"
     ]);
     expect(updated?.clarifications).toHaveLength(1);
     expect(updated?.companyProfileJson).toContain("banking");
-    expect(updated?.companyReportJson).toContain("DNB oversikt");
     expect(llmClient.webSearchCalls[0]?.options?.model).toBe("gpt-5.5");
     expect(llmClient.completeCalls.every((call) => call.model === "gpt-5.5")).toBe(true);
     expect(llmClient.structuredCalls.every((call) => call.options.model === "gpt-5.5")).toBe(true);
-    // Reasoning web search measured ~110s; the 60s client default must never apply to research steps.
     expect(llmClient.webSearchCalls[0]?.options?.timeoutMs).toBeGreaterThanOrEqual(240_000);
     expect(llmClient.completeCalls.every((call) => (call.timeoutMs ?? 0) > 60_000)).toBe(true);
     expect(llmClient.structuredCalls.every((call) => (call.options.timeoutMs ?? 0) > 60_000)).toBe(true);
@@ -120,68 +125,41 @@ describe("PrepResearchService", () => {
     expect(updated?.questions.length).toBe(30);
     expect(updated?.questions.every((q) => q.source === "bank")).toBe(true);
     expect(updated?.questions.every((q) => q.audience === "candidate")).toBe(true);
+    expect(updated?.questions.some((q) => q.exampleAnswer.length > 0)).toBe(true);
     expect(llmClient.structuredCalls.every((call) => call.options.model === "gpt-5.5")).toBe(true);
-    const curationUser = llmClient.structuredCalls
-      .map((c) => c.options.messages.find((m) => m.role === "user")?.content ?? "")
-      .find((content) => content.includes("Bedriftsrapport"));
-    expect(curationUser).toContain("mustKnow");
   });
 
-  it("attaches answer notes to company questions from the report", async () => {
+  it("uses candidate background when drafting answers", async () => {
     const repository = new InterviewPrepMemoryRepository();
+    await repository.upsertCandidateBackgroundDocument("u1", {
+      kind: "cv",
+      text: "Erfaring fra McKinsey",
+      fileName: "cv.pdf"
+    });
     const doc = await repository.createKnowledgeDoc("u1", {
       kind: "star",
       title: "Bank",
       content: "x",
-      contentHash: sha256Content("bank-company-notes")
+      contentHash: sha256Content("bank-bg")
     });
     await repository.insertBankQuestions(
       "u1",
       doc.id,
       Array.from({ length: 30 }, (_, i) => ({
-        text: i === 0 ? "Hvorfor vil du jobbe her?" : `Q ${i}?`,
-        category: (i === 0 ? "company" : "behavioral") as "company" | "behavioral",
+        text: `Q ${i}?`,
+        category: "behavioral" as const,
         tags: [],
         origin: "rule" as const,
-        contentHash: sha256Content(`company-note-q-${i}`)
+        contentHash: sha256Content(`bg-q-${i}`)
       }))
     );
     const bank = await repository.listBankQuestions("u1");
     const llmClient = new FakeLlmClient({
       structuredResults: [
-        {
-          industries: [],
-          businessAreas: [],
-          interviewFormats: [],
-          caseTypes: [],
-          values: [],
-          themes: [],
-          summary: ""
-        },
-        {
-          headline: "DNB oversikt",
-          mustKnow: ["Nordisk markets-franchise"],
-          questionPrep: [
-            { question: "Fortell om deg selv", whyTheyAsk: "Struktur", suggestedAnswer: "Jeg ...", backgroundUsed: ["NTNU"], companyHooks: [] },
-            { question: "Hvorfor oss?", whyTheyAsk: "Research", suggestedAnswer: "Fordi ...", backgroundUsed: ["SpareBank"], companyHooks: ["Nordisk markets"] },
-            { question: "Hvorfor denne rollen?", whyTheyAsk: "Motivasjon", suggestedAnswer: "Rollen ...", backgroundUsed: ["RAG"], companyHooks: [] },
-            { question: "Hvorfor er du egnet?", whyTheyAsk: "Fit", suggestedAnswer: "Jeg tilfører ...", backgroundUsed: ["Cogito"], companyHooks: [] },
-            { question: "Hva vet du om oss?", whyTheyAsk: "Research", suggestedAnswer: "Dere ...", backgroundUsed: [], companyHooks: ["markets"] },
-            { question: "Hvordan jobber du i team?", whyTheyAsk: "Samarbeid", suggestedAnswer: "I team ...", backgroundUsed: ["tverrfaglig"], companyHooks: [] }
-          ],
-          questionsToAsk: [
-            { question: "Hvordan måles suksess?", why: "Forventninger" },
-            { question: "Hvordan ser en uke ut?", why: "Praktisk" },
-            { question: "Hvilke prosjekter er aktuelle?", why: "Fit" },
-            { question: "Hva liker du best?", why: "Personlig" }
-          ],
-          sources: []
-        },
+        emptyProfile,
         { clarifications: [{ question: "Team?" }] },
-        {
-          selectedRefs: bank.map((_, i) => `Q${i + 1}`),
-          generatedQuestions: []
-        }
+        { selectedRefs: bank.map((_, i) => `Q${i + 1}`), generatedQuestions: [] },
+        ...answerDraftBatches(30)
       ]
     });
     const research = service(llmClient, repository);
@@ -192,14 +170,16 @@ describe("PrepResearchService", () => {
       researchModel: "gpt-6-astra"
     });
     await research.startResearch("u1", plan.id);
-    const awaiting = await repository.getPrepPlan("u1", plan.id);
     await research.submitClarificationsAndCurate("u1", plan.id, [], true);
     const ready = await repository.getPrepPlan("u1", plan.id);
     expect(ready?.status).toBe("ready");
-    const companyQ = ready?.questions.find((q) => q.category === "company");
-    expect(companyQ?.notes).toMatch(/Svarforslag/);
-    expect(awaiting?.companyReportJson).toContain("mustKnow");
-    expect(awaiting?.companyReportJson).toContain("questionPrep");
+
+    const draftCall = llmClient.structuredCalls.find((call) =>
+      call.options.messages.some((m) => m.role === "system" && m.content.includes("eksempelsvar"))
+    );
+    expect(draftCall).toBeTruthy();
+    const draftUser = draftCall?.options.messages.find((m) => m.role === "user")?.content ?? "";
+    expect(draftUser).toContain("McKinsey");
   });
 
   it("allows skipping clarification round", async () => {
@@ -224,39 +204,13 @@ describe("PrepResearchService", () => {
     const bank = await repository.listBankQuestions("u1");
     const llmClient = new FakeLlmClient({
       structuredResults: [
-        {
-          industries: [],
-          businessAreas: [],
-          interviewFormats: [],
-          caseTypes: [],
-          values: [],
-          themes: [],
-          summary: ""
-        },
-        {
-          headline: "DNB oversikt",
-          mustKnow: ["Nordisk markets-franchise"],
-          questionPrep: [
-            { question: "Fortell om deg selv", whyTheyAsk: "Struktur", suggestedAnswer: "Jeg ...", backgroundUsed: ["NTNU"], companyHooks: [] },
-            { question: "Hvorfor oss?", whyTheyAsk: "Research", suggestedAnswer: "Fordi ...", backgroundUsed: ["SpareBank"], companyHooks: ["Nordisk markets"] },
-            { question: "Hvorfor denne rollen?", whyTheyAsk: "Motivasjon", suggestedAnswer: "Rollen ...", backgroundUsed: ["RAG"], companyHooks: [] },
-            { question: "Hvorfor er du egnet?", whyTheyAsk: "Fit", suggestedAnswer: "Jeg tilfører ...", backgroundUsed: ["Cogito"], companyHooks: [] },
-            { question: "Hva vet du om oss?", whyTheyAsk: "Research", suggestedAnswer: "Dere ...", backgroundUsed: [], companyHooks: ["markets"] },
-            { question: "Hvordan jobber du i team?", whyTheyAsk: "Samarbeid", suggestedAnswer: "I team ...", backgroundUsed: ["tverrfaglig"], companyHooks: [] }
-          ],
-          questionsToAsk: [
-            { question: "Hvordan måles suksess?", why: "Forventninger" },
-            { question: "Hvordan ser en uke ut?", why: "Praktisk" },
-            { question: "Hvilke prosjekter er aktuelle?", why: "Fit" },
-            { question: "Hva liker du best?", why: "Personlig" }
-          ],
-          sources: []
-        },
+        emptyProfile,
         { clarifications: [{ question: "Format?" }] },
         {
           selectedRefs: bank.map((_, i) => `Q${i + 1}`),
           generatedQuestions: []
-        }
+        },
+        ...answerDraftBatches(30)
       ]
     });
     const research = service(llmClient, repository);
@@ -272,7 +226,7 @@ describe("PrepResearchService", () => {
     expect(updated?.status).toBe("ready");
   });
 
-  it("keeps reverse-bank questions out of the curated plan (they live on the report)", async () => {
+  it("keeps reverse-bank questions out of the curated plan", async () => {
     const repository = new InterviewPrepMemoryRepository();
     const doc = await repository.createKnowledgeDoc("u1", {
       kind: "company",
@@ -300,34 +254,15 @@ describe("PrepResearchService", () => {
     const bank = await repository.listBankQuestions("u1");
     const candidateIds = bank.filter((q) => q.audience === "candidate").map((q) => q.id);
     const personal = bank.find((q) => q.audience === "ask_interviewer_personal")!;
-    const report = {
-      headline: "DNB oversikt",
-      mustKnow: ["Nordisk markets-franchise"],
-      questionPrep: [
-        { question: "Fortell om deg selv", whyTheyAsk: "Struktur", suggestedAnswer: "Jeg ...", backgroundUsed: ["NTNU"], companyHooks: [] },
-        { question: "Hvorfor oss?", whyTheyAsk: "Research", suggestedAnswer: "Fordi ...", backgroundUsed: ["SpareBank"], companyHooks: ["Nordisk markets"] },
-        { question: "Hvorfor denne rollen?", whyTheyAsk: "Motivasjon", suggestedAnswer: "Rollen ...", backgroundUsed: ["RAG"], companyHooks: [] },
-        { question: "Hvorfor er du egnet?", whyTheyAsk: "Fit", suggestedAnswer: "Jeg tilfører ...", backgroundUsed: ["Cogito"], companyHooks: [] },
-        { question: "Hva vet du om oss?", whyTheyAsk: "Research", suggestedAnswer: "Dere ...", backgroundUsed: [], companyHooks: ["markets"] },
-        { question: "Hvordan jobber du i team?", whyTheyAsk: "Samarbeid", suggestedAnswer: "I team ...", backgroundUsed: ["tverrfaglig"], companyHooks: [] }
-      ],
-      questionsToAsk: [
-        { question: "Hvordan måles suksess?", why: "Forventninger" },
-        { question: "Hvordan ser en uke ut?", why: "Praktisk" },
-        { question: "Hvilke prosjekter er aktuelle?", why: "Fit" },
-        { question: "Hva liker du best?", why: "Personlig" }
-      ],
-      sources: []
-    };
     const llmClient = new FakeLlmClient({
       structuredResults: [
-        { industries: [], businessAreas: [], interviewFormats: [], caseTypes: [], values: [], themes: [], summary: "" },
-        report,
+        emptyProfile,
         { clarifications: [{ question: "Format?" }] },
         {
           selectedRefs: candidateIds.map((_, i) => `Q${i + 1}`),
           generatedQuestions: []
-        }
+        },
+        ...answerDraftBatches(30)
       ]
     });
     const research = service(llmClient, repository);
@@ -345,50 +280,16 @@ describe("PrepResearchService", () => {
     expect(updated!.questions.every((q) => q.audience === "candidate")).toBe(true);
     expect(updated!.questions).toHaveLength(30);
     expect(updated!.questions.some((q) => q.bankQuestionId === personal.id)).toBe(false);
-    expect(updated?.companyReportJson).toContain("Hvordan måles suksess?");
 
-    const reportUser = llmClient.structuredCalls
-      .map((c) => c.options.messages.find((m) => m.role === "user")?.content ?? "")
-      .find((content) => content.includes("Kandidatbakgrunn"));
-    expect(reportUser).toContain(personal.text);
-
-    const curationUser = llmClient.structuredCalls[3]!.options.messages[1]!.content;
-    expect(curationUser).not.toContain("Spørsmål kandidaten kan stille");
+    const curationUser = llmClient.structuredCalls[2]!.options.messages[1]!.content;
     expect(curationUser).not.toContain(personal.text);
   });
 
-  it("includes jobAdText in research prompts and stores the company report", async () => {
+  it("includes jobAdText in research prompts", async () => {
     const repository = new InterviewPrepMemoryRepository();
     const llmClient = new FakeLlmClient({
       structuredResults: [
-        {
-          industries: [],
-          businessAreas: [],
-          interviewFormats: [],
-          caseTypes: [],
-          values: [],
-          themes: [],
-          summary: ""
-        },
-        {
-          headline: "DNB oversikt",
-          mustKnow: ["Nordisk markets-franchise"],
-          questionPrep: [
-            { question: "Fortell om deg selv", whyTheyAsk: "Struktur", suggestedAnswer: "Jeg ...", backgroundUsed: ["NTNU"], companyHooks: [] },
-            { question: "Hvorfor oss?", whyTheyAsk: "Research", suggestedAnswer: "Fordi ...", backgroundUsed: ["SpareBank"], companyHooks: ["Nordisk markets"] },
-            { question: "Hvorfor denne rollen?", whyTheyAsk: "Motivasjon", suggestedAnswer: "Rollen ...", backgroundUsed: ["RAG"], companyHooks: [] },
-            { question: "Hvorfor er du egnet?", whyTheyAsk: "Fit", suggestedAnswer: "Jeg tilfører ...", backgroundUsed: ["Cogito"], companyHooks: [] },
-            { question: "Hva vet du om oss?", whyTheyAsk: "Research", suggestedAnswer: "Dere ...", backgroundUsed: [], companyHooks: ["markets"] },
-            { question: "Hvordan jobber du i team?", whyTheyAsk: "Samarbeid", suggestedAnswer: "I team ...", backgroundUsed: ["tverrfaglig"], companyHooks: [] }
-          ],
-          questionsToAsk: [
-            { question: "Hvordan måles suksess?", why: "Forventninger" },
-            { question: "Hvordan ser en uke ut?", why: "Praktisk" },
-            { question: "Hvilke prosjekter er aktuelle?", why: "Fit" },
-            { question: "Hva liker du best?", why: "Personlig" }
-          ],
-          sources: []
-        },
+        emptyProfile,
         { clarifications: [{ question: "Team?" }] }
       ]
     });
@@ -404,56 +305,11 @@ describe("PrepResearchService", () => {
     await research.startResearch("u1", plan.id);
     const updated = await repository.getPrepPlan("u1", plan.id);
     expect(updated?.status).toBe("awaiting_answers");
-    expect(updated?.companyReportJson).toContain("DNB oversikt");
     expect(updated?.jobAdText).toContain("Python-utvikler");
 
     const notesPrompt = llmClient.completeCalls[0]?.messages.find((m) => m.role === "user")?.content ?? "";
     expect(notesPrompt).toContain("Stillingsannonse");
     expect(notesPrompt).toContain("Python-utvikler");
-
-    const reportCall = llmClient.structuredCalls.find((call) =>
-      call.options.messages.some(
-        (m) => m.role === "system" && m.content.includes("bedriftsrapport")
-      )
-    );
-    expect(reportCall).toBeTruthy();
-    const reportUser = reportCall?.options.messages.find((m) => m.role === "user")?.content ?? "";
-    expect(reportUser).toContain("Python-utvikler");
-  });
-
-  it("marks plan failed when company report schema validation fails", async () => {
-    const repository = new InterviewPrepMemoryRepository();
-    const llmClient = new FakeLlmClient({
-      structuredResults: [
-        {
-          industries: [],
-          businessAreas: [],
-          interviewFormats: [],
-          caseTypes: [],
-          values: [],
-          themes: [],
-          summary: ""
-        },
-        {
-          headline: "x".repeat(200),
-          mustKnow: [],
-          questionPrep: [],
-          questionsToAsk: [],
-          sources: []
-        }
-      ]
-    });
-    const research = service(llmClient, repository);
-    const plan = await repository.createPrepPlan("u1", {
-      companyName: "Bad",
-      roleTitle: "X",
-      format: "interview",
-      researchModel: "gpt-6-astra"
-    });
-
-    await expect(research.startResearch("u1", plan.id)).rejects.toThrow();
-    const updated = await repository.getPrepPlan("u1", plan.id);
-    expect(updated?.status).toBe("failed");
   });
 
   it("resumes curation without re-running research LLM calls", async () => {
@@ -494,26 +350,7 @@ describe("PrepResearchService", () => {
         values: [],
         themes: [],
         summary: "profile"
-      }),
-      companyReportJson: JSON.stringify({
-          headline: "DNB oversikt",
-          mustKnow: ["Nordisk markets-franchise"],
-          questionPrep: [
-            { question: "Fortell om deg selv", whyTheyAsk: "Struktur", suggestedAnswer: "Jeg ...", backgroundUsed: ["NTNU"], companyHooks: [] },
-            { question: "Hvorfor oss?", whyTheyAsk: "Research", suggestedAnswer: "Fordi ...", backgroundUsed: ["SpareBank"], companyHooks: ["Nordisk markets"] },
-            { question: "Hvorfor denne rollen?", whyTheyAsk: "Motivasjon", suggestedAnswer: "Rollen ...", backgroundUsed: ["RAG"], companyHooks: [] },
-            { question: "Hvorfor er du egnet?", whyTheyAsk: "Fit", suggestedAnswer: "Jeg tilfører ...", backgroundUsed: ["Cogito"], companyHooks: [] },
-            { question: "Hva vet du om oss?", whyTheyAsk: "Research", suggestedAnswer: "Dere ...", backgroundUsed: [], companyHooks: ["markets"] },
-            { question: "Hvordan jobber du i team?", whyTheyAsk: "Samarbeid", suggestedAnswer: "I team ...", backgroundUsed: ["tverrfaglig"], companyHooks: [] }
-          ],
-          questionsToAsk: [
-            { question: "Hvordan måles suksess?", why: "Forventninger" },
-            { question: "Hvordan ser en uke ut?", why: "Praktisk" },
-            { question: "Hvilke prosjekter er aktuelle?", why: "Fit" },
-            { question: "Hva liker du best?", why: "Personlig" }
-          ],
-          sources: []
-        })
+      })
     });
     await repository.setPrepPlanResearch("u1", plan.id, {
       researchNotes: "Saved notes",
@@ -526,25 +363,6 @@ describe("PrepResearchService", () => {
         themes: [],
         summary: "profile"
       }),
-      companyReportJson: JSON.stringify({
-          headline: "DNB oversikt",
-          mustKnow: ["Nordisk markets-franchise"],
-          questionPrep: [
-            { question: "Fortell om deg selv", whyTheyAsk: "Struktur", suggestedAnswer: "Jeg ...", backgroundUsed: ["NTNU"], companyHooks: [] },
-            { question: "Hvorfor oss?", whyTheyAsk: "Research", suggestedAnswer: "Fordi ...", backgroundUsed: ["SpareBank"], companyHooks: ["Nordisk markets"] },
-            { question: "Hvorfor denne rollen?", whyTheyAsk: "Motivasjon", suggestedAnswer: "Rollen ...", backgroundUsed: ["RAG"], companyHooks: [] },
-            { question: "Hvorfor er du egnet?", whyTheyAsk: "Fit", suggestedAnswer: "Jeg tilfører ...", backgroundUsed: ["Cogito"], companyHooks: [] },
-            { question: "Hva vet du om oss?", whyTheyAsk: "Research", suggestedAnswer: "Dere ...", backgroundUsed: [], companyHooks: ["markets"] },
-            { question: "Hvordan jobber du i team?", whyTheyAsk: "Samarbeid", suggestedAnswer: "I team ...", backgroundUsed: ["tverrfaglig"], companyHooks: [] }
-          ],
-          questionsToAsk: [
-            { question: "Hvordan måles suksess?", why: "Forventninger" },
-            { question: "Hvordan ser en uke ut?", why: "Praktisk" },
-            { question: "Hvilke prosjekter er aktuelle?", why: "Fit" },
-            { question: "Hva liker du best?", why: "Personlig" }
-          ],
-          sources: []
-        }),
       clarificationRound: 1,
       clarifications: [{ question: "Team?", sortOrder: 0 }]
     });
@@ -556,7 +374,8 @@ describe("PrepResearchService", () => {
         {
           selectedRefs: bank.slice(0, 22).map((_, i) => `Q${i + 1}`).concat(["Q999", "bogus", "Q1"]),
           generatedQuestions: []
-        }
+        },
+        ...answerDraftBatches(30)
       ]
     });
     const research = service(llmClient, repository);
@@ -575,77 +394,51 @@ describe("PrepResearchService", () => {
     expect(ready?.curationFilledCount).toBe(8);
     expect(llmClient.webSearchCalls).toHaveLength(0);
     expect(llmClient.completeCalls).toHaveLength(0);
-    expect(llmClient.structuredCalls).toHaveLength(1);
+    expect(llmClient.structuredCalls).toHaveLength(4);
   });
 
-  it("resumes company_report using stored search snippet and notes", async () => {
+  it("resumes drafting_answers without re-running curation", async () => {
     const repository = new InterviewPrepMemoryRepository();
     const plan = await repository.createPrepPlan("u1", {
-      companyName: "ResumeReport",
+      companyName: "ResumeDraft",
       roleTitle: "X",
       format: "interview",
       researchModel: "gpt-6-astra"
     });
-    await repository.setPrepPlanPipeline("u1", plan.id, {
-      pipelineStep: "company_report",
-      searchSnippet: "Cached nettsøk",
-      researchNotes: "Cached notes",
-      companyProfileJson: JSON.stringify({
-        industries: ["banking"],
-        businessAreas: [],
-        interviewFormats: [],
-        caseTypes: [],
-        values: [],
-        themes: [],
-        summary: "Cached profile"
-      })
+    await repository.setPrepPlanCurated("u1", plan.id, {
+      questions: Array.from({ length: 5 }, (_, i) => ({
+        text: `Q${i}?`,
+        category: "behavioral" as const,
+        target: "interview" as const,
+        source: "bank" as const
+      }))
     });
-    await repository.updatePrepPlanStatus("u1", plan.id, "failed", "Rapport feilet.");
+    await repository.updatePrepPlanStatus("u1", plan.id, "failed", "Svargenerering feilet.");
+    await repository.setPrepPlanPipeline("u1", plan.id, {
+      pipelineStep: "drafting_answers",
+      researchNotes: "notes",
+      companyProfileJson: JSON.stringify(emptyProfile)
+    });
 
     const llmClient = new FakeLlmClient({
-      structuredResults: [
-        {
-          headline: "DNB oversikt",
-          mustKnow: ["Nordisk markets-franchise"],
-          questionPrep: [
-            { question: "Fortell om deg selv", whyTheyAsk: "Struktur", suggestedAnswer: "Jeg ...", backgroundUsed: ["NTNU"], companyHooks: [] },
-            { question: "Hvorfor oss?", whyTheyAsk: "Research", suggestedAnswer: "Fordi ...", backgroundUsed: ["SpareBank"], companyHooks: ["Nordisk markets"] },
-            { question: "Hvorfor denne rollen?", whyTheyAsk: "Motivasjon", suggestedAnswer: "Rollen ...", backgroundUsed: ["RAG"], companyHooks: [] },
-            { question: "Hvorfor er du egnet?", whyTheyAsk: "Fit", suggestedAnswer: "Jeg tilfører ...", backgroundUsed: ["Cogito"], companyHooks: [] },
-            { question: "Hva vet du om oss?", whyTheyAsk: "Research", suggestedAnswer: "Dere ...", backgroundUsed: [], companyHooks: ["markets"] },
-            { question: "Hvordan jobber du i team?", whyTheyAsk: "Samarbeid", suggestedAnswer: "I team ...", backgroundUsed: ["tverrfaglig"], companyHooks: [] }
-          ],
-          questionsToAsk: [
-            { question: "Hvordan måles suksess?", why: "Forventninger" },
-            { question: "Hvordan ser en uke ut?", why: "Praktisk" },
-            { question: "Hvilke prosjekter er aktuelle?", why: "Fit" },
-            { question: "Hva liker du best?", why: "Personlig" }
-          ],
-          sources: []
-        },
-        { clarifications: [{ question: "Avdeling?" }] }
-      ]
+      structuredResults: [...answerDraftBatches(5)]
     });
     const research = service(llmClient, repository);
-    await research.enqueueResume("u1", plan.id);
+    const resumed = await research.enqueueResume("u1", plan.id);
+    expect(resumed.status).toBe("curating");
 
     for (let attempt = 0; attempt < 50; attempt += 1) {
       const current = await repository.getPrepPlan("u1", plan.id);
-      if (current?.status === "awaiting_answers" || current?.status === "failed") break;
+      if (current?.status === "ready" || current?.status === "failed") break;
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
 
-    const updated = await repository.getPrepPlan("u1", plan.id);
-    expect(updated?.status).toBe("awaiting_answers");
-    expect(updated?.researchNotes).toBe("Cached notes");
-    expect(updated?.searchSnippet).toBe("Cached nettsøk");
-    expect(updated?.companyReportJson).toContain("DNB oversikt");
+    const ready = await repository.getPrepPlan("u1", plan.id);
+    expect(ready?.status).toBe("ready");
+    expect(ready?.questions.some((q) => q.exampleAnswer.length > 0)).toBe(true);
     expect(llmClient.webSearchCalls).toHaveLength(0);
     expect(llmClient.completeCalls).toHaveLength(0);
-    expect(llmClient.structuredCalls).toHaveLength(2);
-    const reportUser = llmClient.structuredCalls[0]!.options.messages.find((m) => m.role === "user")!.content;
-    expect(reportUser).toContain("Cached nettsøk");
-    expect(reportUser).toContain("Cached notes");
+    expect(llmClient.structuredCalls).toHaveLength(1);
   });
 
   it("fails curation with a clear message when the bank is too small", async () => {
@@ -676,34 +469,7 @@ describe("PrepResearchService", () => {
     await repository.setPrepPlanPipeline("u1", plan.id, {
       pipelineStep: "curating_questions",
       researchNotes: "notes",
-      companyProfileJson: JSON.stringify({
-        industries: [],
-        businessAreas: [],
-        interviewFormats: [],
-        caseTypes: [],
-        values: [],
-        themes: [],
-        summary: ""
-      }),
-      companyReportJson: JSON.stringify({
-          headline: "DNB oversikt",
-          mustKnow: ["Nordisk markets-franchise"],
-          questionPrep: [
-            { question: "Fortell om deg selv", whyTheyAsk: "Struktur", suggestedAnswer: "Jeg ...", backgroundUsed: ["NTNU"], companyHooks: [] },
-            { question: "Hvorfor oss?", whyTheyAsk: "Research", suggestedAnswer: "Fordi ...", backgroundUsed: ["SpareBank"], companyHooks: ["Nordisk markets"] },
-            { question: "Hvorfor denne rollen?", whyTheyAsk: "Motivasjon", suggestedAnswer: "Rollen ...", backgroundUsed: ["RAG"], companyHooks: [] },
-            { question: "Hvorfor er du egnet?", whyTheyAsk: "Fit", suggestedAnswer: "Jeg tilfører ...", backgroundUsed: ["Cogito"], companyHooks: [] },
-            { question: "Hva vet du om oss?", whyTheyAsk: "Research", suggestedAnswer: "Dere ...", backgroundUsed: [], companyHooks: ["markets"] },
-            { question: "Hvordan jobber du i team?", whyTheyAsk: "Samarbeid", suggestedAnswer: "I team ...", backgroundUsed: ["tverrfaglig"], companyHooks: [] }
-          ],
-          questionsToAsk: [
-            { question: "Hvordan måles suksess?", why: "Forventninger" },
-            { question: "Hvordan ser en uke ut?", why: "Praktisk" },
-            { question: "Hvilke prosjekter er aktuelle?", why: "Fit" },
-            { question: "Hva liker du best?", why: "Personlig" }
-          ],
-          sources: []
-        })
+      companyProfileJson: JSON.stringify(emptyProfile)
     });
     await repository.setPrepPlanResearch("u1", plan.id, {
       researchNotes: "notes",
@@ -729,4 +495,3 @@ describe("PrepResearchService", () => {
     expect(llmClient.structuredCalls).toHaveLength(0);
   });
 });
-

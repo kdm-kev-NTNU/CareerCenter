@@ -409,7 +409,6 @@ model InterviewPrepPlan {
   researchNotes       String                        @default("")
   searchSnippet       String                        @default("")
   companyProfileJson  String                        @default("{}")
-  companyReportJson   String                        @default("")
   clarificationRound  Int                           @default(0)
   curationFilledCount Int                           @default(0)
   failureReason       String?
@@ -449,6 +448,8 @@ model InterviewPrepQuestion {
   gapReason       String?
   included        Boolean                @default(true)
   notes           String                 @default("")
+  exampleAnswer   String                 @default("")
+  tips            String[]               @default([])
   plan            InterviewPrepPlan      @relation(fields: [planId], references: [id], onDelete: Cascade)
   bankQuestion    InterviewBankQuestion? @relation(fields: [bankQuestionId], references: [id], onDelete: SetNull)
 

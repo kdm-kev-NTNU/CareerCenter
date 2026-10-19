@@ -62,15 +62,14 @@ import {
   resolveExistingAonSourcePath
 } from "../interview/aonSourceStorage.js";
 import {
-  renderCompanyReportPdf,
-  sanitizeReportFilename
-} from "../interview/companyReportPdf.js";
+  renderPracticeDocx,
+  sanitizePracticeFilename
+} from "../interview/practiceDocx.js";
 import {
   addPlanQuestionSchema,
   bankQuestionQuerySchema,
   caseEntryInputSchema,
   clarificationAnswersSchema,
-  companyReportSchema,
   createSessionSchema,
   discardBankQuestionSchema,
   essentialsDraftSchema,
@@ -592,32 +591,40 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
     return deleted ? reply.code(204).send() : reply.code(409).send({ message: busyMessage });
   });
 
-  app.get("/api/interview/plans/:id/company-report.pdf", async (request, reply) => {
+  app.get("/api/interview/plans/:id/company-report.pdf", async (_request, reply) => {
+    return reply.code(404).send({ message: "Bedriftsrapport er fjernet. Bruk øvingsdokument i stedet." });
+  });
+
+  app.get("/api/interview/plans/:id/practice.docx", async (request, reply) => {
     const plan = await deps.interviewPrepRepository.getPrepPlan(
       request.user.id,
       (request.params as { id: string }).id
     );
     if (!plan) return reply.code(404).send({ message: "Plan ikke funnet." });
-    const raw = plan.companyReportJson?.trim();
-    if (!raw || raw === "{}") {
-      return reply.code(404).send({ message: "Bedriftsrapport er ikke klar ennå." });
+    if (plan.pipelineStep !== "ready" || plan.status !== "ready") {
+      return reply.code(409).send({ message: "Planen er ikke klar ennå." });
     }
-    let report;
-    try {
-      report = companyReportSchema.parse(JSON.parse(raw));
-    } catch {
-      return reply.code(404).send({ message: "Bedriftsrapport er ikke klar ennå." });
-    }
-    const pdf = await renderCompanyReportPdf(report, {
+    const docx = await renderPracticeDocx({
       companyName: plan.companyName,
       roleTitle: plan.roleTitle,
-      generatedAt: plan.updatedAt
+      questions: plan.questions
+        .filter((q) => q.included && (q.audience ?? "candidate") === "candidate")
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((q) => ({
+          text: q.text,
+          category: q.category,
+          audience: q.audience ?? "candidate",
+          sortOrder: q.sortOrder,
+          included: q.included,
+          exampleAnswer: q.exampleAnswer,
+          tips: q.tips
+        }))
     });
-    const filename = sanitizeReportFilename(plan.companyName);
+    const filename = sanitizePracticeFilename(plan.companyName);
     return reply
-      .header("content-type", "application/pdf")
+      .header("content-type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
       .header("content-disposition", `attachment; filename="${filename}"`)
-      .send(pdf);
+      .send(Buffer.from(docx));
   });
 
   app.put("/api/interview/plans/:id/questions/order", async (request, reply) => {
@@ -1023,6 +1030,11 @@ export async function interviewPrepRoutes(app: FastifyInstance, deps: InterviewP
     }
 
     const history = await deps.interviewPrepRepository.listSessionMessages(request.user.id, sessionId);
+    if (!history.some((message) => message.role === "user")) {
+      return reply.code(422).send({
+        message: "Fant ingen svar fra deg i transkriptet – ingenting å vurdere."
+      });
+    }
     const transcript = formatSessionTranscriptForRubric(history);
     const rated = await rateStarAnswer(deps.llmClient, transcript, { log: request.log });
     if (!rated.ok) {
