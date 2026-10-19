@@ -46,10 +46,10 @@ describe("createVoiceSession", () => {
     await createVoiceSession(envWithKey);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const call = fetchMock.mock.calls[0];
-    expect(call).toBeDefined();
-    const init = call![1] as RequestInit;
-    const body = JSON.parse(String(init.body)) as {
+    const calls = fetchMock.mock.calls as unknown as Array<[string, RequestInit]>;
+    const init = calls[0]?.[1];
+    expect(init).toBeDefined();
+    const body = JSON.parse(String(init!.body)) as {
       session: {
         audio: { input: { transcription: { model: string; language: string } } };
       };
